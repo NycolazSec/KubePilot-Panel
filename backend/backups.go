@@ -1,0 +1,490 @@
+package main
+
+import (
+	"compress/gzip"
+	"context"
+	"database/sql"
+	"errors"
+	"fmt"
+	"io/fs"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/robfig/cron/v3"
+)
+
+type Backup struct {
+	ID          string `json:"id"`
+	ServerID    string `json:"serverId"`
+	Name        string `json:"name"`
+	Size        int64  `json:"size"`
+	Status      string `json:"status"` // pending, completed, failed
+	Error       string `json:"error"`
+	Locked      bool   `json:"locked"`
+	CreatedAt   int64  `json:"createdAt"`
+	CompletedAt int64  `json:"completedAt"`
+}
+
+func (a *App) backupPath(serverID, id string) string {
+	return filepath.Join(a.cfg.DataDir, "backups", serverID, id+".tar.gz")
+}
+
+func (a *App) listBackups(serverID string) ([]*Backup, error) {
+	rows, err := a.db.Query(`SELECT id, server_id, name, size, status, error, locked, created_at, completed_at FROM backups WHERE server_id=? ORDER BY created_at DESC`, serverID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []*Backup{}
+	for rows.Next() {
+		b := &Backup{}
+		if err := rows.Scan(&b.ID, &b.ServerID, &b.Name, &b.Size, &b.Status, &b.Error, &b.Locked, &b.CreatedAt, &b.CompletedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, b)
+	}
+	return out, rows.Err()
+}
+
+func (a *App) getBackup(serverID, id string) (*Backup, error) {
+	b := &Backup{}
+	err := a.db.QueryRow(`SELECT id, server_id, name, size, status, error, locked, created_at, completed_at FROM backups WHERE server_id=? AND id=?`, serverID, id).
+		Scan(&b.ID, &b.ServerID, &b.Name, &b.Size, &b.Status, &b.Error, &b.Locked, &b.CreatedAt, &b.CompletedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return b, err
+}
+
+func (a *App) deleteBackup(b *Backup) {
+	_ = os.Remove(a.backupPath(b.ServerID, b.ID))
+	_, _ = a.db.Exec(`DELETE FROM backups WHERE id=?`, b.ID)
+}
+
+// createBackup starts a backup. rotate=true deletes the oldest unlocked backup when the limit is reached.
+func (a *App) createBackup(s *Server, name string, rotate bool) (*Backup, error) {
+	if s.BackupLimit <= 0 {
+		return nil, errCode(403, "Les sauvegardes sont désactivées pour ce serveur")
+	}
+	list, err := a.listBackups(s.ID)
+	if err != nil {
+		return nil, err
+	}
+	for _, b := range list {
+		if b.Status == "pending" {
+			return nil, errCode(409, "Une sauvegarde est déjà en cours")
+		}
+	}
+	if len(list) >= s.BackupLimit {
+		if !rotate {
+			return nil, errCode(409, fmt.Sprintf("Limite de %d sauvegardes atteinte : supprimes-en une", s.BackupLimit))
+		}
+		var oldest *Backup
+		for _, b := range list {
+			if !b.Locked {
+				oldest = b // list is newest first
+			}
+		}
+		if oldest == nil {
+			return nil, errCode(409, "Limite atteinte et toutes les sauvegardes sont verrouillées")
+		}
+		a.deleteBackup(oldest)
+	}
+	if _, err := a.kube.DataDir(a.ctx, s.ID); err != nil {
+		return nil, err
+	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		name = "Sauvegarde du " + time.Now().In(a.loc()).Format("02/01/2006 15:04")
+	}
+	b := &Backup{ID: randomID(12), ServerID: s.ID, Name: truncate(name, 80), Status: "pending", CreatedAt: now()}
+	if _, err := a.db.Exec(`INSERT INTO backups(id,server_id,name,status,created_at) VALUES(?,?,?,?,?)`, b.ID, s.ID, b.Name, b.Status, b.CreatedAt); err != nil {
+		return nil, err
+	}
+	go a.runBackup(s, b)
+	return b, nil
+}
+
+func (a *App) runBackup(s *Server, b *Backup) {
+	h := a.hub(s.ID)
+	h.daemon("Sauvegarde « " + b.Name + " » en cours…")
+	fail := func(err error) {
+		_ = os.Remove(a.backupPath(s.ID, b.ID))
+		_, _ = a.db.Exec(`UPDATE backups SET status='failed', error=?, completed_at=? WHERE id=?`, err.Error(), now(), b.ID)
+		h.daemon("Échec de la sauvegarde : " + err.Error())
+	}
+	if t, err := a.db.Template(s.TemplateID); err == nil && t.ConsoleInput && strings.HasPrefix(t.Slug, "minecraft") && a.kube.State(s.ID).Status == "running" {
+		if a.kube.SendStdin(s.ID, "save-all flush") == nil {
+			time.Sleep(4 * time.Second)
+		}
+	}
+	root, _, err := a.openRoot(a.ctx, s)
+	if err != nil {
+		fail(err)
+		return
+	}
+	defer root.Close()
+	p := a.backupPath(s.ID, b.ID)
+	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+		fail(err)
+		return
+	}
+	f, err := os.OpenFile(p, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	if err != nil {
+		fail(err)
+		return
+	}
+	entries, err := fs.ReadDir(root.FS(), ".")
+	if err != nil {
+		f.Close()
+		fail(err)
+		return
+	}
+	paths := []string{}
+	for _, e := range entries {
+		paths = append(paths, e.Name())
+	}
+	err = writeTarGz(f, root, paths)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		fail(err)
+		return
+	}
+	st, _ := os.Stat(p)
+	_, _ = a.db.Exec(`UPDATE backups SET status='completed', size=?, completed_at=? WHERE id=?`, st.Size(), now(), b.ID)
+	h.daemon(fmt.Sprintf("Sauvegarde terminée ✔ (%s)", humanBytes(st.Size())))
+}
+
+func humanBytes(n int64) string {
+	f := float64(n)
+	for _, u := range []string{"o", "Ko", "Mo", "Go"} {
+		if f < 1024 {
+			return fmt.Sprintf("%.1f %s", f, u)
+		}
+		f /= 1024
+	}
+	return fmt.Sprintf("%.1f To", f)
+}
+
+func (a *App) handleBackups(w http.ResponseWriter, r *http.Request, c *Ctx) {
+	list, err := a.listBackups(c.Server.ID)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]any{"backups": list, "limit": c.Server.BackupLimit})
+}
+
+func (a *App) handleBackupCreate(w http.ResponseWriter, r *http.Request, c *Ctx) {
+	var in struct{ Name string }
+	_ = readJSON(r, &in)
+	b, err := a.createBackup(c.Server, in.Name, false)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	c.log(a, "server.backup.create", b.Name)
+	writeJSON(w, 200, b)
+}
+
+func (a *App) handleBackupDownload(w http.ResponseWriter, r *http.Request, c *Ctx) {
+	b, err := a.getBackup(c.Server.ID, r.PathValue("bid"))
+	if err != nil || b.Status != "completed" {
+		writeErr(w, ErrNotFound)
+		return
+	}
+	f, err := os.Open(a.backupPath(b.ServerID, b.ID))
+	if err != nil {
+		writeErr(w, ErrNotFound)
+		return
+	}
+	defer f.Close()
+	st, _ := f.Stat()
+	c.log(a, "server.backup.download", b.Name)
+	w.Header().Set("Content-Disposition", contentDisposition(fmt.Sprintf("%s-%s.tar.gz", c.Server.Name, time.Unix(b.CreatedAt, 0).Format("20060102-150405"))))
+	w.Header().Set("Content-Type", "application/gzip")
+	http.ServeContent(w, r, "", st.ModTime(), f)
+}
+
+func (a *App) handleBackupRestore(w http.ResponseWriter, r *http.Request, c *Ctx) {
+	var in struct {
+		Truncate bool `json:"truncate"`
+	}
+	_ = readJSON(r, &in)
+	b, err := a.getBackup(c.Server.ID, r.PathValue("bid"))
+	if err != nil || b.Status != "completed" {
+		writeErr(w, ErrNotFound)
+		return
+	}
+	if st := a.kube.State(c.Server.ID).Status; st != "offline" {
+		writeErr(w, errCode(409, "Arrête le serveur avant de restaurer une sauvegarde"))
+		return
+	}
+	lock := a.serverLock(c.Server.ID)
+	if !lock.TryLock() {
+		writeErr(w, errCode(409, "Une action est déjà en cours sur ce serveur"))
+		return
+	}
+	defer lock.Unlock()
+	h := a.hub(c.Server.ID)
+	h.daemon("Restauration de « " + b.Name + " »…")
+	a.withRoot(w, r, c, func(root *os.Root, uid int) error {
+		if in.Truncate {
+			entries, err := fs.ReadDir(root.FS(), ".")
+			if err != nil {
+				return err
+			}
+			for _, e := range entries {
+				if err := root.RemoveAll(e.Name()); err != nil {
+					return err
+				}
+			}
+		}
+		f, err := os.Open(a.backupPath(b.ServerID, b.ID))
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		gz, err := gzip.NewReader(f)
+		if err != nil {
+			return errCode(400, "Sauvegarde corrompue")
+		}
+		if err := extractTar(gz, root, ".", uid, 0); err != nil {
+			h.daemon("Échec de la restauration : " + err.Error())
+			return err
+		}
+		h.daemon("Restauration terminée ✔")
+		c.log(a, "server.backup.restore", b.Name)
+		go a.refreshDisk(a.ctx, c.Server.ID)
+		writeJSON(w, 200, map[string]bool{"ok": true})
+		return nil
+	})
+}
+
+func (a *App) handleBackupLock(w http.ResponseWriter, r *http.Request, c *Ctx) {
+	b, err := a.getBackup(c.Server.ID, r.PathValue("bid"))
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	_, _ = a.db.Exec(`UPDATE backups SET locked=? WHERE id=?`, !b.Locked, b.ID)
+	c.log(a, "server.backup.lock", fmt.Sprintf("%s → %v", b.Name, !b.Locked))
+	writeJSON(w, 200, map[string]bool{"locked": !b.Locked})
+}
+
+func (a *App) handleBackupDelete(w http.ResponseWriter, r *http.Request, c *Ctx) {
+	b, err := a.getBackup(c.Server.ID, r.PathValue("bid"))
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	if b.Locked {
+		writeErr(w, errCode(409, "Sauvegarde verrouillée : déverrouille-la d'abord"))
+		return
+	}
+	if b.Status == "pending" {
+		writeErr(w, errCode(409, "Sauvegarde en cours"))
+		return
+	}
+	a.deleteBackup(b)
+	c.log(a, "server.backup.delete", b.Name)
+	writeJSON(w, 200, map[string]bool{"ok": true})
+}
+
+// ---------- Schedules
+
+type Schedule struct {
+	ID         int64  `json:"id"`
+	ServerID   string `json:"serverId"`
+	Name       string `json:"name"`
+	Cron       string `json:"cron"`
+	Action     string `json:"action"` // command, start, stop, restart, backup
+	Payload    string `json:"payload"`
+	Enabled    bool   `json:"enabled"`
+	OnlyOnline bool   `json:"onlyOnline"`
+	LastRun    int64  `json:"lastRun"`
+	NextRun    int64  `json:"nextRun"`
+	LastResult string `json:"lastResult"`
+	CreatedAt  int64  `json:"createdAt"`
+}
+
+const schedCols = `id, server_id, name, cron, action, payload, enabled, only_online, last_run, next_run, last_result, created_at`
+
+func scanSchedules(rows *sql.Rows) ([]*Schedule, error) {
+	defer rows.Close()
+	out := []*Schedule{}
+	for rows.Next() {
+		s := &Schedule{}
+		if err := rows.Scan(&s.ID, &s.ServerID, &s.Name, &s.Cron, &s.Action, &s.Payload, &s.Enabled, &s.OnlyOnline, &s.LastRun, &s.NextRun, &s.LastResult, &s.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
+func (a *App) loc() *time.Location {
+	if l, err := time.LoadLocation(a.db.Settings().Timezone); err == nil {
+		return l
+	}
+	return time.UTC
+}
+
+func (a *App) nextRun(expr string) (int64, error) {
+	sched, err := cron.ParseStandard(expr)
+	if err != nil {
+		return 0, errCode(400, "Expression cron invalide (format : minute heure jour mois jour-semaine)")
+	}
+	return sched.Next(time.Now().In(a.loc())).Unix(), nil
+}
+
+func (a *App) handleSchedules(w http.ResponseWriter, r *http.Request, c *Ctx) {
+	rows, err := a.db.Query(`SELECT `+schedCols+` FROM schedules WHERE server_id=? ORDER BY id`, c.Server.ID)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	list, err := scanSchedules(rows)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]any{"schedules": list, "timezone": a.db.Settings().Timezone})
+}
+
+func (a *App) handleScheduleSave(w http.ResponseWriter, r *http.Request, c *Ctx) {
+	var in Schedule
+	if err := readJSON(r, &in); err != nil {
+		writeErr(w, err)
+		return
+	}
+	in.Name = strings.TrimSpace(in.Name)
+	if in.Name == "" {
+		in.Name = "Tâche"
+	}
+	switch in.Action {
+	case "command":
+		if strings.TrimSpace(in.Payload) == "" || strings.ContainsAny(in.Payload, "\r\n") {
+			writeErr(w, errCode(400, "Commande requise (une seule ligne)"))
+			return
+		}
+	case "start", "stop", "restart", "backup":
+	default:
+		writeErr(w, errCode(400, "Action invalide"))
+		return
+	}
+	next, err := a.nextRun(in.Cron)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	if sid := r.PathValue("sid"); sid != "" {
+		id, _ := strconv.ParseInt(sid, 10, 64)
+		res, err := a.db.Exec(`UPDATE schedules SET name=?, cron=?, action=?, payload=?, enabled=?, only_online=?, next_run=? WHERE id=? AND server_id=?`,
+			truncate(in.Name, 60), in.Cron, in.Action, truncate(in.Payload, 1000), in.Enabled, in.OnlyOnline, next, id, c.Server.ID)
+		if n, _ := res.RowsAffected(); err != nil || n == 0 {
+			writeErr(w, ErrNotFound)
+			return
+		}
+	} else {
+		var count int
+		_ = a.db.QueryRow(`SELECT COUNT(*) FROM schedules WHERE server_id=?`, c.Server.ID).Scan(&count)
+		if count >= 25 {
+			writeErr(w, errCode(409, "25 tâches maximum par serveur"))
+			return
+		}
+		if _, err := a.db.Exec(`INSERT INTO schedules(server_id,name,cron,action,payload,enabled,only_online,next_run,created_at) VALUES(?,?,?,?,?,?,?,?,?)`,
+			c.Server.ID, truncate(in.Name, 60), in.Cron, in.Action, truncate(in.Payload, 1000), in.Enabled, in.OnlyOnline, next, now()); err != nil {
+			writeErr(w, err)
+			return
+		}
+	}
+	c.log(a, "server.schedule.save", in.Name+" ("+in.Cron+")")
+	writeJSON(w, 200, map[string]bool{"ok": true})
+}
+
+func (a *App) handleScheduleDelete(w http.ResponseWriter, r *http.Request, c *Ctx) {
+	id, _ := strconv.ParseInt(r.PathValue("sid"), 10, 64)
+	_, _ = a.db.Exec(`DELETE FROM schedules WHERE id=? AND server_id=?`, id, c.Server.ID)
+	c.log(a, "server.schedule.delete", fmt.Sprintf("#%d", id))
+	writeJSON(w, 200, map[string]bool{"ok": true})
+}
+
+func (a *App) handleScheduleRun(w http.ResponseWriter, r *http.Request, c *Ctx) {
+	id, _ := strconv.ParseInt(r.PathValue("sid"), 10, 64)
+	rows, err := a.db.Query(`SELECT `+schedCols+` FROM schedules WHERE id=? AND server_id=?`, id, c.Server.ID)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	list, _ := scanSchedules(rows)
+	if len(list) == 0 {
+		writeErr(w, ErrNotFound)
+		return
+	}
+	res := a.runSchedule(list[0], true)
+	c.log(a, "server.schedule.run", list[0].Name)
+	writeJSON(w, 200, map[string]string{"result": res})
+}
+
+func (a *App) runSchedule(sc *Schedule, manual bool) string {
+	s, err := a.db.Server(sc.ServerID)
+	if err != nil {
+		return "serveur introuvable"
+	}
+	result := "OK"
+	st := a.kube.State(s.ID).Status
+	switch {
+	case s.Suspended:
+		result = "ignoré : serveur suspendu"
+	case sc.OnlyOnline && st != "running" && !manual:
+		result = "ignoré : serveur hors ligne"
+	default:
+		var err error
+		switch sc.Action {
+		case "command":
+			err = a.sendCommand(s, sc.Payload)
+		case "backup":
+			_, err = a.createBackup(s, sc.Payload, true)
+		default:
+			err = a.power(s, sc.Action)
+		}
+		if err != nil {
+			result = "erreur : " + err.Error()
+		}
+	}
+	a.hub(s.ID).daemon(fmt.Sprintf("Tâche planifiée « %s » : %s", sc.Name, result))
+	next, _ := a.nextRun(sc.Cron)
+	_, _ = a.db.Exec(`UPDATE schedules SET last_run=?, next_run=?, last_result=? WHERE id=?`, now(), next, result, sc.ID)
+	a.db.LogActivity(s.ID, nil, "", "server.schedule.execute", sc.Name+" → "+result)
+	return result
+}
+
+func (a *App) scheduleLoop(ctx context.Context) {
+	t := time.NewTicker(15 * time.Second)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+		rows, err := a.db.Query(`SELECT `+schedCols+` FROM schedules WHERE enabled=1 AND next_run>0 AND next_run<=?`, now())
+		if err != nil {
+			continue
+		}
+		due, err := scanSchedules(rows)
+		if err != nil {
+			continue
+		}
+		for _, sc := range due {
+			a.runSchedule(sc, false)
+		}
+	}
+}

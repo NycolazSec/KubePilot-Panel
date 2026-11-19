@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 300" role="img" aria-label="KubePilot — game servers, piloted by Kubernetes">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="300" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#140f2b"/><stop offset=".55" stop-color="#0b0d14"/><stop offset="1" stop-color="#0c1630"/></linearGradient>
+    <radialGradient id="glow" cx="250" cy="150" r="260" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#7c3aed" stop-opacity=".35"/><stop offset="1" stop-color="#7c3aed" stop-opacity="0"/></radialGradient>
+    <linearGradient id="r" x1="12" y1="10" x2="116" y2="118" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#c4b5fd"/><stop offset=".5" stop-color="#8b5cf6"/><stop offset="1" stop-color="#3b82f6"/></linearGradient>
+    <linearGradient id="a" x1="40" y1="36" x2="92" y2="94" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#c7d2fe"/></linearGradient>
+    <linearGradient id="t" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#ede9fe"/><stop offset=".6" stop-color="#c4b5fd"/><stop offset="1" stop-color="#93c5fd"/></linearGradient>
+  </defs>
+  <rect width="1200" height="300" rx="28" fill="url(#bg)"/>
+  <rect width="1200" height="300" rx="28" fill="url(#glow)"/>
+  <g transform="translate(150 70) scale(1.25)">
+    <path d="M64 10 L110.8 37 V91 L64 118 L17.2 91 V37 Z" fill="none" stroke="url(#r)" stroke-width="9" stroke-linejoin="round"/>
+    <g fill="#8b5cf6"><circle cx="64" cy="10" r="6.5"/><circle cx="110.8" cy="91" r="6.5" fill="#3b82f6"/><circle cx="17.2" cy="91" r="6.5" fill="#6d5df6"/></g>
+    <path d="M88 38 L40 60 L60.5 67.5 L68 88 Z" fill="url(#a)" stroke="url(#a)" stroke-width="5" stroke-linejoin="round"/>
+  </g>
+  <text x="380" y="160" font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="92" font-weight="700" letter-spacing="-2" fill="url(#t)">KubePilot</text>
+  <text x="384" y="212" font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="30" fill="#959cb8">Game servers, piloted by Kubernetes.</text>
+</svg>

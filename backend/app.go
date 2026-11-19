@@ -1,0 +1,461 @@
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"io"
+	"io/fs"
+	"log"
+	"net"
+	"net/http"
+	"path"
+	"strings"
+	"sync"
+	"time"
+
+	"golang.org/x/crypto/bcrypt"
+)
+
+type App struct {
+	cfg  Config
+	db   *DB
+	kube *Kube
+	ctx  context.Context
+
+	hubsMu sync.Mutex
+	hubs   map[string]*Hub
+
+	locksMu sync.Mutex
+	locks   map[string]*sync.Mutex
+
+	diskMu sync.RWMutex
+	disk   map[string]int64
+
+	allocMu sync.Mutex
+
+	limiter *rateLimiter
+}
+
+func newApp(cfg Config, db *DB, kube *Kube) *App {
+	return &App{
+		cfg: cfg, db: db, kube: kube, ctx: context.Background(),
+		hubs: map[string]*Hub{}, locks: map[string]*sync.Mutex{}, disk: map[string]int64{},
+		limiter: newRateLimiter(10, 10*time.Minute),
+	}
+}
+
+func (a *App) startBackground(ctx context.Context) {
+	a.ctx = ctx
+	servers, err := a.db.AllServers()
+	if err == nil {
+		for _, s := range servers {
+			a.hub(s.ID)
+		}
+	}
+	go a.diskLoop(ctx)
+	go a.scheduleLoop(ctx)
+	go a.sessionCleanup(ctx)
+}
+
+func (a *App) serverLock(id string) *sync.Mutex {
+	a.locksMu.Lock()
+	defer a.locksMu.Unlock()
+	m, ok := a.locks[id]
+	if !ok {
+		m = &sync.Mutex{}
+		a.locks[id] = m
+	}
+	return m
+}
+
+func (a *App) sessionCleanup(ctx context.Context) {
+	t := time.NewTicker(time.Hour)
+	defer t.Stop()
+	for {
+		_, _ = a.db.Exec(`DELETE FROM sessions WHERE expires_at < ?`, now())
+		_, _ = a.db.Exec(`DELETE FROM activity WHERE created_at < ?`, time.Now().Add(-90*24*time.Hour).Unix())
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+	}
+}
+
+// ---------- HTTP helpers
+
+type apiError struct {
+	code int
+	msg  string
+}
+
+func (e *apiError) Error() string { return e.msg }
+
+func errCode(code int, msg string) error { return &apiError{code, msg} }
+
+func writeJSON(w http.ResponseWriter, code int, v any) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(code)
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+func writeErr(w http.ResponseWriter, err error) {
+	var ae *apiError
+	switch {
+	case errors.As(err, &ae):
+		writeJSON(w, ae.code, map[string]string{"error": ae.msg})
+	case errors.Is(err, ErrNotFound):
+		writeJSON(w, 404, map[string]string{"error": "Introuvable"})
+	case errors.Is(err, ErrNoVolume):
+		writeJSON(w, 409, map[string]string{"error": err.Error()})
+	default:
+		writeJSON(w, 400, map[string]string{"error": err.Error()})
+	}
+}
+
+func readJSON(r *http.Request, v any) error {
+	body := io.LimitReader(r.Body, 2<<20)
+	if err := json.NewDecoder(body).Decode(v); err != nil {
+		return errCode(400, "JSON invalide")
+	}
+	return nil
+}
+
+// Cloudflare edge ranges (https://www.cloudflare.com/ips/). CF-Connecting-IP is only trusted
+// when the request really comes from one of them, so it can't be spoofed by hitting the origin directly.
+var cloudflareNets = func() []*net.IPNet {
+	var out []*net.IPNet
+	for _, c := range strings.Fields(`173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18
+		108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13
+		104.24.0.0/14 172.64.0.0/13 131.0.72.0/22 2400:cb00::/32 2606:4700::/32 2803:f800::/32 2405:b500::/32
+		2405:8100::/32 2a06:98c0::/29 2c0f:f248::/32`) {
+		if _, n, err := net.ParseCIDR(c); err == nil {
+			out = append(out, n)
+		}
+	}
+	return out
+}()
+
+func fromCloudflare(ip string) bool {
+	parsed := net.ParseIP(ip)
+	if parsed == nil {
+		return false
+	}
+	for _, n := range cloudflareNets {
+		if n.Contains(parsed) {
+			return true
+		}
+	}
+	return false
+}
+
+func clientIP(r *http.Request) string {
+	// Traffic always arrives through the ingress controller, which appends the peer it saw last.
+	ip, _, _ := net.SplitHostPort(r.RemoteAddr)
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		parts := strings.Split(xff, ",")
+		ip = strings.TrimSpace(parts[len(parts)-1])
+	}
+	if cf := strings.TrimSpace(r.Header.Get("CF-Connecting-IP")); cf != "" && fromCloudflare(ip) && net.ParseIP(cf) != nil {
+		return cf
+	}
+	return ip
+}
+
+// ---------- Rate limiter (login)
+
+type rateLimiter struct {
+	mu     sync.Mutex
+	max    int
+	window time.Duration
+	hits   map[string][]time.Time
+}
+
+func newRateLimiter(max int, window time.Duration) *rateLimiter {
+	return &rateLimiter{max: max, window: window, hits: map[string][]time.Time{}}
+}
+
+func (l *rateLimiter) allow(key string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	cut := time.Now().Add(-l.window)
+	h := l.hits[key][:0]
+	for _, t := range l.hits[key] {
+		if t.After(cut) {
+			h = append(h, t)
+		}
+	}
+	if len(h) >= l.max {
+		l.hits[key] = h
+		return false
+	}
+	l.hits[key] = append(h, time.Now())
+	return true
+}
+
+func (l *rateLimiter) reset(key string) {
+	l.mu.Lock()
+	delete(l.hits, key)
+	l.mu.Unlock()
+}
+
+// ---------- Auth
+
+const cookieName = "kubepilot_session"
+
+type ctxKey int
+
+const userKey ctxKey = 1
+
+func (a *App) currentUser(r *http.Request) *User {
+	c, err := r.Cookie(cookieName)
+	if err != nil {
+		return nil
+	}
+	u, err := a.db.SessionUser(c.Value)
+	if err != nil {
+		return nil
+	}
+	return u
+}
+
+type authedHandler func(w http.ResponseWriter, r *http.Request, u *User)
+
+func (a *App) authed(h authedHandler) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		u := a.currentUser(r)
+		if u == nil {
+			writeJSON(w, 401, map[string]string{"error": "Non connecté"})
+			return
+		}
+		h(w, r, u)
+	}
+}
+
+func (a *App) admin(h authedHandler) http.HandlerFunc {
+	return a.authed(func(w http.ResponseWriter, r *http.Request, u *User) {
+		if !u.IsAdmin {
+			writeJSON(w, 403, map[string]string{"error": "Réservé aux administrateurs"})
+			return
+		}
+		h(w, r, u)
+	})
+}
+
+// dummy hash so failed lookups take as long as real ones (no user enumeration by timing)
+var dummyHash = sync.OnceValue(func() string {
+	h, _ := bcrypt.GenerateFromPassword([]byte("kubepilot-dummy-password"), 12)
+	return string(h)
+})
+
+func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
+	var in struct{ Login, Password string }
+	if err := readJSON(r, &in); err != nil {
+		writeErr(w, err)
+		return
+	}
+	ip := clientIP(r)
+	if !a.limiter.allow(ip) {
+		writeJSON(w, 429, map[string]string{"error": "Trop de tentatives, réessaie dans quelques minutes"})
+		return
+	}
+	u, err := a.db.UserByLogin(strings.TrimSpace(in.Login))
+	if err != nil {
+		(&User{hash: dummyHash()}).CheckPassword(in.Password)
+		writeJSON(w, 401, map[string]string{"error": "Identifiants incorrects"})
+		return
+	}
+	if !u.CheckPassword(in.Password) {
+		a.db.LogActivity("", u, ip, "auth.fail", "")
+		writeJSON(w, 401, map[string]string{"error": "Identifiants incorrects"})
+		return
+	}
+	a.limiter.reset(ip)
+	tok, err := a.db.CreateSession(u.ID, ip, r.UserAgent())
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name: cookieName, Value: tok, Path: "/", HttpOnly: true, Secure: a.cfg.SecureCookies,
+		SameSite: http.SameSiteLaxMode, MaxAge: int(sessionTTL.Seconds()),
+	})
+	a.db.LogActivity("", u, ip, "auth.login", "")
+	writeJSON(w, 200, a.meView(u))
+}
+
+func (a *App) handleLogout(w http.ResponseWriter, r *http.Request) {
+	if c, err := r.Cookie(cookieName); err == nil {
+		a.db.DeleteSession(c.Value)
+	}
+	http.SetCookie(w, &http.Cookie{Name: cookieName, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: a.cfg.SecureCookies})
+	writeJSON(w, 200, map[string]bool{"ok": true})
+}
+
+func (a *App) meView(u *User) map[string]any {
+	st := a.db.Settings()
+	return map[string]any{"user": u, "panelName": st.PanelName, "version": version}
+}
+
+func (a *App) handleMe(w http.ResponseWriter, r *http.Request, u *User) {
+	writeJSON(w, 200, a.meView(u))
+}
+
+func (a *App) handlePassword(w http.ResponseWriter, r *http.Request, u *User) {
+	var in struct{ Current, New string }
+	if err := readJSON(r, &in); err != nil {
+		writeErr(w, err)
+		return
+	}
+	if !u.CheckPassword(in.Current) {
+		writeErr(w, errCode(400, "Mot de passe actuel incorrect"))
+		return
+	}
+	if err := a.db.SetPassword(u.ID, in.New); err != nil {
+		writeErr(w, err)
+		return
+	}
+	if c, err := r.Cookie(cookieName); err == nil {
+		a.db.DeleteOtherSessions(u.ID, c.Value)
+	}
+	a.db.LogActivity("", u, clientIP(r), "account.password", "")
+	writeJSON(w, 200, map[string]bool{"ok": true})
+}
+
+// ---------- Router
+
+func (a *App) routes() http.Handler {
+	m := http.NewServeMux()
+	m.HandleFunc("POST /api/auth/login", a.handleLogin)
+	m.HandleFunc("POST /api/auth/logout", a.handleLogout)
+	m.HandleFunc("GET /api/auth/me", a.authed(a.handleMe))
+	m.HandleFunc("PUT /api/account/password", a.authed(a.handlePassword))
+
+	m.HandleFunc("GET /api/servers", a.authed(a.handleServers))
+	m.HandleFunc("GET /api/servers/{id}", a.srv("", a.handleServer))
+	m.HandleFunc("POST /api/servers/{id}/power", a.srv("power", a.handlePower))
+	m.HandleFunc("POST /api/servers/{id}/command", a.srv("console", a.handleCommand))
+	m.HandleFunc("GET /api/servers/{id}/ws", a.srv("console", a.handleWS))
+
+	m.HandleFunc("GET /api/servers/{id}/files/list", a.srv("files", a.handleFileList))
+	m.HandleFunc("GET /api/servers/{id}/files/content", a.srv("files", a.handleFileRead))
+	m.HandleFunc("PUT /api/servers/{id}/files/content", a.srv("files", a.handleFileWrite))
+	m.HandleFunc("POST /api/servers/{id}/files/mkdir", a.srv("files", a.handleMkdir))
+	m.HandleFunc("POST /api/servers/{id}/files/rename", a.srv("files", a.handleRename))
+	m.HandleFunc("POST /api/servers/{id}/files/delete", a.srv("files", a.handleDelete))
+	m.HandleFunc("POST /api/servers/{id}/files/upload", a.srv("files", a.handleUpload))
+	m.HandleFunc("GET /api/servers/{id}/files/download", a.srv("files", a.handleDownload))
+	m.HandleFunc("POST /api/servers/{id}/files/compress", a.srv("files", a.handleCompress))
+	m.HandleFunc("POST /api/servers/{id}/files/decompress", a.srv("files", a.handleDecompress))
+
+	m.HandleFunc("GET /api/servers/{id}/backups", a.srv("backups", a.handleBackups))
+	m.HandleFunc("POST /api/servers/{id}/backups", a.srv("backups", a.handleBackupCreate))
+	m.HandleFunc("GET /api/servers/{id}/backups/{bid}/download", a.srv("backups", a.handleBackupDownload))
+	m.HandleFunc("POST /api/servers/{id}/backups/{bid}/restore", a.srv("backups", a.handleBackupRestore))
+	m.HandleFunc("POST /api/servers/{id}/backups/{bid}/lock", a.srv("backups", a.handleBackupLock))
+	m.HandleFunc("DELETE /api/servers/{id}/backups/{bid}", a.srv("backups", a.handleBackupDelete))
+
+	m.HandleFunc("GET /api/servers/{id}/schedules", a.srv("schedules", a.handleSchedules))
+	m.HandleFunc("POST /api/servers/{id}/schedules", a.srv("schedules", a.handleScheduleSave))
+	m.HandleFunc("PUT /api/servers/{id}/schedules/{sid}", a.srv("schedules", a.handleScheduleSave))
+	m.HandleFunc("DELETE /api/servers/{id}/schedules/{sid}", a.srv("schedules", a.handleScheduleDelete))
+	m.HandleFunc("POST /api/servers/{id}/schedules/{sid}/run", a.srv("schedules", a.handleScheduleRun))
+
+	m.HandleFunc("GET /api/servers/{id}/startup", a.srv("startup", a.handleStartup))
+	m.HandleFunc("PUT /api/servers/{id}/startup", a.srv("startup", a.handleStartupSave))
+
+	m.HandleFunc("GET /api/servers/{id}/network", a.srv("network", a.handleNetwork))
+	m.HandleFunc("POST /api/servers/{id}/network", a.srv("network", a.handleAllocAdd))
+	m.HandleFunc("PUT /api/servers/{id}/network/{port}", a.srv("network", a.handleAllocUpdate))
+	m.HandleFunc("DELETE /api/servers/{id}/network/{port}", a.srv("network", a.handleAllocDelete))
+
+	m.HandleFunc("GET /api/servers/{id}/users", a.srv("users", a.handleSubUsers))
+	m.HandleFunc("POST /api/servers/{id}/users", a.srv("users", a.handleSubUserSave))
+	m.HandleFunc("PUT /api/servers/{id}/users/{uid}", a.srv("users", a.handleSubUserSave))
+	m.HandleFunc("DELETE /api/servers/{id}/users/{uid}", a.srv("users", a.handleSubUserDelete))
+
+	m.HandleFunc("GET /api/servers/{id}/activity", a.srv("activity", a.handleServerActivity))
+	m.HandleFunc("PUT /api/servers/{id}/settings", a.srv("settings", a.handleServerSettings))
+	m.HandleFunc("POST /api/servers/{id}/reinstall", a.srv("settings", a.handleReinstall))
+
+	m.HandleFunc("GET /api/admin/overview", a.admin(a.handleAdminOverview))
+	m.HandleFunc("GET /api/admin/users", a.admin(a.handleAdminUsers))
+	m.HandleFunc("POST /api/admin/users", a.admin(a.handleAdminUserSave))
+	m.HandleFunc("PUT /api/admin/users/{uid}", a.admin(a.handleAdminUserSave))
+	m.HandleFunc("DELETE /api/admin/users/{uid}", a.admin(a.handleAdminUserDelete))
+	m.HandleFunc("GET /api/admin/templates", a.admin(a.handleAdminTemplates))
+	m.HandleFunc("POST /api/admin/templates", a.admin(a.handleAdminTemplateSave))
+	m.HandleFunc("PUT /api/admin/templates/{tid}", a.admin(a.handleAdminTemplateSave))
+	m.HandleFunc("DELETE /api/admin/templates/{tid}", a.admin(a.handleAdminTemplateDelete))
+	m.HandleFunc("POST /api/admin/servers", a.admin(a.handleAdminServerCreate))
+	m.HandleFunc("PUT /api/admin/servers/{id}", a.admin(a.handleAdminServerUpdate))
+	m.HandleFunc("DELETE /api/admin/servers/{id}", a.admin(a.handleAdminServerDelete))
+	m.HandleFunc("GET /api/admin/settings", a.admin(a.handleAdminSettings))
+	m.HandleFunc("PUT /api/admin/settings", a.admin(a.handleAdminSettingsSave))
+	m.HandleFunc("GET /api/admin/activity", a.admin(a.handleAdminActivity))
+
+	m.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("ok")) })
+	m.Handle("/api/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, 404, map[string]string{"error": "Route inconnue"})
+	}))
+	m.Handle("/", a.spa())
+	return a.secure(m)
+}
+
+func (a *App) secure(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("Referrer-Policy", "same-origin")
+		h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+		h.Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self' ws: wss:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
+		if a.cfg.SecureCookies {
+			h.Set("Strict-Transport-Security", "max-age=31536000")
+		}
+		// CSRF: state-changing API calls must carry a custom header (forces a CORS preflight cross-site).
+		if strings.HasPrefix(r.URL.Path, "/api/") && r.Method != http.MethodGet && r.Method != http.MethodHead {
+			if r.Header.Get("X-KubePilot") != "1" {
+				writeJSON(w, 403, map[string]string{"error": "Requête refusée (CSRF)"})
+				return
+			}
+		}
+		defer func() {
+			if rec := recover(); rec != nil {
+				log.Printf("panic %s %s: %v", r.Method, r.URL.Path, rec)
+				writeJSON(w, 500, map[string]string{"error": "Erreur interne"})
+			}
+		}()
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (a *App) spa() http.Handler {
+	sub, _ := fs.Sub(webFS, "web")
+	files := http.FileServer(http.FS(sub))
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		p := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
+		if p != "" {
+			if f, err := sub.Open(p); err == nil {
+				st, _ := f.Stat()
+				f.Close()
+				if !st.IsDir() {
+					if strings.HasPrefix(p, "assets/") {
+						w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+					}
+					files.ServeHTTP(w, r)
+					return
+				}
+			}
+		}
+		w.Header().Set("Cache-Control", "no-cache")
+		b, err := fs.ReadFile(sub, "index.html")
+		if err != nil {
+			http.Error(w, "frontend not built", 500)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write(b)
+	})
+}

@@ -1,0 +1,163 @@
+# KubePilot : panel de serveurs de jeu natif Kubernetes
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kubepilot-system
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kubepilot-servers
+  labels:
+    app.kubernetes.io/managed-by: kubepilot
+    # Les serveurs de jeu tournent sans root, sans capacités, seccomp actif
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kubepilot
+  namespace: kubepilot-system
+---
+# Droits complets mais limités au namespace des serveurs de jeu
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: kubepilot
+  namespace: kubepilot-servers
+rules:
+  - apiGroups: [""]
+    resources: [pods, services, persistentvolumeclaims]
+    verbs: [get, list, watch, create, update, patch, delete, deletecollection]
+  - apiGroups: [""]
+    resources: [pods/log, events]
+    verbs: [get, list, watch]
+  - apiGroups: [""]
+    resources: [pods/attach]
+    verbs: [get, create]
+  - apiGroups: [apps]
+    resources: [statefulsets, statefulsets/scale]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [get, list, watch, create, delete, deletecollection]
+  - apiGroups: [networking.k8s.io]
+    resources: [networkpolicies]
+    verbs: [get, create, update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kubepilot
+  namespace: kubepilot-servers
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: kubepilot }
+subjects: [{ kind: ServiceAccount, name: kubepilot, namespace: kubepilot-system }]
+---
+# Lecture seule au niveau du cluster : nœuds, volumes, ports NodePort déjà pris, métriques
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kubepilot
+rules:
+  - apiGroups: [""]
+    resources: [nodes, persistentvolumes, services]
+    verbs: [get, list]
+  - apiGroups: [metrics.k8s.io]
+    resources: [pods, nodes]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kubepilot
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: kubepilot }
+subjects: [{ kind: ServiceAccount, name: kubepilot, namespace: kubepilot-system }]
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: kubepilot-data
+  namespace: kubepilot-system
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: local-path
+  resources: { requests: { storage: 20Gi } }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kubepilot
+  namespace: kubepilot-system
+  labels: { app: kubepilot }
+spec:
+  replicas: 1
+  strategy: { type: Recreate }
+  selector: { matchLabels: { app: kubepilot } }
+  template:
+    metadata:
+      labels: { app: kubepilot }
+    spec:
+      serviceAccountName: kubepilot
+      # Le gestionnaire de fichiers lit les volumes local-path : même nœud que les serveurs
+      nodeSelector: { kubernetes.io/hostname: __NODE__ }
+      containers:
+        - name: panel
+          image: kubepilot:latest
+          imagePullPolicy: Never
+          env:
+            - { name: KUBEPILOT_NAMESPACE, value: kubepilot-servers }
+            - { name: KUBEPILOT_STORAGE_ROOT, value: /var/lib/rancher/k3s/storage }
+            - { name: KUBEPILOT_DATA, value: /data }
+            - { name: KUBEPILOT_SECURE_COOKIES, value: "true" }
+          ports: [{ containerPort: 8080, name: http }]
+          readinessProbe: { httpGet: { path: /healthz, port: http }, periodSeconds: 5 }
+          livenessProbe: { httpGet: { path: /healthz, port: http }, periodSeconds: 20, failureThreshold: 6 }
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { cpu: "2", memory: 1Gi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+              # chown des fichiers créés pour l'utilisateur du jeu + accès à leurs fichiers
+              add: [CHOWN, DAC_OVERRIDE, FOWNER]
+          volumeMounts:
+            - { name: data, mountPath: /data }
+            - { name: storage, mountPath: /var/lib/rancher/k3s/storage }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: data
+          persistentVolumeClaim: { claimName: kubepilot-data }
+        - name: storage
+          hostPath: { path: /var/lib/rancher/k3s/storage, type: Directory }
+        - name: tmp
+          emptyDir: { sizeLimit: 1Gi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kubepilot
+  namespace: kubepilot-system
+spec:
+  selector: { app: kubepilot }
+  ports: [{ port: 80, targetPort: http, name: http }]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: kubepilot
+  namespace: kubepilot-system
+  annotations:
+    cert-manager.io/cluster-issuer: __ISSUER__
+spec:
+  ingressClassName: traefik
+  tls: [{ hosts: [__HOST__], secretName: kubepilot-tls }]
+  rules:
+    - host: __HOST__
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend: { service: { name: kubepilot, port: { name: http } } }

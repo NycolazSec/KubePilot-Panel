@@ -1,0 +1,15 @@
+# build outputs
+/kubepilot
+/deploy/kubepilot
+/backend/web/*
+!/backend/web/.gitkeep
+node_modules/
+# local secrets / data — never commit
+/deploy/config.env
+/.admin-password
+/migration-backup/
+*.db
+*.db-wal
+*.db-shm
+.env
+dev-data/
