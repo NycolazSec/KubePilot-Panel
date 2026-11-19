@@ -29,6 +29,7 @@ import AdminUsers from './pages/admin/AdminUsers';
 import AdminTemplates from './pages/admin/AdminTemplates';
 import AdminSettings from './pages/admin/AdminSettings';
 import AdminActivity from './pages/admin/AdminActivity';
+import AdminCluster from './pages/admin/AdminCluster';
 
 type AuthCtx = { me: Me | null; setMe: (m: Me | null) => void; refresh: () => Promise<void> };
 const Auth = createContext<AuthCtx>(null!);
@@ -85,6 +86,7 @@ function App() {
               {me.user.isAdmin && (
                 <Route path="admin" element={<AdminLayout />}>
                   <Route index element={<AdminOverview />} />
+                  <Route path="cluster" element={<AdminCluster />} />
                   <Route path="servers" element={<AdminServers />} />
                   <Route path="users" element={<AdminUsers />} />
                   <Route path="templates" element={<AdminTemplates />} />
