@@ -64,7 +64,7 @@ export default function Backups() {
           <ul className="divide-y divide-ink-800">
             {data.backups.map((b) => (
               <li key={b.id} className="flex flex-wrap items-center gap-4 px-5 py-3.5">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-ink-800 text-brand-300">{b.status === 'pending' ? <Spinner className="h-4 w-4" /> : <History className="h-4 w-4" />}</div>
+                <div className="flex h-9 w-9 items-center justify-center rounded-md border border-ink-600 bg-ink-800 text-ink-300">{b.status === 'pending' ? <Spinner className="h-4 w-4" /> : <History className="h-4 w-4" />}</div>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-medium">{b.name}</span>

@@ -229,11 +229,11 @@ export default function Files() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-ink-700 text-left text-xs text-ink-400">
-                <th className="w-10 px-4 py-2"><input type="checkbox" className="accent-brand-500" checked={!!all} onChange={() => setSelected(all ? new Set() : new Set(data.map((e) => e.name)))} /></th>
-                <th className="py-2 font-medium">Nom</th>
-                <th className="hidden px-4 py-2 text-right font-medium sm:table-cell">Taille</th>
-                <th className="hidden px-4 py-2 text-right font-medium md:table-cell">Modifié</th>
+              <tr className="border-b border-ink-700">
+                <th className="th w-10"><input type="checkbox" className="accent-brand-500" checked={!!all} onChange={() => setSelected(all ? new Set() : new Set(data.map((e) => e.name)))} /></th>
+                <th className="th">Nom</th>
+                <th className="th hidden text-right sm:table-cell">Taille</th>
+                <th className="th hidden text-right md:table-cell">Modifié</th>
                 <th className="w-40 px-4 py-2" />
               </tr>
             </thead>

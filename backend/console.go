@@ -77,7 +77,7 @@ func (h *Hub) push(line string) {
 }
 
 func (h *Hub) daemon(msg string) {
-	h.push("\x1b[1;38;5;141m[KubePilot]\x1b[0m \x1b[38;5;189m" + msg + "\x1b[0m")
+	h.push("\x1b[38;5;104m[KubePilot]\x1b[0m \x1b[38;5;250m" + msg + "\x1b[0m")
 }
 
 func (h *Hub) subscribe() (chan WSMsg, []string) {
@@ -115,9 +115,9 @@ func (a *App) watchState(ctx context.Context, h *Hub) {
 		st := a.kube.State(h.id)
 		if st.Status != last.Status || (st.Status == "crashed" && st.Restarts != last.Restarts) {
 			if st.Status == "crashed" {
-				h.push("\x1b[1;31m[KubePilot] Le serveur a planté : " + st.Reason + "\x1b[0m")
+				h.push("\x1b[38;5;203m[KubePilot] Le serveur a planté : " + st.Reason + "\x1b[0m")
 			} else if last.Status == "installing" && st.InstallError {
-				h.push("\x1b[1;31m[KubePilot] L'installation a échoué. Consulte les lignes ci-dessus.\x1b[0m")
+				h.push("\x1b[38;5;203m[KubePilot] L'installation a échoué. Consulte les lignes ci-dessus.\x1b[0m")
 			} else if last.Status == "installing" {
 				h.daemon("Installation terminée ✔")
 			} else if txt, ok := statusText[st.Status]; ok {

@@ -1,6 +1,6 @@
 import { Copy, Download, Layers, Pencil, Plus, Trash2, Upload, X } from 'lucide-react';
 import { useRef, useState } from 'react';
-import { del, get, post, put, Template, TemplateVar } from '../../api';
+import { del, get, post, put, sortTemplates, Template, TemplateVar } from '../../api';
 import { Badge, Button, Card, Empty, ErrorBox, Field, IconButton, Loading, Modal, Toggle, useLoad, useUI } from '../../components/ui';
 import { cpuLabel, mb } from '../../lib/format';
 import TemplateIcon from '../../components/TemplateIcon';
@@ -78,7 +78,7 @@ function TemplateEditor({ t, setT }: { t: Template; setT: (t: Template) => void 
           <Button size="sm" variant="ghost" icon={<Plus className="h-3.5 w-3.5" />} onClick={() => set('vars', [...t.vars, { key: 'NOUVELLE_VAR', name: 'Nouvelle variable', description: '', default: '', userViewable: true, userEditable: true }])}>Ajouter</Button></div>
         <div className="space-y-3">
           {t.vars.map((v, i) => (
-            <div key={i} className="rounded-xl border border-ink-700 p-3">
+            <div key={i} className="rounded-md border border-ink-700 p-3">
               <div className="grid gap-2 sm:grid-cols-3">
                 <input className="input font-mono text-xs" placeholder="CLE" value={v.key} onChange={(e) => setVar(i, { key: e.target.value.toUpperCase() })} />
                 <input className="input" placeholder="Libellé" value={v.name} onChange={(e) => setVar(i, { name: e.target.value })} />
@@ -112,7 +112,7 @@ function TemplateEditor({ t, setT }: { t: Template; setT: (t: Template) => void 
 
 export default function AdminTemplates() {
   const { toast, confirm } = useUI();
-  const { data, error, loading, reload } = useLoad(() => get<Template[]>('/admin/templates'));
+  const { data, error, loading, reload } = useLoad(() => get<Template[]>('/admin/templates').then(sortTemplates));
   const [edit, setEdit] = useState<Template | null>(null);
   const [busy, setBusy] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);

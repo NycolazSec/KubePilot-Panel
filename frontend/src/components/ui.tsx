@@ -8,11 +8,11 @@ import { statusLabel } from '../lib/format';
 
 type BtnVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'success';
 const btnStyles: Record<BtnVariant, string> = {
-  primary: 'bg-gradient-to-r from-brand-600 to-sky2-500 text-white shadow-glow hover:brightness-110',
-  secondary: 'bg-ink-800 border border-ink-600 text-ink-100 hover:border-ink-500 hover:bg-ink-700',
-  ghost: 'text-ink-300 hover:text-ink-100 hover:bg-ink-800',
-  danger: 'bg-red-500/10 border border-red-500/30 text-red-300 hover:bg-red-500/20',
-  success: 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/20',
+  primary: 'bg-brand-600 text-white border border-brand-500/60 hover:bg-brand-500 disabled:bg-ink-800 disabled:border-ink-700 disabled:text-ink-500 disabled:hover:bg-ink-800',
+  secondary: 'bg-ink-800 text-ink-100 border border-ink-600 hover:bg-ink-750 hover:border-ink-500',
+  ghost: 'text-ink-300 border border-transparent hover:bg-ink-800 hover:text-ink-100',
+  danger: 'bg-ink-800 text-red-300 border border-ink-600 hover:border-red-500/50 hover:bg-red-500/10',
+  success: 'bg-ink-800 text-emerald-300 border border-ink-600 hover:border-emerald-500/50 hover:bg-emerald-500/10',
 };
 
 export function Button({ variant = 'secondary', size = 'md', loading, icon, className, children, ...rest }:
@@ -22,12 +22,12 @@ export function Button({ variant = 'secondary', size = 'md', loading, icon, clas
       {...rest}
       disabled={rest.disabled || loading}
       className={clsx(
-        'inline-flex items-center justify-center gap-2 rounded-xl font-medium transition disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap select-none',
-        size === 'sm' ? 'px-2.5 py-1.5 text-xs' : 'px-3.5 py-2 text-sm',
+        'inline-flex items-center justify-center gap-1.5 rounded-md font-medium transition-colors disabled:opacity-60 disabled:cursor-not-allowed whitespace-nowrap select-none [&_svg]:h-3.5 [&_svg]:w-3.5',
+        size === 'sm' ? 'h-7 px-2.5 text-xs' : 'h-8 px-3 text-[13px]',
         btnStyles[variant], className,
       )}
     >
-      {loading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : icon}
+      {loading ? <LoaderCircle className="animate-spin" /> : icon}
       {children}
     </button>
   );
@@ -36,7 +36,7 @@ export function Button({ variant = 'secondary', size = 'md', loading, icon, clas
 export function IconButton({ title, className, children, ...rest }: React.ButtonHTMLAttributes<HTMLButtonElement> & { title: string }) {
   return (
     <button {...rest} title={title} aria-label={title}
-      className={clsx('inline-flex h-8 w-8 items-center justify-center rounded-lg text-ink-300 transition hover:bg-ink-700 hover:text-ink-100 disabled:opacity-40', className)}>
+      className={clsx('inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-400 transition-colors hover:bg-ink-750 hover:text-ink-100 disabled:opacity-40 [&_svg]:h-4 [&_svg]:w-4', className)}>
       {children}
     </button>
   );
@@ -44,26 +44,29 @@ export function IconButton({ title, className, children, ...rest }: React.Button
 
 // ---------- Layout bits
 
-export function Card({ className, children, title, actions, padded = true }: { className?: string; children: React.ReactNode; title?: React.ReactNode; actions?: React.ReactNode; padded?: boolean }) {
+export function Card({ className, children, title, actions, padded = true, description }: { className?: string; children: React.ReactNode; title?: React.ReactNode; actions?: React.ReactNode; padded?: boolean; description?: React.ReactNode }) {
   return (
-    <div className={clsx('card animate-fade-in', className)}>
+    <section className={clsx('card', className)}>
       {(title || actions) && (
-        <div className="flex items-center justify-between gap-3 border-b border-ink-700 px-5 py-3.5">
-          <h3 className="text-sm font-semibold text-ink-100">{title}</h3>
-          <div className="flex items-center gap-2">{actions}</div>
-        </div>
+        <header className="flex min-h-[52px] items-center justify-between gap-3 border-b border-ink-700 px-4 py-2.5">
+          <div className="min-w-0">
+            <h3 className="text-[13px] font-semibold text-ink-100">{title}</h3>
+            {description && <p className="mt-0.5 text-xs text-ink-400">{description}</p>}
+          </div>
+          <div className="flex shrink-0 items-center gap-2">{actions}</div>
+        </header>
       )}
-      <div className={clsx(padded && 'p-5')}>{children}</div>
-    </div>
+      <div className={clsx(padded && 'p-4')}>{children}</div>
+    </section>
   );
 }
 
 export function PageHeader({ title, subtitle, actions }: { title: React.ReactNode; subtitle?: React.ReactNode; actions?: React.ReactNode }) {
   return (
-    <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-ink-100">{title}</h1>
-        {subtitle && <p className="mt-1 text-sm text-ink-400">{subtitle}</p>}
+    <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
+      <div className="min-w-0">
+        <h1 className="text-xl font-semibold tracking-tight text-ink-100">{title}</h1>
+        {subtitle && <p className="mt-1 text-[13px] text-ink-400">{subtitle}</p>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </div>
@@ -75,16 +78,16 @@ export function Field({ label, hint, children, className }: { label: string; hin
     <label className={clsx('block', className)}>
       <span className="label">{label}</span>
       {children}
-      {hint && <span className="mt-1 block text-xs text-ink-400">{hint}</span>}
+      {hint && <span className="mt-1.5 block text-xs text-ink-400">{hint}</span>}
     </label>
   );
 }
 
 export function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label?: string }) {
   return (
-    <button type="button" onClick={() => onChange(!checked)} className="inline-flex items-center gap-2.5 text-sm text-ink-200">
-      <span className={clsx('relative h-5 w-9 rounded-full transition', checked ? 'bg-brand-500' : 'bg-ink-600')}>
-        <span className={clsx('absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all', checked ? 'left-[18px]' : 'left-0.5')} />
+    <button type="button" role="switch" aria-checked={checked} onClick={() => onChange(!checked)} className="inline-flex items-center gap-2.5 text-[13px] text-ink-200">
+      <span className={clsx('relative h-[18px] w-8 rounded-full border transition-colors', checked ? 'border-brand-500 bg-brand-600' : 'border-ink-600 bg-ink-750')}>
+        <span className={clsx('absolute top-[2px] h-3 w-3 rounded-full bg-white transition-all', checked ? 'left-[16px]' : 'left-[2px] bg-ink-300')} />
       </span>
       {label}
     </button>
@@ -92,33 +95,39 @@ export function Toggle({ checked, onChange, label }: { checked: boolean; onChang
 }
 
 export function Spinner({ className }: { className?: string }) {
-  return <LoaderCircle className={clsx('h-5 w-5 animate-spin text-brand-400', className)} />;
+  return <LoaderCircle className={clsx('h-4 w-4 animate-spin text-ink-400', className)} />;
 }
 
 export function Loading({ label = 'Chargement…' }: { label?: string }) {
-  return <div className="flex items-center justify-center gap-3 py-16 text-sm text-ink-400"><Spinner /> {label}</div>;
+  return <div className="flex items-center justify-center gap-2.5 py-14 text-[13px] text-ink-400"><Spinner /> {label}</div>;
 }
 
 export function Empty({ icon, title, children }: { icon?: React.ReactNode; title: string; children?: React.ReactNode }) {
   return (
-    <div className="flex flex-col items-center justify-center px-6 py-14 text-center">
-      {icon && <div className="mb-3 rounded-2xl bg-ink-800 p-3 text-ink-400">{icon}</div>}
-      <p className="font-medium text-ink-200">{title}</p>
-      {children && <div className="mt-1 max-w-md text-sm text-ink-400">{children}</div>}
+    <div className="flex flex-col items-center justify-center px-6 py-12 text-center">
+      {icon && <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-md border border-ink-700 bg-ink-800 text-ink-400 [&_svg]:h-5 [&_svg]:w-5">{icon}</div>}
+      <p className="text-[13px] font-medium text-ink-100">{title}</p>
+      {children && <div className="mt-1 max-w-md text-[13px] text-ink-400">{children}</div>}
     </div>
   );
 }
 
 export function ErrorBox({ error }: { error: string }) {
-  return <div className="flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200"><CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />{error}</div>;
+  return <div className="flex items-start gap-2 rounded-md border border-red-500/30 bg-red-500/[.07] px-3 py-2.5 text-[13px] text-red-200"><CircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-red-400" />{error}</div>;
 }
 
-export function Badge({ color = 'gray', children }: { color?: 'gray' | 'green' | 'red' | 'yellow' | 'violet' | 'blue'; children: React.ReactNode }) {
-  const c = {
-    gray: 'bg-ink-700 text-ink-200', green: 'bg-emerald-500/15 text-emerald-300', red: 'bg-red-500/15 text-red-300',
-    yellow: 'bg-amber-500/15 text-amber-300', violet: 'bg-brand-500/15 text-brand-300', blue: 'bg-sky2-500/15 text-sky2-400',
-  }[color];
-  return <span className={clsx('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold', c)}>{children}</span>;
+type BadgeColor = 'gray' | 'green' | 'red' | 'yellow' | 'violet' | 'blue';
+const badgeStyles: Record<BadgeColor, string> = {
+  gray: 'bg-ink-750 text-ink-300 ring-ink-600',
+  green: 'bg-emerald-500/10 text-emerald-300 ring-emerald-500/25',
+  red: 'bg-red-500/10 text-red-300 ring-red-500/25',
+  yellow: 'bg-amber-500/10 text-amber-300 ring-amber-500/25',
+  violet: 'bg-brand-500/10 text-brand-300 ring-brand-500/25',
+  blue: 'bg-sky2-500/10 text-sky2-400 ring-sky2-500/25',
+};
+
+export function Badge({ color = 'gray', children }: { color?: BadgeColor; children: React.ReactNode }) {
+  return <span className={clsx('inline-flex h-5 items-center gap-1 whitespace-nowrap rounded px-1.5 text-2xs font-medium ring-1 ring-inset [&_svg]:h-3 [&_svg]:w-3', badgeStyles[color])}>{children}</span>;
 }
 
 export const statusColor: Record<Status, string> = {
@@ -126,35 +135,31 @@ export const statusColor: Record<Status, string> = {
 };
 
 export function StatusDot({ status, className }: { status: Status; className?: string }) {
-  const pulse = status === 'starting' || status === 'stopping' || status === 'installing';
-  return (
-    <span className={clsx('relative inline-flex h-2.5 w-2.5', className)}>
-      {(pulse || status === 'running') && <span className={clsx('absolute inline-flex h-full w-full rounded-full opacity-60', statusColor[status], pulse ? 'animate-ping' : 'animate-pulse')} />}
-      <span className={clsx('relative inline-flex h-2.5 w-2.5 rounded-full', statusColor[status])} />
-    </span>
-  );
+  const transitional = status === 'starting' || status === 'stopping' || status === 'installing';
+  return <span className={clsx('inline-block h-2 w-2 shrink-0 rounded-full', statusColor[status], transitional && 'animate-pulse', className)} />;
 }
 
+const statusBadge: Record<Status, BadgeColor> = { running: 'green', starting: 'yellow', stopping: 'yellow', installing: 'blue', offline: 'gray', crashed: 'red' };
+
 export function StatusPill({ status }: { status: Status }) {
-  const color = { running: 'green', starting: 'yellow', stopping: 'yellow', installing: 'blue', offline: 'gray', crashed: 'red' }[status] as any;
-  return <Badge color={color}><StatusDot status={status} className="!h-1.5 !w-1.5 [&>span]:!h-1.5 [&>span]:!w-1.5" />{statusLabel[status]}</Badge>;
+  return <Badge color={statusBadge[status]}><StatusDot status={status} className="!h-1.5 !w-1.5" />{statusLabel[status]}</Badge>;
 }
 
 export function Bar({ value, max, className }: { value: number; max: number; className?: string }) {
   const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0;
   return (
-    <div className={clsx('h-1.5 overflow-hidden rounded-full bg-ink-700', className)}>
-      <div className={clsx('h-full rounded-full transition-all duration-700', pct > 90 ? 'bg-red-500' : pct > 70 ? 'bg-amber-400' : 'bg-gradient-to-r from-brand-500 to-sky2-500')} style={{ width: `${pct}%` }} />
+    <div className={clsx('h-1 overflow-hidden rounded-full bg-ink-700', className)}>
+      <div className={clsx('h-full rounded-full transition-[width] duration-700', pct > 90 ? 'bg-red-500' : pct > 75 ? 'bg-amber-400' : 'bg-brand-500')} style={{ width: `${pct}%` }} />
     </div>
   );
 }
 
 export function Tabs<T extends string>({ value, onChange, items }: { value: T; onChange: (v: T) => void; items: { id: T; label: React.ReactNode }[] }) {
   return (
-    <div className="inline-flex rounded-xl border border-ink-700 bg-ink-900 p-1">
+    <div className="inline-flex h-9 items-center rounded-md border border-ink-600 bg-ink-850 p-0.5">
       {items.map((it) => (
         <button key={it.id} onClick={() => onChange(it.id)}
-          className={clsx('rounded-lg px-3 py-1.5 text-xs font-medium transition', value === it.id ? 'bg-ink-700 text-ink-100' : 'text-ink-400 hover:text-ink-200')}>
+          className={clsx('h-full rounded px-3 text-xs font-medium transition-colors', value === it.id ? 'bg-ink-700 text-ink-100' : 'text-ink-400 hover:text-ink-200')}>
           {it.label}
         </button>
       ))}
@@ -173,14 +178,14 @@ export function Modal({ open, onClose, title, children, footer, wide }: { open: 
   }, [open, onClose]);
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-sm sm:items-center" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={clsx('card my-8 w-full animate-fade-in shadow-2xl', wide === 'xl' ? 'max-w-5xl' : wide ? 'max-w-3xl' : 'max-w-lg')}>
-        <div className="flex items-center justify-between border-b border-ink-700 px-5 py-4">
-          <h3 className="font-semibold">{title}</h3>
-          <IconButton title="Fermer" onClick={onClose}><X className="h-4 w-4" /></IconButton>
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-4 sm:items-center" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div role="dialog" aria-modal="true" className={clsx('my-8 w-full animate-fade-in rounded-lg border border-ink-600 bg-ink-850 shadow-2xl shadow-black/50', wide === 'xl' ? 'max-w-5xl' : wide ? 'max-w-3xl' : 'max-w-lg')}>
+        <div className="flex items-center justify-between border-b border-ink-700 px-5 py-3">
+          <h3 className="text-[15px] font-semibold">{title}</h3>
+          <IconButton title="Fermer" onClick={onClose}><X /></IconButton>
         </div>
         <div className="p-5">{children}</div>
-        {footer && <div className="flex justify-end gap-2 border-t border-ink-700 px-5 py-3.5">{footer}</div>}
+        {footer && <div className="flex justify-end gap-2 rounded-b-lg border-t border-ink-700 bg-ink-900/40 px-5 py-3">{footer}</div>}
       </div>
     </div>
   );
@@ -218,10 +223,9 @@ export function UIProvider({ children }: { children: React.ReactNode }) {
   return (
     <UICtx.Provider value={{ toast, confirm, prompt }}>
       {children}
-      <div className="pointer-events-none fixed bottom-4 right-4 z-[60] flex w-[min(380px,calc(100vw-2rem))] flex-col gap-2">
+      <div className="pointer-events-none fixed bottom-4 right-4 z-[60] flex w-[min(360px,calc(100vw-2rem))] flex-col gap-2">
         {toasts.map((t) => (
-          <div key={t.id} className={clsx('pointer-events-auto flex items-start gap-2.5 rounded-xl border bg-ink-850/95 px-4 py-3 text-sm shadow-2xl backdrop-blur animate-fade-in',
-            t.kind === 'err' ? 'border-red-500/40' : t.kind === 'info' ? 'border-sky2-500/40' : 'border-emerald-500/40')}>
+          <div key={t.id} className="pointer-events-auto flex animate-fade-in items-start gap-2.5 rounded-md border border-ink-600 bg-ink-800 px-3.5 py-2.5 text-[13px] shadow-xl shadow-black/40">
             {t.kind === 'err' ? <CircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-red-400" /> : t.kind === 'info' ? <Info className="mt-0.5 h-4 w-4 shrink-0 text-sky2-400" /> : <CircleCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />}
             <span className="text-ink-100">{t.text}</span>
           </div>
@@ -232,7 +236,7 @@ export function UIProvider({ children }: { children: React.ReactNode }) {
           <Button variant="ghost" onClick={() => closeConf(false)}>Annuler</Button>
           <Button variant={conf?.danger ? 'danger' : 'primary'} onClick={() => closeConf(true)} autoFocus>{conf?.confirm || 'Confirmer'}</Button>
         </>}>
-        <div className="text-sm text-ink-300">{conf?.body}</div>
+        <div className="text-[13px] leading-relaxed text-ink-300">{conf?.body}</div>
       </Modal>
       <Modal open={!!prm} onClose={() => closePrm(null)} title={prm?.title}
         footer={<>

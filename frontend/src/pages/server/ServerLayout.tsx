@@ -1,10 +1,10 @@
 import clsx from 'clsx';
-import { Activity, ArrowLeft, CalendarClock, Copy, Folder, History, Network as NetIcon, Settings, SquareTerminal, Users, Wrench } from 'lucide-react';
+import { Activity, CalendarClock, ChevronRight, Copy, Folder, History, Network as NetIcon, Settings, SquareTerminal, Users, Wrench } from 'lucide-react';
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useParams } from 'react-router-dom';
 import { get, Server, State } from '../../api';
 import PowerButtons from '../../components/PowerButtons';
-import { ErrorBox, Loading, StatusPill, useUI } from '../../components/ui';
+import { Badge, ErrorBox, Loading, StatusPill, useUI } from '../../components/ui';
 import { copy, duration } from '../../lib/format';
 import TemplateIcon from '../../components/TemplateIcon';
 
@@ -147,42 +147,46 @@ export default function ServerLayout() {
 
   return (
     <ServerCtx.Provider value={{ server, reload, state, disk, bus, connected, send, can }}>
-      <Link to="/" className="mb-4 inline-flex items-center gap-1.5 text-xs text-ink-400 hover:text-ink-200"><ArrowLeft className="h-3.5 w-3.5" /> Mes serveurs</Link>
-      <div className="card mb-5 p-5">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex min-w-0 items-center gap-4">
-            <TemplateIcon slug={server.templateSlug} size="lg" />
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2.5">
-                <h1 className="truncate text-xl font-semibold">{server.name}</h1>
-                {server.suspended ? <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-[11px] font-semibold text-red-300">Suspendu</span> : <StatusPill status={state.status} />}
-              </div>
-              <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-400">
-                <span>{server.template}</span>
-                {server.address && (
-                  <button onClick={async () => { await copy(server.address); toast('Adresse copiée'); }} className="inline-flex items-center gap-1 font-mono hover:text-brand-300">
-                    <Copy className="h-3 w-3" /> {server.address}
-                  </button>
-                )}
-                {uptime && <span>En ligne depuis {uptime}</span>}
-                <span className="font-mono text-ink-500">#{server.id}</span>
-              </div>
+      <nav aria-label="Fil d'Ariane" className="mb-3 flex items-center gap-1.5 text-xs text-ink-400">
+        <Link to="/" className="hover:text-ink-200">Serveurs</Link>
+        <ChevronRight className="h-3 w-3 text-ink-500" />
+        <span className="truncate text-ink-200">{server.name}</span>
+      </nav>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex min-w-0 items-center gap-3.5">
+          <TemplateIcon slug={server.templateSlug} size="lg" />
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <h1 className="truncate text-xl font-semibold tracking-tight">{server.name}</h1>
+              {server.suspended ? <Badge color="red">Suspendu</Badge> : <StatusPill status={state.status} />}
+            </div>
+            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-400">
+              <span>{server.template}</span>
+              {server.address && <>
+                <span className="text-ink-600">•</span>
+                <button onClick={async () => { await copy(server.address); toast('Adresse copiée'); }} className="inline-flex items-center gap-1 font-mono text-ink-300 hover:text-ink-100" title="Copier l'adresse">
+                  {server.address}<Copy className="h-3 w-3" />
+                </button>
+              </>}
+              {uptime && <><span className="text-ink-600">•</span><span className="tabular-nums">En ligne depuis {uptime}</span></>}
+              <span className="text-ink-600">•</span>
+              <span className="font-mono text-ink-500">{server.id}</span>
             </div>
           </div>
-          {can('power') && !server.suspended && <PowerButtons id={server.id} status={state.status} />}
         </div>
-        {state.reason && state.status !== 'running' && (
-          <p className={clsx('mt-4 rounded-xl px-3 py-2 text-xs', state.status === 'crashed' ? 'bg-red-500/10 text-red-300' : 'bg-amber-500/10 text-amber-200')}>{state.reason}</p>
-        )}
-        {state.installError && state.status === 'offline' && (
-          <p className="mt-4 rounded-xl bg-red-500/10 px-3 py-2 text-xs text-red-300">La dernière installation a échoué. Consulte la console puis réinstalle depuis Paramètres.</p>
-        )}
+        {can('power') && !server.suspended && <PowerButtons id={server.id} status={state.status} />}
       </div>
-      <nav className="mb-5 flex gap-1 overflow-x-auto border-b border-ink-700">
+      {state.reason && state.status !== 'running' && (
+        <div className={clsx('mb-4 rounded-md border px-3 py-2 text-xs', state.status === 'crashed' ? 'border-red-500/30 bg-red-500/[.07] text-red-200' : 'border-amber-500/30 bg-amber-500/[.07] text-amber-200')}>{state.reason}</div>
+      )}
+      {state.installError && state.status === 'offline' && (
+        <div className="mb-4 rounded-md border border-red-500/30 bg-red-500/[.07] px-3 py-2 text-xs text-red-200">La dernière installation a échoué. Consulte la console puis réinstalle depuis Paramètres.</div>
+      )}
+      <nav className="mb-5 flex gap-0.5 overflow-x-auto border-b border-ink-700">
         {tabs.map((t) => (
           <NavLink key={t.to} to={t.to} end={t.to === ''}
-            className={({ isActive }) => clsx('flex shrink-0 items-center gap-2 border-b-2 px-3.5 py-2.5 text-sm font-medium transition',
-              isActive ? 'border-brand-400 text-ink-100' : 'border-transparent text-ink-400 hover:text-ink-200')}>
+            className={({ isActive }) => clsx('-mb-px flex h-10 shrink-0 items-center gap-2 border-b-2 px-3 text-[13px] font-medium transition-colors',
+              isActive ? 'border-brand-500 text-ink-100' : 'border-transparent text-ink-400 hover:text-ink-200')}>
             <t.icon className="h-4 w-4" /> {t.label}
           </NavLink>
         ))}

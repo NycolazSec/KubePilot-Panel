@@ -12,10 +12,10 @@ type Overview = {
 
 function Tile({ icon, label, value, sub }: { icon: React.ReactNode; label: string; value: React.ReactNode; sub?: React.ReactNode }) {
   return (
-    <div className="card p-5">
-      <div className="flex items-center gap-2 text-xs text-ink-400">{icon}{label}</div>
-      <div className="mt-2 text-2xl font-semibold tracking-tight">{value}</div>
-      {sub && <div className="mt-1 text-xs text-ink-400">{sub}</div>}
+    <div className="card px-4 py-3">
+      <div className="flex items-center gap-1.5 text-2xs font-medium uppercase tracking-wider text-ink-400 [&_svg]:h-3.5 [&_svg]:w-3.5">{icon}{label}</div>
+      <div className="mt-1 text-lg font-semibold tabular-nums tracking-tight">{value}</div>
+      {sub && <div className="mt-0.5 text-xs text-ink-400">{sub}</div>}
     </div>
   );
 }
@@ -49,18 +49,18 @@ export default function AdminOverview() {
       <Card padded={false} title="Nœuds Kubernetes">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead><tr className="border-b border-ink-700 text-left text-xs text-ink-400">
-              <th className="px-5 py-2 font-medium">Nœud</th><th className="px-3 py-2 font-medium">État</th><th className="px-3 py-2 font-medium">CPU</th><th className="px-3 py-2 font-medium">Mémoire</th><th className="px-3 py-2 font-medium">Serveurs</th><th className="px-3 py-2 font-medium">Version</th>
+            <thead><tr className="border-b border-ink-700">
+              <th className="th">Nœud</th><th className="th">État</th><th className="th">CPU</th><th className="th">Mémoire</th><th className="th">Serveurs</th><th className="th">Version</th>
             </tr></thead>
             <tbody>
               {data.nodes.map((n) => (
                 <tr key={n.name} className="border-b border-ink-800">
-                  <td className="px-5 py-3"><div className="font-mono">{n.name}</div><div className="text-xs text-ink-500">{n.address} · {n.os}</div></td>
-                  <td className="px-3 py-3">{n.ready ? <Badge color="green">Prêt</Badge> : <Badge color="red">Hors service</Badge>}</td>
-                  <td className="w-44 px-3 py-3">{n.ready ? <><div className="text-xs">{cpuLabel(Math.round(n.cpu))} / {cpuLabel(n.cpuCap)}</div><Bar className="mt-1.5" value={n.cpu} max={n.cpuCap} /></> : '—'}</td>
-                  <td className="w-44 px-3 py-3">{n.ready ? <><div className="text-xs">{bytes(n.mem)} / {bytes(n.memCap, 0)}</div><Bar className="mt-1.5" value={n.mem} max={n.memCap} /></> : '—'}</td>
-                  <td className="px-3 py-3 text-ink-300">{n.pods}</td>
-                  <td className="px-3 py-3 font-mono text-xs text-ink-400">{n.version}</td>
+                  <td className="px-4 py-3"><div className="font-mono">{n.name}</div><div className="text-xs text-ink-500">{n.address} · {n.os}</div></td>
+                  <td className="px-4 py-3">{n.ready ? <Badge color="green">Prêt</Badge> : <Badge color="red">Hors service</Badge>}</td>
+                  <td className="w-44 px-4 py-3">{n.ready ? <><div className="text-xs">{cpuLabel(Math.round(n.cpu))} / {cpuLabel(n.cpuCap)}</div><Bar className="mt-1.5" value={n.cpu} max={n.cpuCap} /></> : '—'}</td>
+                  <td className="w-44 px-4 py-3">{n.ready ? <><div className="text-xs">{bytes(n.mem)} / {bytes(n.memCap, 0)}</div><Bar className="mt-1.5" value={n.mem} max={n.memCap} /></> : '—'}</td>
+                  <td className="px-4 py-3 text-ink-300">{n.pods}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-ink-400">{n.version}</td>
                 </tr>
               ))}
             </tbody>

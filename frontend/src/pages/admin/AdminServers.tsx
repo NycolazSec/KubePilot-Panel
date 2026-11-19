@@ -1,7 +1,7 @@
 import { Boxes, ExternalLink, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { del, get, post, put, Server, Template, User } from '../../api';
+import { del, get, post, put, Server, sortTemplates, Template, User } from '../../api';
 import { Button, Card, Empty, ErrorBox, Field, IconButton, Loading, Modal, StatusPill, Toggle, useLoad, useUI } from '../../components/ui';
 import { bytes, cpuLabel, mb } from '../../lib/format';
 import TemplateIcon from '../../components/TemplateIcon';
@@ -28,7 +28,7 @@ function ServerForm({ form, setForm, users, templates }: { form: Form; setForm: 
           <div className="grid gap-2 sm:grid-cols-2">
             {templates.map((x) => (
               <button key={x.id} type="button" onClick={() => pickTemplate(x.id)}
-                className={`flex items-start gap-3 rounded-xl border p-3 text-left transition ${form.templateId === x.id ? 'border-brand-500 bg-brand-500/10' : 'border-ink-700 hover:border-ink-500'}`}>
+                className={`flex items-start gap-3 rounded-md border p-3 text-left transition ${form.templateId === x.id ? 'border-brand-500 bg-ink-800 ring-1 ring-brand-500' : 'border-ink-700 hover:border-ink-500'}`}>
                 <TemplateIcon slug={x.slug} size="sm" />
                 <span className="min-w-0"><span className="block text-sm font-medium">{x.name}</span><span className="line-clamp-2 text-xs text-ink-400">{x.description}</span></span>
               </button>
@@ -57,7 +57,7 @@ function ServerForm({ form, setForm, users, templates }: { form: Form; setForm: 
         </Field>
       </div>
       {!form.id && t && t.vars.filter((v) => v.userViewable).length > 0 && (
-        <details className="rounded-xl border border-ink-700 p-3">
+        <details className="rounded-md border border-ink-700 p-3">
           <summary className="cursor-pointer text-sm text-ink-300">Variables du template ({t.vars.filter((v) => v.userViewable).length})</summary>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             {t.vars.filter((v) => v.userViewable).map((v) => (
@@ -90,7 +90,7 @@ export default function AdminServers() {
   const { toast, confirm } = useUI();
   const servers = useLoad(() => get<Server[]>('/servers?all=1'));
   const users = useLoad(() => get<User[]>('/admin/users'));
-  const templates = useLoad(() => get<Template[]>('/admin/templates'));
+  const templates = useLoad(() => get<Template[]>('/admin/templates').then(sortTemplates));
   const [form, setForm] = useState<Form | null>(null);
   const [busy, setBusy] = useState(false);
   const [q, setQ] = useState('');
@@ -135,18 +135,18 @@ export default function AdminServers() {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead><tr className="border-b border-ink-700 text-left text-xs text-ink-400">
-                <th className="px-5 py-2 font-medium">Serveur</th><th className="px-3 py-2 font-medium">Propriétaire</th><th className="px-3 py-2 font-medium">État</th><th className="px-3 py-2 font-medium">Ressources</th><th className="px-3 py-2 font-medium">Adresse</th><th className="w-32" />
+              <thead><tr className="border-b border-ink-700">
+                <th className="th">Serveur</th><th className="th">Propriétaire</th><th className="th">État</th><th className="th">Ressources</th><th className="th">Adresse</th><th className="w-32" />
               </tr></thead>
               <tbody>
                 {list.map((s) => (
                   <tr key={s.id} className="border-b border-ink-800 hover:bg-ink-800/40">
-                    <td className="px-5 py-3"><div className="flex items-center gap-2.5"><TemplateIcon slug={s.templateSlug} size="sm" /><div><div className="font-medium">{s.name}</div><div className="font-mono text-xs text-ink-500">#{s.id} · {s.template}</div></div></div></td>
-                    <td className="px-3 py-3 text-ink-300">{s.owner}</td>
-                    <td className="px-3 py-3">{s.suspended ? <span className="text-xs text-red-300">Suspendu</span> : <StatusPill status={s.state.status} />}</td>
-                    <td className="px-3 py-3 text-xs text-ink-400">{mb(s.memory)} · {cpuLabel(s.cpu)} · {bytes(s.diskUsed, 0)} / {mb(s.disk)}</td>
-                    <td className="px-3 py-3 font-mono text-xs text-ink-300">{s.address || '—'}</td>
-                    <td className="px-3 py-2"><div className="flex justify-end gap-1">
+                    <td className="px-4 py-3"><div className="flex items-center gap-2.5"><TemplateIcon slug={s.templateSlug} size="sm" /><div><div className="font-medium">{s.name}</div><div className="font-mono text-xs text-ink-500">#{s.id} · {s.template}</div></div></div></td>
+                    <td className="px-4 py-3 text-ink-300">{s.owner}</td>
+                    <td className="px-4 py-3">{s.suspended ? <span className="text-xs text-red-300">Suspendu</span> : <StatusPill status={s.state.status} />}</td>
+                    <td className="px-4 py-3 text-xs text-ink-400">{mb(s.memory)} · {cpuLabel(s.cpu)} · {bytes(s.diskUsed, 0)} / {mb(s.disk)}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-ink-300">{s.address || '—'}</td>
+                    <td className="px-4 py-2"><div className="flex justify-end gap-1">
                       <Link to={`/server/${s.id}`} title="Ouvrir" className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-ink-300 hover:bg-ink-700 hover:text-ink-100"><ExternalLink className="h-4 w-4" /></Link>
                       <IconButton title="Modifier" onClick={() => openEdit(s)}><Pencil className="h-4 w-4" /></IconButton>
                       <IconButton title="Supprimer" className="hover:!text-red-300" onClick={() => remove(s)}><Trash2 className="h-4 w-4" /></IconButton>

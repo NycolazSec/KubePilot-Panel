@@ -46,22 +46,22 @@ export default function Network() {
         <>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead><tr className="border-b border-ink-700 text-left text-xs text-ink-400">
-                <th className="px-5 py-2 font-medium">Adresse publique</th><th className="px-3 py-2 font-medium">Protocole</th><th className="px-3 py-2 font-medium">Port interne</th><th className="px-3 py-2 font-medium">Note</th><th className="w-28" />
+              <thead><tr className="border-b border-ink-700">
+                <th className="th">Adresse publique</th><th className="th">Protocole</th><th className="th">Port interne</th><th className="th">Note</th><th className="w-28" />
               </tr></thead>
               <tbody>
                 {data.allocations.map((a) => (
                   <tr key={a.port} className="border-b border-ink-800">
-                    <td className="px-5 py-3">
+                    <td className="px-4 py-3">
                       <button onClick={async () => { await copy(`${data.host}:${a.port}`); toast('Adresse copiée'); }} className="inline-flex items-center gap-2 font-mono text-ink-100 hover:text-brand-300">
                         <Copy className="h-3.5 w-3.5 text-ink-400" />{data.host}:{a.port}
                       </button>
                       {a.isPrimary && <Badge color="violet"><Star className="h-3 w-3" /> Principal</Badge>}
                     </td>
-                    <td className="px-3 py-3 uppercase text-ink-300">{a.protocol}</td>
-                    <td className="px-3 py-3 font-mono text-ink-400">{a.targetPort}</td>
-                    <td className="px-3 py-2"><input className="input !py-1.5 text-xs" defaultValue={a.notes} placeholder="ex : Dynmap, voice chat…" onBlur={(e) => notes(a, e.target.value)} /></td>
-                    <td className="px-3 py-2">
+                    <td className="px-4 py-3 uppercase text-ink-300">{a.protocol}</td>
+                    <td className="px-4 py-3 font-mono text-ink-400">{a.targetPort}</td>
+                    <td className="px-4 py-2"><input className="input !py-1.5 text-xs" defaultValue={a.notes} placeholder="ex : Dynmap, voice chat…" onBlur={(e) => notes(a, e.target.value)} /></td>
+                    <td className="px-4 py-2">
                       <div className="flex justify-end gap-1">
                         {!a.isPrimary && <IconButton title="Définir comme principal" onClick={() => primary(a)}><Star className="h-4 w-4" /></IconButton>}
                         {!a.isPrimary && <IconButton title="Retirer" className="hover:!text-red-300" onClick={() => remove(a)}><Trash2 className="h-4 w-4" /></IconButton>}

@@ -8,13 +8,21 @@ export default {
         mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
       },
       colors: {
-        ink: { 950: '#07080d', 900: '#0b0d14', 850: '#0f121b', 800: '#131724', 700: '#1b2030', 600: '#262c40', 500: '#3a4260', 400: '#646d8c', 300: '#959cb8', 200: '#c3c8dc', 100: '#e7e9f2' },
-        brand: { 300: '#c4b5fd', 400: '#a78bfa', 500: '#8b5cf6', 600: '#7c3aed', 700: '#6d28d9' },
+        // neutres graphite, légèrement froids
+        ink: {
+          950: '#08090b', 900: '#0d0e11', 850: '#121317', 800: '#17181d', 750: '#1c1d23', 700: '#25272e',
+          600: '#30323b', 500: '#4b4e5a', 400: '#7c7f8c', 300: '#a5a8b3', 200: '#cfd1d8', 100: '#eceef2',
+        },
+        // accent unique, tiré du logo
+        brand: {
+          50: '#f2f0ff', 100: '#e6e3ff', 200: '#cdc7fe', 300: '#aba1fb', 400: '#8f82f7',
+          500: '#7a6bf1', 600: '#6656e3', 700: '#5546c4', 800: '#43389b',
+        },
         sky2: { 400: '#60a5fa', 500: '#3b82f6' },
       },
-      boxShadow: { glow: '0 0 0 1px rgba(139,92,246,.35), 0 8px 30px -8px rgba(139,92,246,.45)' },
-      keyframes: { 'fade-in': { from: { opacity: 0, transform: 'translateY(4px)' }, to: { opacity: 1, transform: 'none' } } },
-      animation: { 'fade-in': 'fade-in .18s ease-out' },
+      fontSize: { '2xs': ['11px', '16px'] },
+      keyframes: { 'fade-in': { from: { opacity: 0 }, to: { opacity: 1 } } },
+      animation: { 'fade-in': 'fade-in .12s ease-out' },
     },
   },
   plugins: [],

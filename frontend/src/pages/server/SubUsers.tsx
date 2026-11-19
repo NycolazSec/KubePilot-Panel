@@ -45,7 +45,7 @@ export default function SubUsers() {
           <ul className="divide-y divide-ink-800">
             {data.users.map((u) => (
               <li key={u.userId} className="flex flex-wrap items-center gap-4 px-5 py-3.5">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-ink-700 text-xs font-semibold">{u.username.slice(0, 2).toUpperCase()}</div>
+                <div className="flex h-8 w-8 items-center justify-center rounded-md border border-ink-600 bg-ink-800 text-2xs font-semibold text-ink-200">{u.username.slice(0, 2).toUpperCase()}</div>
                 <div className="min-w-0 flex-1">
                   <p className="font-medium">{u.username} <span className="text-xs font-normal text-ink-400">· ajouté {ago(u.createdAt)}</span></p>
                   <div className="mt-1 flex flex-wrap gap-1">{u.permissions.map((p) => <Badge key={p}>{permLabels[p] || p}</Badge>)}</div>
@@ -64,7 +64,7 @@ export default function SubUsers() {
             {!edit.userId && <Field label="Nom d'utilisateur ou email" hint="La personne doit déjà avoir un compte sur le panel."><input className="input" value={edit.username} onChange={(e) => setEdit({ ...edit, username: e.target.value })} autoFocus /></Field>}
             <div className="grid gap-2 sm:grid-cols-2">
               {(data?.permissions || []).map((p) => (
-                <label key={p} className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-ink-700 px-3 py-2.5 text-sm hover:border-ink-500">
+                <label key={p} className="flex cursor-pointer items-center gap-2.5 rounded-md border border-ink-700 px-3 py-2.5 text-sm hover:border-ink-500">
                   <input type="checkbox" className="accent-brand-500" checked={edit.permissions.includes(p)} onChange={() => toggle(p)} />
                   {permLabels[p] || p}
                 </label>

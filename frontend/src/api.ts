@@ -72,3 +72,9 @@ export interface Template {
 
 export interface Settings { panelName: string; publicHost: string; portMin: number; portMax: number; timezone: string }
 export interface NodeInfo { name: string; ready: boolean; version: string; os: string; cpuCap: number; memCap: number; cpu: number; mem: number; pods: number; address: string }
+
+const templateOrder = ['minecraft-java', 'minecraft-bedrock', 'nodejs', 'python'];
+export function sortTemplates<T extends { slug: string; name: string }>(list: T[]): T[] {
+  const rank = (t: T) => { const i = templateOrder.indexOf(t.slug); return i === -1 ? (t.slug === 'custom' ? 99 : 50) : i; };
+  return [...list].sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
+}

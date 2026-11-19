@@ -1,22 +1,37 @@
 import clsx from 'clsx';
-import { LayoutDashboard, LogOut, Menu, Shield, User, X } from 'lucide-react';
-import { useState } from 'react';
+import { Activity, Boxes, Gauge, Layers, LogOut, Menu, Server, Settings, User, Users, X } from 'lucide-react';
+import React, { useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { post } from '../api';
 import { useAuth } from '../main';
 
-export function Logo({ name }: { name: string }) {
+export function Logo({ name, size = 28 }: { name: string; size?: number }) {
   return (
     <div className="flex items-center gap-2.5">
-      <img src="/kubepilot.svg" alt="" className="h-8 w-8" />
-      <span className="text-lg font-semibold tracking-tight"><span className="text-gradient">{name}</span></span>
+      <img src="/kubepilot.svg" alt="" width={size} height={size} />
+      <span className="text-[15px] font-semibold tracking-tight text-ink-100">{name}</span>
     </div>
   );
 }
 
-const linkCls = ({ isActive }: { isActive: boolean }) =>
-  clsx('flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition',
-    isActive ? 'bg-brand-500/15 text-brand-200 ring-1 ring-inset ring-brand-500/30' : 'text-ink-300 hover:bg-ink-800 hover:text-ink-100');
+function Item({ to, icon: Icon, children, end }: { to: string; icon: typeof Server; children: React.ReactNode; end?: boolean }) {
+  return (
+    <NavLink to={to} end={end}
+      className={({ isActive }) => clsx('group flex h-8 items-center gap-2.5 rounded-md px-2.5 text-[13px] font-medium transition-colors',
+        isActive ? 'bg-ink-800 text-ink-100' : 'text-ink-300 hover:bg-ink-800/60 hover:text-ink-100')}>
+      {({ isActive }) => <><Icon className={clsx('h-4 w-4', isActive ? 'text-brand-400' : 'text-ink-400 group-hover:text-ink-300')} />{children}</>}
+    </NavLink>
+  );
+}
+
+function Section({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="mt-5 first:mt-0">
+      <p className="mb-1 px-2.5 text-2xs font-medium uppercase tracking-wider text-ink-500">{label}</p>
+      <div className="flex flex-col gap-0.5">{children}</div>
+    </div>
+  );
+}
 
 export default function Layout() {
   const { me, setMe } = useAuth();
@@ -26,50 +41,62 @@ export default function Layout() {
     await post('/auth/logout').catch(() => {});
     setMe(null);
   };
+  const name = me?.panelName || 'KubePilot';
 
   const nav = (
-    <nav className="flex flex-col gap-1" onClick={() => setOpen(false)}>
-      <NavLink to="/" end className={linkCls}><LayoutDashboard className="h-4 w-4" /> Mes serveurs</NavLink>
-      {me?.user.isAdmin && <NavLink to="/admin" className={linkCls}><Shield className="h-4 w-4" /> Administration</NavLink>}
-      <NavLink to="/account" className={linkCls}><User className="h-4 w-4" /> Mon compte</NavLink>
+    <nav onClick={() => setOpen(false)}>
+      <Section label="Espace">
+        <Item to="/" end icon={Server}>Serveurs</Item>
+        <Item to="/account" icon={User}>Mon compte</Item>
+      </Section>
+      {me?.user.isAdmin && (
+        <Section label="Administration">
+          <Item to="/admin" end icon={Gauge}>Vue d'ensemble</Item>
+          <Item to="/admin/servers" icon={Boxes}>Serveurs</Item>
+          <Item to="/admin/users" icon={Users}>Utilisateurs</Item>
+          <Item to="/admin/templates" icon={Layers}>Templates</Item>
+          <Item to="/admin/settings" icon={Settings}>Réglages</Item>
+          <Item to="/admin/activity" icon={Activity}>Journal</Item>
+        </Section>
+      )}
     </nav>
   );
 
+  const userBox = (
+    <div className="flex items-center gap-2.5 rounded-md px-1.5 py-1.5">
+      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-ink-600 bg-ink-800 text-2xs font-semibold text-ink-200">
+        {me?.user.username.slice(0, 2).toUpperCase()}
+      </div>
+      <div className="min-w-0 flex-1 leading-tight">
+        <p className="truncate text-[13px] font-medium text-ink-100">{me?.user.username}</p>
+        <p className="truncate text-2xs text-ink-400">{me?.user.isAdmin ? 'Administrateur' : 'Utilisateur'}</p>
+      </div>
+      <button onClick={logout} title="Se déconnecter" aria-label="Se déconnecter" className="rounded-md p-1.5 text-ink-400 hover:bg-ink-800 hover:text-ink-100"><LogOut className="h-4 w-4" /></button>
+    </div>
+  );
+
   return (
-    <div className="app-bg flex min-h-full">
-      {/* Sidebar desktop */}
-      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-ink-700/70 bg-ink-900/60 px-4 py-5 backdrop-blur lg:flex">
-        <div className="mb-8 px-1"><Logo name={me?.panelName || 'KubePilot'} /></div>
-        {nav}
-        <div className="mt-auto rounded-2xl border border-ink-700 bg-ink-850 p-3">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-sky2-500 text-sm font-semibold text-white">
-              {me?.user.username.slice(0, 2).toUpperCase()}
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">{me?.user.username}</p>
-              <p className="truncate text-xs text-ink-400">{me?.user.isAdmin ? 'Administrateur' : 'Utilisateur'}</p>
-            </div>
-            <button onClick={logout} title="Se déconnecter" className="rounded-lg p-2 text-ink-400 hover:bg-ink-700 hover:text-ink-100"><LogOut className="h-4 w-4" /></button>
-          </div>
-        </div>
-        <p className="mt-3 px-1 text-[11px] text-ink-500">KubePilot v{me?.version} · Kubernetes</p>
+    <div className="flex min-h-full bg-ink-900">
+      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-ink-700 bg-ink-950 lg:flex">
+        <div className="flex h-14 items-center border-b border-ink-700 px-4"><Logo name={name} /></div>
+        <div className="flex-1 overflow-y-auto px-3 py-4">{nav}</div>
+        <div className="border-t border-ink-700 p-2">{userBox}</div>
+        <p className="border-t border-ink-700 px-4 py-2 text-2xs text-ink-500">v{me?.version} · Kubernetes</p>
       </aside>
 
-      {/* Mobile top bar */}
-      <div className="fixed inset-x-0 top-0 z-40 flex h-14 items-center justify-between border-b border-ink-700 bg-ink-900/90 px-4 backdrop-blur lg:hidden">
-        <Logo name={me?.panelName || 'KubePilot'} />
-        <button onClick={() => setOpen(!open)} className="rounded-lg p-2 text-ink-300 hover:bg-ink-800">{open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}</button>
+      <div className="fixed inset-x-0 top-0 z-40 flex h-14 items-center justify-between border-b border-ink-700 bg-ink-950 px-4 lg:hidden">
+        <Logo name={name} />
+        <button onClick={() => setOpen(!open)} aria-label="Menu" className="rounded-md p-2 text-ink-300 hover:bg-ink-800">{open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}</button>
       </div>
       {open && (
-        <div className="fixed inset-x-0 top-14 z-40 border-b border-ink-700 bg-ink-900 p-4 lg:hidden">
+        <div className="fixed inset-x-0 top-14 z-40 max-h-[calc(100vh-3.5rem)] overflow-y-auto border-b border-ink-700 bg-ink-950 p-3 lg:hidden">
           {nav}
-          <button onClick={logout} className="mt-2 flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm text-ink-300 hover:bg-ink-800"><LogOut className="h-4 w-4" /> Se déconnecter</button>
+          <div className="mt-4 border-t border-ink-700 pt-2">{userBox}</div>
         </div>
       )}
 
-      <main key={loc.pathname.split('/').slice(0, 3).join('/')} className="min-w-0 flex-1 px-4 pb-10 pt-20 sm:px-6 lg:px-10 lg:pt-8">
-        <div className="mx-auto max-w-7xl"><Outlet /></div>
+      <main key={loc.pathname.split('/').slice(0, 3).join('/')} className="min-w-0 flex-1 px-4 pb-12 pt-20 sm:px-6 lg:px-8 lg:pt-7">
+        <div className="mx-auto max-w-[1280px]"><Outlet /></div>
       </main>
     </div>
   );

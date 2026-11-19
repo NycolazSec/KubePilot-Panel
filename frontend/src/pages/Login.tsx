@@ -1,8 +1,6 @@
-import { KeyRound, User } from 'lucide-react';
 import { useState } from 'react';
 import { Me, post } from '../api';
-import { Logo } from '../components/Layout';
-import { Button, ErrorBox } from '../components/ui';
+import { Button, ErrorBox, Field } from '../components/ui';
 import { useAuth } from '../main';
 
 export default function Login() {
@@ -26,27 +24,24 @@ export default function Login() {
   };
 
   return (
-    <div className="app-bg relative flex min-h-full items-center justify-center overflow-hidden px-4 py-12">
-      <div className="pointer-events-none absolute -left-32 top-1/4 h-96 w-96 rounded-full bg-brand-600/20 blur-3xl" />
-      <div className="pointer-events-none absolute -right-32 bottom-0 h-96 w-96 rounded-full bg-sky2-500/10 blur-3xl" />
-      <div className="relative w-full max-w-sm animate-fade-in">
-        <div className="mb-8 flex justify-center"><Logo name="KubePilot" /></div>
-        <form onSubmit={submit} className="card space-y-4 p-6 shadow-2xl">
-          <div className="mb-2">
-            <h1 className="text-xl font-semibold">Connexion</h1>
-            <p className="mt-1 text-sm text-ink-400">Gère tes serveurs de jeu, propulsés par Kubernetes.</p>
-          </div>
+    <div className="flex min-h-full flex-col items-center justify-center bg-ink-950 px-4 py-12">
+      <div className="w-full max-w-[360px]">
+        <div className="mb-8 flex flex-col items-center text-center">
+          <img src="/kubepilot.svg" alt="" width={48} height={48} />
+          <h1 className="mt-4 text-xl font-semibold tracking-tight">Connexion à KubePilot</h1>
+          <p className="mt-1 text-[13px] text-ink-400">Panel de serveurs de jeu sur Kubernetes</p>
+        </div>
+        <form onSubmit={submit} className="card space-y-4 p-6">
           {error && <ErrorBox error={error} />}
-          <div className="relative">
-            <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
-            <input className="input pl-9" placeholder="Nom d'utilisateur ou email" autoComplete="username" value={login} onChange={(e) => setLogin(e.target.value)} autoFocus required />
-          </div>
-          <div className="relative">
-            <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
-            <input className="input pl-9" type="password" placeholder="Mot de passe" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
-          </div>
-          <Button type="submit" variant="primary" loading={loading} className="w-full">Se connecter</Button>
+          <Field label="Nom d'utilisateur ou email">
+            <input className="input" autoComplete="username" value={login} onChange={(e) => setLogin(e.target.value)} autoFocus required />
+          </Field>
+          <Field label="Mot de passe">
+            <input className="input" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+          </Field>
+          <Button type="submit" variant="primary" loading={loading} className="!h-9 w-full">Se connecter</Button>
         </form>
+        <p className="mt-6 text-center text-2xs text-ink-500">Accès réservé · les connexions sont journalisées</p>
       </div>
     </div>
   );
