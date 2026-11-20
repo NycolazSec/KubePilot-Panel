@@ -75,6 +75,7 @@ type Kube struct {
 	ns           string
 	storageRoot  string
 	storageClass string
+	rootInstall  bool // the namespace accepts root install containers (eggs)
 
 	pods corelisters.PodLister
 	sts  appslisters.StatefulSetLister
@@ -105,7 +106,7 @@ func newKube(cfg Config) (*Kube, error) {
 		return nil, err
 	}
 	return &Kube{
-		cs: cs, rc: rc, ns: cfg.Namespace, storageRoot: filepath.Clean(cfg.StorageRoot), storageClass: cfg.StorageClass,
+		cs: cs, rc: rc, ns: cfg.Namespace, storageRoot: filepath.Clean(cfg.StorageRoot), storageClass: cfg.StorageClass, rootInstall: cfg.RootInstall,
 		metrics: map[string]Usage{}, pvPaths: map[string]string{}, attach: map[string]*attachSess{},
 	}, nil
 }
@@ -325,6 +326,13 @@ func (sp Spec) podTemplate() corev1.PodTemplateSpec {
 	if strings.TrimSpace(s.Startup) != "" {
 		c.Command = []string{"/bin/sh", "-c", escapeDollar(s.Startup)}
 	}
+	if t.StopCommand != "" {
+		// Before any stop (button, restart, node drain), type the stop command in the game's console and wait
+		// for it to exit, so it saves cleanly; the grace period still bounds the wait.
+		c.Lifecycle = &corev1.Lifecycle{PreStop: &corev1.LifecycleHandler{Exec: &corev1.ExecAction{
+			Command: []string{"/bin/sh", "-c", stopScript(t.StopCommand)},
+		}}}
+	}
 	seen := map[string]bool{}
 	var probePort int
 	for _, a := range sp.Allocs {
@@ -495,9 +503,29 @@ func (k *Kube) RunInstall(ctx context.Context, sp Spec) error {
 	_ = k.cs.BatchV1().Jobs(k.ns).DeleteCollection(ctx, metav1.DeleteOptions{PropagationPolicy: &bg}, metav1.ListOptions{LabelSelector: sel})
 
 	psc, csc := sp.podSecurity()
-	script := t.InstallScript
+	script := strings.ReplaceAll(t.InstallScript, "\r\n", "\n")
 	if strings.TrimSpace(script) == "" {
 		script = "echo 'Volume ready.'"
+	}
+	mount, shell := t.DataPath, "/bin/sh"
+	if t.InstallPath != "" {
+		mount = t.InstallPath
+	}
+	if t.InstallShell != "" {
+		shell = "/bin/" + t.InstallShell
+	}
+	command := "set -e\n" + script
+	if t.InstallAsRoot && k.rootInstall {
+		// Egg install scripts install packages as root (apt, apk, SteamCMD…): root, but without privilege
+		// escalation, seccomp on and only the capabilities package managers need. Whatever happens, the files
+		// are handed back to the game's user, which never runs as root.
+		uid := t.RunAsUser
+		root, nonRoot := int64(0), false
+		psc = &corev1.PodSecurityContext{RunAsUser: &root, RunAsGroup: &root, RunAsNonRoot: &nonRoot,
+			SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault}}
+		csc = &corev1.SecurityContext{AllowPrivilegeEscalation: boolp(false), Capabilities: &corev1.Capabilities{
+			Drop: []corev1.Capability{"ALL"}, Add: []corev1.Capability{"CHOWN", "DAC_OVERRIDE", "FOWNER", "FSETID", "SETUID", "SETGID"}}}
+		command = fmt.Sprintf("trap 'chown -R %d:%d %s' EXIT\ncd %s\n%s", uid, uid, mount, mount, script)
 	}
 	backoff, ttl, deadline := int32(0), int32(6*3600), int64(1800)
 	tmpLimit := resource.MustParse("1Gi")
@@ -521,13 +549,13 @@ func (k *Kube) RunInstall(ctx context.Context, sp Spec) error {
 					SecurityContext:              psc,
 					Containers: []corev1.Container{{
 						Name: installCtr, Image: t.InstallImage, ImagePullPolicy: corev1.PullIfNotPresent,
-						Command:    []string{"/bin/sh", "-c", escapeDollar("set -e\n" + script)},
-						WorkingDir: t.DataPath, Env: sp.env(), SecurityContext: csc,
+						Command:    []string{shell, "-c", escapeDollar(command)},
+						WorkingDir: mount, Env: sp.env(), SecurityContext: csc,
 						Resources: corev1.ResourceRequirements{
 							Limits:   corev1.ResourceList{corev1.ResourceMemory: mi(memMB), corev1.ResourceCPU: milli(2000)},
 							Requests: corev1.ResourceList{corev1.ResourceMemory: mi(128), corev1.ResourceCPU: milli(100)},
 						},
-						VolumeMounts: []corev1.VolumeMount{{Name: "data", MountPath: t.DataPath}, {Name: "tmp", MountPath: "/tmp"}},
+						VolumeMounts: []corev1.VolumeMount{{Name: "data", MountPath: mount}, {Name: "tmp", MountPath: "/tmp"}},
 					}},
 					Volumes: []corev1.Volume{
 						{Name: "data", VolumeSource: corev1.VolumeSource{PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{ClaimName: pvcName(s.ID)}}},
@@ -971,3 +999,15 @@ func (k *Kube) openAttach(pod *corev1.Pod) (*attachSess, error) {
 	}()
 	return s, nil
 }
+
+// stopScript sends an egg's stop command: "^C" is SIGINT, anything else is typed in the console (stdin of PID 1,
+// which the game shares), then it waits for the game to exit.
+func stopScript(cmd string) string {
+	send := "printf '%s\\n' " + shellQuote(cmd) + " > /proc/1/fd/0"
+	if strings.HasPrefix(cmd, "^") {
+		send = "kill -INT -1 2>/dev/null; kill -INT 1"
+	}
+	return send + "\nwhile kill -0 1 2>/dev/null; do sleep 1; done"
+}
+
+func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }

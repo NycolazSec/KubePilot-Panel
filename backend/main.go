@@ -30,7 +30,9 @@ type Config struct {
 	StorageClass string
 	// MinecraftRouter: the chart deployed mc-router, which routes players by hostname on port 25565
 	MinecraftRouter bool
-	SecureCookies   bool
+	// RootInstall: the game namespace allows root install containers (Pod Security "baseline"), for eggs
+	RootInstall   bool
+	SecureCookies bool
 }
 
 func env(key, def string) string {
@@ -48,6 +50,7 @@ func main() {
 	flag.StringVar(&cfg.Namespace, "namespace", env("KUBEPILOT_NAMESPACE", "kubepilot-servers"), "namespace for game servers")
 	flag.StringVar(&cfg.StorageRoot, "storage-root", env("KUBEPILOT_STORAGE_ROOT", "/var/lib/rancher/k3s/storage"), "host path of local-path volumes")
 	flag.StringVar(&cfg.StorageClass, "storage-class", env("KUBEPILOT_STORAGE_CLASS", "local-path"), "StorageClass of game server volumes (hostPath-based provisioner)")
+	flag.BoolVar(&cfg.RootInstall, "root-install", env("KUBEPILOT_ROOT_INSTALL", "false") == "true", "install scripts of egg templates may run as root (namespace Pod Security baseline)")
 	flag.BoolVar(&cfg.MinecraftRouter, "minecraft-router", env("KUBEPILOT_MINECRAFT_ROUTER", "false") == "true", "mc-router is deployed: give Minecraft servers hostnames on port 25565")
 	secure := flag.Bool("secure-cookies", env("KUBEPILOT_SECURE_COOKIES", "true") == "true", "set Secure flag on cookies")
 	flag.Parse()
