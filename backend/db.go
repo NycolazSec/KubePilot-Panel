@@ -400,8 +400,18 @@ type Template struct {
 	DefCPU        int            `json:"defaultCpu"`
 	DefDisk       int            `json:"defaultDisk"`
 	// Features turn on game-specific pages in the panel: "minecraft-java", "minecraft-bedrock"
-	Features  []string `json:"features,omitempty"`
-	UpdatedAt int64    `json:"updatedAt"`
+	Features []string `json:"features,omitempty"`
+	// Pterodactyl / Pelican eggs: their install scripts expect root, a given shell and /mnt/server;
+	// the game itself always runs as RunAsUser. StopCommand is typed in the console to stop the game cleanly.
+	InstallAsRoot bool `json:"installAsRoot,omitempty"`
+	// StartupEnv hands the startup command to the image's own entrypoint in $STARTUP (Pterodactyl images
+	// run it with bash eval, after their own steps) instead of running it with sh -c.
+	StartupEnv   bool   `json:"startupEnv,omitempty"`
+	InstallShell string `json:"installShell,omitempty"`
+	InstallPath  string `json:"installPath,omitempty"`
+	StopCommand  string `json:"stopCommand,omitempty"`
+	Source       string `json:"source,omitempty"`
+	UpdatedAt    int64  `json:"updatedAt"`
 }
 
 var slugRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{1,40}$`)
@@ -435,6 +445,17 @@ func (t *Template) Validate() error {
 				return errCode(400, "Invalid regex for %s", v.Key)
 			}
 		}
+	}
+	switch t.InstallShell {
+	case "", "sh", "bash", "ash":
+	default:
+		return errCode(400, "Install shell: sh, bash or ash")
+	}
+	if t.InstallPath != "" && (!strings.HasPrefix(t.InstallPath, "/") || strings.Contains(t.InstallPath, "..")) {
+		return errCode(400, "Invalid install path")
+	}
+	if len(t.StopCommand) > 100 || strings.ContainsAny(t.StopCommand, "\r\n") {
+		return errCode(400, "Invalid stop command")
 	}
 	for _, f := range t.Features {
 		if !slices.Contains(knownFeatures, f) {

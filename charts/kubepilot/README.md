@@ -33,7 +33,8 @@ data is ever lost by accident. Delete them by hand if you really want to.
 | `image.repository` | `ghcr.io/nycolazsec/kubepilot-panel` | Panel image |
 | `image.tag` | chart `appVersion` | Image tag |
 | `serversNamespace.name` | `kubepilot-servers` | Namespace of the game servers (kept on uninstall) |
-| `serversNamespace.create` | `true` | Create that namespace, with Pod Security `restricted` |
+| `serversNamespace.create` | `true` | Create that namespace (Pod Security `restricted` audited) |
+| `serversNamespace.rootInstall` | `true` | Let egg install scripts run as root (namespace enforced at `baseline`; games stay non-root). `false` enforces `restricted` |
 | `storage.isolated` | `true` | Create a StorageClass that keeps game volumes in their own folder; the panel mounts only that folder, never other apps' volumes (local-path-provisioner ≥ v0.0.27) |
 | `storage.className` | `kubepilot-local` | StorageClass of game volumes (created when `isolated`, else an existing hostPath-based one) |
 | `storage.provisioner` | `rancher.io/local-path` | Provisioner of the created StorageClass |

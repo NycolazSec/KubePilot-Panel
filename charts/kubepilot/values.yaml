@@ -8,6 +8,11 @@ image:
 serversNamespace:
   name: kubepilot-servers
   create: true
+  # Pterodactyl / Pelican eggs: their install scripts run as root (no privilege escalation, minimal
+  # capabilities, seccomp). This needs the namespace at Pod Security "baseline"; game servers themselves are
+  # always created non-root, without capabilities (the "restricted" profile is still audited and warned about).
+  # false = "restricted" enforced: eggs whose install script needs root won't install.
+  rootInstall: true
 
 # Game server volumes. The file manager and backups read them directly on the node,
 # so they must come from a hostPath-based provisioner such as local-path.

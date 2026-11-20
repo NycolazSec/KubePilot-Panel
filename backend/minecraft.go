@@ -345,6 +345,14 @@ func (a *App) rconTarget(ctx context.Context, s *Server, podIP string) (string, 
 				break
 			}
 		}
+		if pass == "" { // vanilla configuration (eggs, other images): RCON enabled in server.properties
+			if p := propertiesOf(root, "enable-rcon", "rcon.password", "rcon.port"); p["enable-rcon"] == "true" && p["rcon.password"] != "" {
+				pass = p["rcon.password"]
+				if n, err := strconv.Atoi(p["rcon.port"]); err == nil && n > 0 && n < 65536 {
+					port = p["rcon.port"]
+				}
+			}
+		}
 	}
 	if pass == "" {
 		return "", ""
@@ -454,6 +462,15 @@ func readMCList(root *os.Root, name string) []mcListEntry {
 var shownProperties = []string{"white-list", "enforce-whitelist", "online-mode", "max-players", "gamemode", "difficulty", "pvp", "level-name", "server-port"}
 
 func readProperties(root *os.Root) map[string]string {
+	out := propertiesOf(root, shownProperties...)
+	for k, v := range out {
+		out[k] = truncate(v, 100)
+	}
+	return out
+}
+
+// propertiesOf reads these keys from server.properties (Java properties: "\x" escapes x).
+func propertiesOf(root *os.Root, keys ...string) map[string]string {
 	out := map[string]string{}
 	b, err := readSmall(root, "server.properties", 256<<10)
 	if err != nil {
@@ -461,12 +478,14 @@ func readProperties(root *os.Root) map[string]string {
 	}
 	for _, line := range strings.Split(string(b), "\n") {
 		k, v, ok := strings.Cut(strings.TrimSpace(line), "=")
-		if ok && slices.Contains(shownProperties, k) {
-			out[k] = truncate(strings.TrimSpace(v), 100)
+		if k = strings.TrimSpace(k); ok && slices.Contains(keys, k) {
+			out[k] = propUnescape.Replace(strings.TrimSpace(v))
 		}
 	}
 	return out
 }
+
+var propUnescape = strings.NewReplacer(`\\`, `\`, `\:`, ":", `\=`, "=", `\!`, "!", `\#`, "#", `\ `, " ")
 
 // ---------- HTTP
 

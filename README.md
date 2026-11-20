@@ -24,6 +24,7 @@ volume and `NodePort` service, and the panel drives the cluster through the Kube
 | Real-time console over WebSocket (ANSI colors, command history, search, log export) | Create servers from templates (owner, resources, variables, auto-start) |
 | Start / restart / stop / kill, crash detection (OOMKilled, exit codes, image errors) | Edit resources, image, startup command, suspend servers |
 | File manager: CodeMirror editor, drag & drop upload, zip download, archive / extract | Users & roles, two-factor authentication (TOTP + recovery codes), editable templates with JSON import/export |
+| | **Pterodactyl / Pelican eggs**: import from a catalog of ~300 games and apps, a link or a file |
 | Backups: create, restore, download, lock, automatic rotation | Settings: panel name, public address, port range, timezone |
 | Cron schedules: commands, power actions, backups | Global activity log |
 | Validated startup variables, image selection, extra ports, sub-users with fine-grained permissions |
@@ -64,7 +65,7 @@ flowchart LR
 
 ## Security
 
-- **Game pods**: namespace enforced at Pod Security `restricted` — UID 1000, all capabilities dropped, no privilege escalation, seccomp `RuntimeDefault`, no service-account token.
+- **Game pods**: UID 1000, all capabilities dropped, no privilege escalation, seccomp `RuntimeDefault`, no service-account token (Pod Security `restricted`). Only the install scripts of eggs run as root, still without privilege escalation and with a minimal set of capabilities; the namespace is then enforced at `baseline` with `restricted` audited (`serversNamespace.rootInstall=false` enforces `restricted`).
 - **Network isolation**: a `NetworkPolicy` gives game servers Internet + DNS access but blocks private ranges, the cluster network and the node IPs (databases, API server…).
 - **Least privilege**: the panel's ServiceAccount has full rights *only* in `kubepilot-servers`, and read-only access to nodes, PVs, services and metrics. No access to Secrets.
 - **Storage isolation**: game volumes live in their own folder (dedicated `kubepilot-local` StorageClass) and the panel only mounts that folder — it never sees the volumes of the other applications of the cluster.
@@ -129,10 +130,12 @@ docs/       logo and banner
   them (`storage.node`). Multi-node storage would need a CSI driver with a file API.
 - Java heap is set to the memory limit minus max(640 MB, 20 %) to avoid OOM kills; templates get it as `SERVER_JVM_MEMORY`.
 - Disk limits are soft: usage is measured by the panel and a server over its quota can't be started.
+- Eggs: the configuration file edits Wings applies on start (`config.files`) are not applied yet; the import lists
+  them so you can check the files once. Extra ports an egg needs (query, RCON…) are added in the server's *Network*.
 
 ## Roadmap
 
-Coming next: Pterodactyl egg import, SFTP, MySQL databases and S3 backups (v0.2), then multi-node, server transfers and
+Coming next: SFTP, MySQL databases and S3 backups (v0.2), then multi-node, server transfers and
 auto-sleep (v0.3).
 See the full [roadmap](ROADMAP.md).
 

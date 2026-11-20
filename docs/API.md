@@ -157,6 +157,8 @@ Paths are relative to the server's data folder (`/` = its root) and can never le
 | `PUT` / `DELETE` | `/admin/users/{uid}` | Update (also `"reset2fa": true`) / delete |
 | `GET` / `POST` | `/admin/templates` | List / create |
 | `PUT` / `DELETE` | `/admin/templates/{tid}` | Update / delete |
+| `POST` | `/admin/templates/egg` | Convert a Pterodactyl / Pelican egg `{"url"}` (GitHub only) or `{"egg": <egg JSON>}` into a template draft → `{"template", "warnings"}` (not saved) |
+| `GET` | `/admin/eggs/catalog` | Community eggs of github.com/pelican-eggs `[{"repo", "name", "group", "url"}]` (cached 6 h) |
 | `POST` | `/admin/servers` | Create `{"name", "ownerId", "templateId", "image", "memory", "cpu", "disk", "backupLimit", "allocationLimit", "env", "startAfterInstall"}` |
 | `PUT` / `DELETE` | `/admin/servers/{id}` | Update / delete (volume and backups included) |
 | `GET` / `PUT` | `/admin/settings` | Panel settings |
