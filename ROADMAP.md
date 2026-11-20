@@ -5,7 +5,7 @@ plus what only an orchestrator makes possible.
 
 Ideas and votes are welcome in the [issues](https://github.com/NycolazSec/KubePilot-Panel/issues).
 
-## v0.1 — First official release
+## v0.1 — First official release ✅
 
 - [x] Game servers as StatefulSets: console, files, backups, schedules, sub-users, templates
 - [x] Hardened by default: Pod Security `restricted`, NetworkPolicy, least-privilege RBAC
@@ -15,13 +15,13 @@ Ideas and votes are welcome in the [issues](https://github.com/NycolazSec/KubePi
 - [x] English and French interface, ready for community translations
 - [x] Two-factor authentication (TOTP) with recovery codes
 - [x] Personal API keys (permissions, read-only, IP allow-list, expiry) and a documented REST API ([docs/API.md](docs/API.md))
-- [ ] Backend test suite in CI
+- [x] Backend test suite in CI, plus govulncheck, npm audit and CodeQL
 
 ## v0.2 — Pterodactyl parity
 
 - [ ] Import Pterodactyl / Pelican **eggs** — hundreds of games out of the box
 - [ ] Built-in **SFTP** server
-- [ ] Documented public REST API (OpenAPI) for bots and billing systems
+- [x] Documented public REST API for bots and billing systems ([docs/API.md](docs/API.md))
 - [ ] MySQL / MariaDB databases per server
 - [ ] Backups to S3-compatible storage
 - [ ] Password reset and notifications by email

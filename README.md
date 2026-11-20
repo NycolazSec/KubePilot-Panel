@@ -130,8 +130,8 @@ docs/       logo and banner
 
 ## Roadmap
 
-Coming next: 2FA and API keys (v0.1), then Pterodactyl egg
-import, SFTP and a public API (v0.2), then multi-node, server transfers and auto-sleep (v0.3).
+Coming next: Pterodactyl egg import, SFTP, MySQL databases and S3 backups (v0.2), then multi-node, server transfers and
+auto-sleep (v0.3).
 See the full [roadmap](ROADMAP.md).
 
 ## Contributing

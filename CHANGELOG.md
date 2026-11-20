@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-20
+
 First public version of KubePilot, the Kubernetes-native game server panel.
 
 ### Added
@@ -61,3 +63,6 @@ First public version of KubePilot, the Kubernetes-native game server panel.
 
 - Long dialogs (new template, new server…) no longer get their top cut off on small screens: the dialog stays within
   the screen, its content scrolls and the title and buttons stay visible.
+
+[Unreleased]: https://github.com/NycolazSec/KubePilot-Panel/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/NycolazSec/KubePilot-Panel/releases/tag/v0.1.0
