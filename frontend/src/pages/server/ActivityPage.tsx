@@ -49,6 +49,8 @@ const labels: Record<string, string> = {
   'auth.login': t('act.auth.login'),
   'auth.fail': t('act.auth.fail'),
   'account.password': t('act.account.password'),
+  'account.apikey.create': t('act.account.apikey.create'),
+  'account.apikey.delete': t('act.account.apikey.delete'),
   'server.disk.stop': t('act.server.disk.stop'),
   'auth.2fa.fail': t('act.auth.2fa.fail'),
   'auth.2fa.recovery': t('act.auth.2fa.recovery'),
@@ -69,7 +71,7 @@ export function ActivityList({ items, showServer }: { items: Activity[]; showSer
         <li key={a.id} className="flex items-start gap-3 px-5 py-3 text-sm">
           <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-ink-800 text-[10px] font-semibold text-ink-300">{who(a).slice(0, 2).toUpperCase()}</div>
           <div className="min-w-0 flex-1">
-            <p><span className="font-medium text-ink-100">{who(a)}</span> <span className="text-ink-300">· {actLabel(a.action)}</span>{showServer && a.serverId && <span className="ml-1 font-mono text-xs text-ink-500">#{a.serverId}</span>}</p>
+            <p><span className="font-medium text-ink-100">{who(a)}</span>{a.apiKey && <span className="ml-1.5 rounded bg-brand-500/10 px-1.5 py-0.5 text-2xs font-medium text-brand-300 ring-1 ring-inset ring-brand-500/25">{t('activity.viaKey', { name: a.apiKey })}</span>} <span className="text-ink-300">· {actLabel(a.action)}</span>{showServer && a.serverId && <span className="ml-1 font-mono text-xs text-ink-500">#{a.serverId}</span>}</p>
             {a.meta && <p className="mt-0.5 truncate font-mono text-xs text-ink-400">{a.meta}</p>}
           </div>
           <div className="shrink-0 text-right text-xs text-ink-500" title={dateTime(a.createdAt)}>{ago(a.createdAt)}{a.ip && <div className="font-mono">{a.ip}</div>}</div>

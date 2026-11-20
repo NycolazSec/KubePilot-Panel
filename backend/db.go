@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"regexp"
 	"strings"
 	"time"
@@ -126,10 +127,28 @@ func openDB(path string) (*DB, error) {
 	// A single connection: SQLite serialises writes anyway and this avoids SQLITE_BUSY.
 	// Rule: never run a query while iterating another result set.
 	sqldb.SetMaxOpenConns(1)
-	if _, err := sqldb.Exec(schema + totpSchema); err != nil {
+	if _, err := sqldb.Exec(schema + totpSchema + apiKeySchema); err != nil {
 		return nil, err
 	}
-	return &DB{sqldb}, nil
+	db := &DB{sqldb}
+	// columns added after the first release
+	if err := db.addColumn("activity", "api_key", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return nil, err
+	}
+	return db, nil
+}
+
+// addColumn adds a column to an existing table if it isn't there yet (simple forward-only migration).
+func (db *DB) addColumn(table, column, def string) error {
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info(?) WHERE name=?`, table, column).Scan(&n); err != nil {
+		return err
+	}
+	if n > 0 {
+		return nil
+	}
+	_, err := db.Exec(fmt.Sprintf(`ALTER TABLE %s ADD COLUMN %s %s`, table, column, def))
+	return err
 }
 
 func now() int64 { return time.Now().Unix() }
@@ -165,6 +184,7 @@ type User struct {
 	TwoFactor bool   `json:"twoFactor"`
 	CreatedAt int64  `json:"createdAt"`
 	hash      string
+	viaKey    string // name of the API key used for this request, if any (activity log)
 }
 
 var usernameRe = regexp.MustCompile(`^[a-zA-Z0-9_.-]{3,32}$`)
@@ -682,26 +702,27 @@ type Activity struct {
 	Action    string `json:"action"`
 	Meta      string `json:"meta"`
 	IP        string `json:"ip"`
+	APIKey    string `json:"apiKey,omitempty"` // set when the action was done with an API key
 	CreatedAt int64  `json:"createdAt"`
 }
 
 func (db *DB) LogActivity(serverID string, u *User, ip, action, meta string) {
 	var uid int64
-	name := "system"
+	name, key := "system", ""
 	if u != nil {
-		uid, name = u.ID, u.Username
+		uid, name, key = u.ID, u.Username, u.viaKey
 	}
 	if len(meta) > 500 {
 		meta = meta[:500] + "…"
 	}
-	_, _ = db.Exec(`INSERT INTO activity(server_id,user_id,username,action,meta,ip,created_at) VALUES(?,?,?,?,?,?,?)`,
-		serverID, uid, name, action, meta, ip, now())
+	_, _ = db.Exec(`INSERT INTO activity(server_id,user_id,username,action,meta,ip,api_key,created_at) VALUES(?,?,?,?,?,?,?,?)`,
+		serverID, uid, name, action, meta, ip, key, now())
 }
 
 func (db *DB) ActivityList(serverID string, limit int) ([]*Activity, error) {
 	var rows *sql.Rows
 	var err error
-	q := `SELECT id, server_id, user_id, username, action, meta, ip, created_at FROM activity`
+	q := `SELECT id, server_id, user_id, username, action, meta, ip, api_key, created_at FROM activity`
 	if serverID == "" {
 		rows, err = db.Query(q+` ORDER BY id DESC LIMIT ?`, limit)
 	} else {
@@ -714,7 +735,7 @@ func (db *DB) ActivityList(serverID string, limit int) ([]*Activity, error) {
 	out := []*Activity{}
 	for rows.Next() {
 		a := &Activity{}
-		if err := rows.Scan(&a.ID, &a.ServerID, &a.UserID, &a.Username, &a.Action, &a.Meta, &a.IP, &a.CreatedAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.ServerID, &a.UserID, &a.Username, &a.Action, &a.Meta, &a.IP, &a.APIKey, &a.CreatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, a)

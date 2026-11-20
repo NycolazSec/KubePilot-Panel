@@ -90,6 +90,13 @@ func (h *Hub) subscribe() (chan WSMsg, []string) {
 	return ch, append([]string(nil), h.lines...)
 }
 
+// snapshot returns a copy of the console history.
+func (h *Hub) snapshot() []string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return append([]string(nil), h.lines...)
+}
+
 func (h *Hub) unsubscribe(ch chan WSMsg) {
 	h.mu.Lock()
 	delete(h.subs, ch)
@@ -235,7 +242,11 @@ var upgrader = websocket.Upgrader{
 }
 
 func (a *App) handleWS(w http.ResponseWriter, r *http.Request, c *Ctx) {
-	conn, err := upgrader.Upgrade(w, r, nil)
+	up := &upgrader
+	if keyFrom(r) != nil {
+		up = &apiUpgrader
+	}
+	conn, err := up.Upgrade(w, r, nil)
 	if err != nil {
 		return
 	}
@@ -283,13 +294,17 @@ func (a *App) handleWS(w http.ResponseWriter, r *http.Request, c *Ctx) {
 			var err error
 			switch in.Type {
 			case "command":
-				if !c.Can("console") {
+				if c.ReadOnly {
+					err = errCode(403, "This API key is read-only")
+				} else if !c.Can("console") {
 					err = errCode(403, "Missing permission: console")
 				} else if err = a.sendCommand(c.Server, in.Data); err == nil {
 					c.log(a, "server.console.command", in.Data)
 				}
 			case "power":
-				if !c.Can("power") {
+				if c.ReadOnly {
+					err = errCode(403, "This API key is read-only")
+				} else if !c.Can("power") {
 					err = errCode(403, "Missing permission: power")
 				} else if err = a.power(c.Server, in.Data); err == nil {
 					c.log(a, "server.power."+in.Data, "")

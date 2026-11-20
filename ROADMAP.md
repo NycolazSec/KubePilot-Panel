@@ -14,7 +14,7 @@ Ideas and votes are welcome in the [issues](https://github.com/NycolazSec/KubePi
 - [x] One-command install with a Helm chart, on any Kubernetes distribution
 - [x] English and French interface, ready for community translations
 - [x] Two-factor authentication (TOTP) with recovery codes
-- [ ] Personal API keys
+- [x] Personal API keys (permissions, read-only, IP allow-list, expiry) and a documented REST API ([docs/API.md](docs/API.md))
 - [ ] Backend test suite in CI
 
 ## v0.2 — Pterodactyl parity

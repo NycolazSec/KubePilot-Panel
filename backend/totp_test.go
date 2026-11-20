@@ -44,6 +44,7 @@ type testClient struct {
 	h      http.Handler
 	cookie string
 	ip     string // client address, 203.0.113.7 by default
+	auth   string // Authorization header (API key); no CSRF header is sent with it, like a script
 }
 
 func (c *testClient) do(method, path string, body any) (int, map[string]any) {
@@ -54,7 +55,11 @@ func (c *testClient) do(method, path string, body any) (int, map[string]any) {
 	if c.ip != "" {
 		r.RemoteAddr = c.ip + ":1234"
 	}
-	r.Header.Set("X-KubePilot", "1")
+	if c.auth != "" {
+		r.Header.Set("Authorization", c.auth)
+	} else {
+		r.Header.Set("X-KubePilot", "1")
+	}
 	r.Header.Set("Content-Type", "application/json")
 	if c.cookie != "" {
 		r.Header.Set("Cookie", c.cookie)

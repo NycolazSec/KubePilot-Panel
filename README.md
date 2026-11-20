@@ -26,7 +26,8 @@ volume and `NodePort` service, and the panel drives the cluster through the Kube
 | File manager: CodeMirror editor, drag & drop upload, zip download, archive / extract | Users & roles, two-factor authentication (TOTP + recovery codes), editable templates with JSON import/export |
 | Backups: create, restore, download, lock, automatic rotation | Settings: panel name, public address, port range, timezone |
 | Cron schedules: commands, power actions, backups | Global activity log |
-| Validated startup variables, image selection, extra ports, sub-users with fine-grained permissions | |
+| Validated startup variables, image selection, extra ports, sub-users with fine-grained permissions |
+| **REST API** with personal API keys (permissions, read-only, IP allow-list, expiry): control servers from scripts and bots — see [docs/API.md](docs/API.md) | |
 
 Built-in templates: **Minecraft Java** (Paper, Purpur, Vanilla, Fabric, Forge, NeoForge… via `itzg/minecraft-server`),
 **Minecraft Bedrock**, **Node.js** and **Python** (Discord bots & apps, optional Git clone + `npm`/`pip` install),
