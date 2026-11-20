@@ -8,6 +8,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
+- Plugins & mods for Minecraft Java servers, from Modrinth: search filtered by the server's software (Paper, Purpur,
+  Folia, Fabric, Quilt, Forge, NeoForge) and Minecraft version, one-click install with dependencies (declared on
+  Modrinth **and** read from the plugin's own `plugin.yml` / `paper-plugin.yml`), installed jars recognized by their
+  SHA-1 with updates, enable / disable, delete, missing dependencies flagged. Files only come from Modrinth's CDN,
+  are checked against their SHA-512 and stay within the disk quota; icons are proxied (raster only).
+
 - Minecraft router (`minecraftRouter.enabled`, itzg/mc-router): Java servers get `<hostname>.<domain>` on the standard
   port 25565 — no port to type for players. Hostname picked from the server name, editable in *Network*; domain in the
   admin settings (wildcard DNS record, DNS only). The NodePort address keeps working.

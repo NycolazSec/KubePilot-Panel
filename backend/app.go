@@ -380,6 +380,13 @@ func (a *App) routes() http.Handler {
 	m.HandleFunc("GET /api/servers/{id}/minecraft", a.srv("console", a.handleMinecraft))
 	m.HandleFunc("POST /api/servers/{id}/minecraft/action", a.srv("console", a.handleMinecraftAction))
 	m.HandleFunc("GET /api/minecraft/avatar/{uuid}", a.authed(a.handleAvatar))
+	m.HandleFunc("GET /api/servers/{id}/plugins", a.srv("files", a.handlePlugins))
+	m.HandleFunc("GET /api/servers/{id}/plugins/search", a.srv("files", a.handlePluginSearch))
+	m.HandleFunc("POST /api/servers/{id}/plugins/install", a.srv("files", a.handlePluginInstall))
+	m.HandleFunc("POST /api/servers/{id}/plugins/update", a.srv("files", a.handlePluginUpdate))
+	m.HandleFunc("POST /api/servers/{id}/plugins/toggle", a.srv("files", a.handlePluginFile))
+	m.HandleFunc("POST /api/servers/{id}/plugins/delete", a.srv("files", a.handlePluginFile))
+	m.HandleFunc("GET /api/modrinth/icon", a.authed(a.handleModrinthIcon))
 
 	m.HandleFunc("GET /api/servers/{id}/files/list", a.srv("files", a.handleFileList))
 	m.HandleFunc("GET /api/servers/{id}/files/content", a.srv("files", a.handleFileRead))

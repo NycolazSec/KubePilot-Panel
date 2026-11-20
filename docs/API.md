@@ -94,6 +94,17 @@ Java servers are queried with the Server List Ping protocol and RCON (the panel 
 `.rcon-cli.env`, written by the `itzg/minecraft-server` image, or from the `RCON_PASSWORD` variable); Bedrock servers
 with a RakNet ping. Player names are validated and reasons cleaned before anything reaches the console.
 
+## Plugins & mods (`files`, Minecraft Java)
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/servers/{id}/plugins` | Software, Minecraft version, folder, installed jars (Modrinth project, version, available update, missing dependencies) |
+| `GET` | `/servers/{id}/plugins/search?q=…&offset=…` | Modrinth search, filtered for this server |
+| `POST` | `/servers/{id}/plugins/install` | `{"projectId": "1u6JkXh5"}` → `{"installed": […], "missing": […]}` (with dependencies) |
+| `POST` | `/servers/{id}/plugins/update` | `{"file": "worldedit-bukkit-7.4.5.jar"}` |
+| `POST` | `/servers/{id}/plugins/toggle` | `{"file": "…"}` — `.jar` ⇄ `.jar.disabled` |
+| `POST` | `/servers/{id}/plugins/delete` | `{"file": "…"}` |
+
 ## Files (`files`)
 
 Paths are relative to the server's data folder (`/` = its root) and can never leave it.
