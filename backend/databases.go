@@ -89,11 +89,23 @@ func randomAlnum(n int) string {
 var safeIdentRe = regexp.MustCompile(`^[a-z0-9_]{1,64}$`)
 var safePassRe = regexp.MustCompile(`^[A-Za-z0-9]{16,64}$`)
 
+const identChars = "abcdefghijklmnopqrstuvwxyz0123456789_"
+
+// quoteIdent checks a database name, then rebuilds it from a constant alphabet: whatever the checks, the query
+// only ever gets characters from identChars.
 func quoteIdent(s string) (string, error) {
 	if !safeIdentRe.MatchString(s) {
 		return "", internalErr("unsafe identifier")
 	}
-	return "`" + s + "`", nil
+	b := make([]byte, len(s))
+	for i := 0; i < len(s); i++ {
+		j := strings.IndexByte(identChars, s[i])
+		if j < 0 {
+			return "", internalErr("unsafe identifier")
+		}
+		b[i] = identChars[j]
+	}
+	return "`" + string(b) + "`", nil
 }
 
 func (db *DB) ServerDatabases(serverID string) ([]ServerDatabase, error) {
