@@ -66,7 +66,7 @@ jobs:
         run: |
           V="${{ steps.v.outputs.version }}"
           # release notes = this version's section of CHANGELOG.md
-          awk -v v="$V" '/^## \[/{p = index($0, "[" v "]") > 0; next} p' CHANGELOG.md > notes.md
+          awk -v v="$V" '/^## \[/{p = index($0, "[" v "]") > 0; next} /^\[[^]]+\]: /{p = 0} p' CHANGELOG.md > notes.md
           cat >> notes.md <<NOTES
 
           ## Install
