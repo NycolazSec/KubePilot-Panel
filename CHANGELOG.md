@@ -27,6 +27,10 @@ First public version of KubePilot, the Kubernetes-native game server panel.
 - Two-factor authentication (TOTP, works with any authenticator app) with 10 single-use recovery codes: enable it
   from *My account*; codes can't be replayed, sign-in tickets are bound to the IP and limited to 5 attempts. Admins can
   reset it for a user who lost their phone (also `kubepilot user:2fa-reset --username …`).
+- Minecraft panel (*Players* tab of Minecraft servers): live status with the server icon and colored MOTD, online
+  players with their skin heads (fetched and cached by the panel, no third-party requests from browsers), whitelist,
+  operators and bans with heads, kick / ban / op / whitelist in one click through RCON (persistent connection, no
+  console spam). Bedrock: status and allowlist. Templates get a "game panel" setting.
 - REST API with personal API keys (*My account → API keys*): permissions per key, read-only mode, IP allow-list,
   expiry, 240 requests / minute, shown once and stored hashed, never able to manage the account; actions are logged
   with the key's name. New `GET /api/servers/{id}/console` endpoint and WebSocket console for scripts.

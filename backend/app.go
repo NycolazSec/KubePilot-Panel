@@ -376,6 +376,9 @@ func (a *App) routes() http.Handler {
 	m.HandleFunc("POST /api/servers/{id}/command", a.srv("console", a.handleCommand))
 	m.HandleFunc("GET /api/servers/{id}/ws", a.srv("console", a.handleWS))
 	m.HandleFunc("GET /api/servers/{id}/console", a.srv("console", a.handleConsoleHistory))
+	m.HandleFunc("GET /api/servers/{id}/minecraft", a.srv("console", a.handleMinecraft))
+	m.HandleFunc("POST /api/servers/{id}/minecraft/action", a.srv("console", a.handleMinecraftAction))
+	m.HandleFunc("GET /api/minecraft/avatar/{uuid}", a.authed(a.handleAvatar))
 
 	m.HandleFunc("GET /api/servers/{id}/files/list", a.srv("files", a.handleFileList))
 	m.HandleFunc("GET /api/servers/{id}/files/content", a.srv("files", a.handleFileRead))

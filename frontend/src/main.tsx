@@ -15,6 +15,7 @@ import Account from './pages/Account';
 import ServerLayout from './pages/server/ServerLayout';
 import Console from './pages/server/Console';
 import Files from './pages/server/Files';
+import Players from './pages/server/Players';
 import Backups from './pages/server/Backups';
 import Schedules from './pages/server/Schedules';
 import Network from './pages/server/Network';
@@ -81,6 +82,7 @@ function App() {
               <Route path="account" element={<Account />} />
               <Route path="server/:id" element={<ServerLayout />}>
                 <Route index element={<Console />} />
+                <Route path="players" element={<Players />} />
                 <Route path="files" element={<Files />} />
                 <Route path="backups" element={<Backups />} />
                 <Route path="schedules" element={<Schedules />} />

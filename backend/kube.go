@@ -51,6 +51,15 @@ func stsName(id string) string { return "srv-" + id }
 func pvcName(id string) string { return "srv-" + id + "-data" }
 func podName(id string) string { return "srv-" + id + "-0" }
 
+// PodIP returns the cluster IP of a server's running pod ("" if none).
+func (k *Kube) PodIP(id string) string {
+	p, err := k.pods.Pods(k.ns).Get(podName(id))
+	if err != nil || p.Status.Phase != corev1.PodRunning {
+		return ""
+	}
+	return p.Status.PodIP
+}
+
 func srvLabels(id, role string) map[string]string {
 	return map[string]string{lblManaged: managedBy, lblServer: id, lblRole: role}
 }
