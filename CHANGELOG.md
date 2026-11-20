@@ -16,8 +16,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   Only the `sftp` subsystem: no shell, command or port forwarding. Sign-in limits per IP and per account, 16
   connections per IP, idle sessions closed after 15 min, every sign-in and a summary of the changes in the activity
   log. New sub-user permission *SFTP access*; *Files* → **SFTP** shows the address, username and host key
-  fingerprint. Chart: `sftp.enabled`, `sftp.port` (default 2022), `sftp.service.*` (`LoadBalancer`,
-  `externalTrafficPolicy: Local`).
+  fingerprint. Chart: `sftp.enabled`, `sftp.port` (default 2022), `sftp.hostPort` (default `true`: the port is
+  opened on the panel's node so the panel sees real client IPs — k3s ServiceLB masquerades them), or a Service
+  (`sftp.service.*`) with `sftp.hostPort=false`.
 
 - **Pterodactyl / Pelican eggs**: *Admin* → *Templates* → *Import an egg*, from the community catalog
   (~300 games and apps of github.com/pelican-eggs, searchable), a GitHub link or a `.json` file. PTDL_v1, PTDL_v2
