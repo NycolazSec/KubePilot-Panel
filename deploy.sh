@@ -15,5 +15,6 @@ helm upgrade --install kubepilot charts/kubepilot --namespace kubepilot-system -
   --set image.repository=docker.io/library/kubepilot --set image.tag="$TAG" --set image.pullPolicy=Never \
   --set ingress.host="$KUBEPILOT_HOST" --set ingress.clusterIssuer="$KUBEPILOT_ISSUER" \
   --set ingress.className="$KUBEPILOT_INGRESS_CLASS" --set storage.node="$KUBEPILOT_NODE" \
+  --set persistence.storageClass=local-path \
   --wait --timeout 5m >/dev/null
 echo "Deployed: KubePilot $VERSION (kubepilot:$TAG) → https://$KUBEPILOT_HOST"
