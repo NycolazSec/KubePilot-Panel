@@ -31,6 +31,7 @@ volume and `NodePort` service, and the panel drives the cluster through the Kube
 | **Plugins & mods** from Modrinth: compatible results only, one-click install with dependencies, updates | |
 | **Minecraft router**: each server at `survival.mc.example.com`, standard port, no port to type | |
 | **Minecraft panel**: live status (MOTD, version, icon), online players with their skin heads, whitelist / ops / bans in one click (RCON) | |
+| **Databases**: MySQL / MariaDB per server in one click, credentials and JDBC URL to copy | |
 | **SFTP** (FileZilla, WinSCP…) with your panel password or SSH keys, sub-user permission, quota-aware | |
 | **REST API** with personal API keys (permissions, read-only, IP allow-list, expiry): control servers from scripts and bots — see [docs/API.md](docs/API.md) | |
 
@@ -71,6 +72,7 @@ flowchart LR
 - **Least privilege**: the panel's ServiceAccount has full rights *only* in `kubepilot-servers`, and read-only access to nodes, PVs, services and metrics. No access to Secrets.
 - **Storage isolation**: game volumes live in their own folder (dedicated `kubepilot-local` StorageClass) and the panel only mounts that folder — it never sees the volumes of the other applications of the cluster.
 - **Origin lock** (optional, Traefik): with `ingress.cloudflareOnly`, the panel only answers requests coming from Cloudflare, so its protections can't be bypassed by hitting the node's IP.
+- **Databases**: the MariaDB pod runs non-root with a read-only root filesystem; a NetworkPolicy lets only game servers and the panel in, and nothing out. Each database user is limited to its own database; passwords are never stored.
 - **SFTP**: only the `sftp` subsystem (no shell, no forwarding); accounts with 2FA must use an SSH key; same per-IP and per-account sign-in limits as the web; same `os.Root` and quota rules as the file manager.
 - **File manager**: every path goes through `os.Root`, so even a symlink planted by a game server can't escape its volume; FIFOs and devices are refused, archives are checked for size and entry count (zip bombs, zip slip).
 - **Disk quotas**: uploads, archives and the editor stop at each server's limit, and a running server that writes far beyond it is stopped, so no server can fill the node's disk.
@@ -131,13 +133,15 @@ docs/       logo and banner
 - The file manager and backups read `local-path` volumes directly, so the panel is pinned to the node that holds
   them (`storage.node`). Multi-node storage would need a CSI driver with a file API.
 - Java heap is set to the memory limit minus max(640 MB, 20 %) to avoid OOM kills; templates get it as `SERVER_JVM_MEMORY`.
+- Databases live in the chart's MariaDB volume: they aren't counted in the servers' disk quota and aren't part of
+  server backups.
 - Disk limits are soft: usage is measured by the panel and a server over its quota can't be started.
 - Eggs: extra ports an egg needs (query, RCON…) are added in the server's *Network*. Structured configuration files
   (JSON, YAML, XML) are edited from the second start, once the game has written them.
 
 ## Roadmap
 
-Coming next: MySQL databases and S3 backups (v0.2), then multi-node, server transfers and
+Coming next: S3 backups (v0.2), then multi-node, server transfers and
 auto-sleep (v0.3).
 See the full [roadmap](ROADMAP.md).
 

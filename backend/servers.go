@@ -145,7 +145,7 @@ func (a *App) view(s *Server, perms []string, host string, tpls map[int64]*Templ
 	}
 	if !slices.Contains(perms, "settings") {
 		v.Server = &Server{ID: s.ID, Name: s.Name, Description: s.Description, OwnerID: s.OwnerID, TemplateID: s.TemplateID,
-			Image: s.Image, MemoryMB: s.MemoryMB, CPUMillis: s.CPUMillis, DiskMB: s.DiskMB, BackupLimit: s.BackupLimit,
+			Image: s.Image, MemoryMB: s.MemoryMB, CPUMillis: s.CPUMillis, DiskMB: s.DiskMB, BackupLimit: s.BackupLimit, DatabaseLimit: s.DatabaseLimit,
 			AllocationLimit: s.AllocationLimit, Suspended: s.Suspended, CreatedAt: s.CreatedAt, Env: map[string]string{}, Hostname: s.Hostname, InternalOnly: s.InternalOnly}
 	}
 	return v
@@ -735,6 +735,7 @@ type serverInput struct {
 	CPU             int               `json:"cpu"`
 	Disk            int               `json:"disk"`
 	BackupLimit     int               `json:"backupLimit"`
+	DatabaseLimit   *int              `json:"databaseLimit"` // nil: unchanged (older clients)
 	AllocationLimit int               `json:"allocationLimit"`
 	Suspended       bool              `json:"suspended"`
 	Env             map[string]string `json:"env"`
@@ -752,7 +753,8 @@ func (in *serverInput) validate() error {
 		return errCode(400, "CPU: 0 (unlimited) or between 100 and 128000 millicores")
 	case in.Disk < 256 || in.Disk > 4194304:
 		return errCode(400, "Disk must be between 256 MB and 4 TB")
-	case in.BackupLimit < 0 || in.BackupLimit > 100 || in.AllocationLimit < 0 || in.AllocationLimit > 50:
+	case in.BackupLimit < 0 || in.BackupLimit > 100 || in.AllocationLimit < 0 || in.AllocationLimit > 50 ||
+		(in.DatabaseLimit != nil && (*in.DatabaseLimit < 0 || *in.DatabaseLimit > 50)):
 		return errCode(400, "Invalid limits")
 	}
 	return nil
@@ -780,7 +782,7 @@ func (a *App) handleAdminServerCreate(w http.ResponseWriter, r *http.Request, u 
 	s := &Server{
 		ID: randomID(8), Name: in.Name, Description: truncate(in.Description, 300), OwnerID: in.OwnerID, TemplateID: t.ID,
 		Image: t.Images[0].Image, Startup: t.Startup, Env: map[string]string{}, MemoryMB: in.Memory, CPUMillis: in.CPU,
-		DiskMB: in.Disk, BackupLimit: in.BackupLimit, AllocationLimit: in.AllocationLimit, CreatedAt: now(),
+		DiskMB: in.Disk, BackupLimit: in.BackupLimit, AllocationLimit: in.AllocationLimit, CreatedAt: now(), DatabaseLimit: derefOr(in.DatabaseLimit, 1),
 	}
 	if strings.TrimSpace(in.Image) != "" {
 		s.Image = strings.TrimSpace(in.Image)
@@ -869,6 +871,7 @@ func (a *App) handleAdminServerUpdate(w http.ResponseWriter, r *http.Request, u 
 	s.Name, s.Description, s.OwnerID = in.Name, truncate(in.Description, 300), in.OwnerID
 	s.MemoryMB, s.CPUMillis, s.DiskMB = in.Memory, in.CPU, in.Disk
 	s.BackupLimit, s.AllocationLimit, s.Suspended = in.BackupLimit, in.AllocationLimit, in.Suspended
+	s.DatabaseLimit = derefOr(in.DatabaseLimit, s.DatabaseLimit)
 	if strings.TrimSpace(in.Image) != "" {
 		s.Image = strings.TrimSpace(in.Image)
 	}
@@ -895,6 +898,10 @@ func (a *App) handleAdminServerDelete(w http.ResponseWriter, r *http.Request, u 
 	}
 	if err := a.kube.DeleteServer(r.Context(), s.ID); err != nil {
 		writeErr(w, r, errCode(500, "Kubernetes deletion failed: %s", err.Error()))
+		return
+	}
+	if err := a.dropServerDatabases(r.Context(), s.ID); err != nil {
+		writeErr(w, r, errCode(500, "The server's databases couldn't be deleted: %s", err.Error()))
 		return
 	}
 	_ = os.RemoveAll(filepath.Join(a.cfg.DataDir, "backups", s.ID))
@@ -1152,3 +1159,10 @@ func (a *App) handleAdminActivity(w http.ResponseWriter, r *http.Request, u *Use
 }
 
 var _ = errors.New
+
+func derefOr(p *int, def int) int {
+	if p == nil {
+		return def
+	}
+	return *p
+}

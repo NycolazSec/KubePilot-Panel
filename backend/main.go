@@ -35,9 +35,12 @@ type Config struct {
 	// RootInstall: the game namespace allows root install containers (Pod Security "baseline"), for eggs
 	RootInstall bool
 	// SFTPListen: address of the built-in SFTP server ("" = off); SFTPPort: the port users connect to
-	SFTPListen    string
-	SFTPPort      int
-	SecureCookies bool
+	SFTPListen string
+	SFTPPort   int
+	// DatabaseAddr / DatabasePassword: the MariaDB for the servers' databases (root), "" = off
+	DatabaseAddr     string
+	DatabasePassword string
+	SecureCookies    bool
 }
 
 func env(key, def string) string {
@@ -59,6 +62,8 @@ func main() {
 	flag.BoolVar(&cfg.MinecraftRouter, "minecraft-router", env("KUBEPILOT_MINECRAFT_ROUTER", "false") == "true", "mc-router is deployed: give Minecraft servers hostnames on port 25565")
 	flag.StringVar(&cfg.SFTPListen, "sftp-listen", env("KUBEPILOT_SFTP_LISTEN", ""), "SFTP listen address, e.g. :2022 (empty = SFTP off)")
 	flag.IntVar(&cfg.SFTPPort, "sftp-port", atoiOr(env("KUBEPILOT_SFTP_PORT", ""), 0), "SFTP port shown to users (default: the listen port)")
+	flag.StringVar(&cfg.DatabaseAddr, "database-addr", env("KUBEPILOT_DATABASE_ADDR", ""), "MariaDB host:port for the servers' databases (empty = off)")
+	cfg.DatabasePassword = os.Getenv("KUBEPILOT_DATABASE_PASSWORD") // never a flag: it would show in the process list
 	secure := flag.Bool("secure-cookies", env("KUBEPILOT_SECURE_COOKIES", "true") == "true", "set Secure flag on cookies")
 	flag.Parse()
 	cfg.SecureCookies = *secure

@@ -40,6 +40,7 @@ export default function ServerSettings() {
             [t('console.cpu'), cpuLabel(server.cpu)],
             [t('common.disk'), mb(server.disk)],
             [t('settings.maxBackups'), server.backupLimit],
+            [t('settings.maxDatabases'), server.databaseLimit],
             [t('settings.maxPorts'), server.allocationLimit],
             [t('settings.createdAt'), dateTime(server.createdAt)],
             [t('settings.k8sResource'), <code className="font-mono text-xs">kubepilot-servers/srv-{server.id}</code>],

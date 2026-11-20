@@ -128,7 +128,7 @@ func openDB(path string) (*DB, error) {
 	// A single connection: SQLite serialises writes anyway and this avoids SQLITE_BUSY.
 	// Rule: never run a query while iterating another result set.
 	sqldb.SetMaxOpenConns(1)
-	if _, err := sqldb.Exec(schema + totpSchema + apiKeySchema + sshKeySchema); err != nil {
+	if _, err := sqldb.Exec(schema + totpSchema + apiKeySchema + sshKeySchema + databaseSchema); err != nil {
 		return nil, err
 	}
 	db := &DB{sqldb}
@@ -137,6 +137,9 @@ func openDB(path string) (*DB, error) {
 		return nil, err
 	}
 	if err := db.addColumn("servers", "hostname", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return nil, err
+	}
+	if err := db.addColumn("servers", "database_limit", "INTEGER NOT NULL DEFAULT 0"); err != nil {
 		return nil, err
 	}
 	if err := db.addColumn("servers", "internal_only", "INTEGER NOT NULL DEFAULT 0"); err != nil {
@@ -564,6 +567,7 @@ type Server struct {
 	CPUMillis       int               `json:"cpu"`
 	DiskMB          int               `json:"disk"`
 	BackupLimit     int               `json:"backupLimit"`
+	DatabaseLimit   int               `json:"databaseLimit"`
 	AllocationLimit int               `json:"allocationLimit"`
 	Suspended       bool              `json:"suspended"`
 	CreatedAt       int64             `json:"createdAt"`
@@ -571,13 +575,13 @@ type Server struct {
 	InternalOnly    bool              `json:"internalOnly"` // no public port: only the owner's other servers reach it
 }
 
-const serverCols = `id, name, description, owner_id, template_id, image, startup, env, memory_mb, cpu_millis, disk_mb, backup_limit, allocation_limit, suspended, created_at, hostname, internal_only`
+const serverCols = `id, name, description, owner_id, template_id, image, startup, env, memory_mb, cpu_millis, disk_mb, backup_limit, allocation_limit, suspended, created_at, hostname, internal_only, database_limit`
 
 func scanServer(row interface{ Scan(...any) error }) (*Server, error) {
 	s := &Server{}
 	var env string
 	if err := row.Scan(&s.ID, &s.Name, &s.Description, &s.OwnerID, &s.TemplateID, &s.Image, &s.Startup, &env,
-		&s.MemoryMB, &s.CPUMillis, &s.DiskMB, &s.BackupLimit, &s.AllocationLimit, &s.Suspended, &s.CreatedAt, &s.Hostname, &s.InternalOnly); err != nil {
+		&s.MemoryMB, &s.CPUMillis, &s.DiskMB, &s.BackupLimit, &s.AllocationLimit, &s.Suspended, &s.CreatedAt, &s.Hostname, &s.InternalOnly, &s.DatabaseLimit); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}
@@ -619,18 +623,18 @@ func (db *DB) ServersForUser(uid int64) ([]*Server, error) {
 
 func (db *DB) InsertServer(s *Server) error {
 	env, _ := json.Marshal(s.Env)
-	_, err := db.Exec(`INSERT INTO servers(`+serverCols+`) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+	_, err := db.Exec(`INSERT INTO servers(`+serverCols+`) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		s.ID, s.Name, s.Description, s.OwnerID, s.TemplateID, s.Image, s.Startup, string(env),
-		s.MemoryMB, s.CPUMillis, s.DiskMB, s.BackupLimit, s.AllocationLimit, s.Suspended, s.CreatedAt, s.Hostname, s.InternalOnly)
+		s.MemoryMB, s.CPUMillis, s.DiskMB, s.BackupLimit, s.AllocationLimit, s.Suspended, s.CreatedAt, s.Hostname, s.InternalOnly, s.DatabaseLimit)
 	return err
 }
 
 func (db *DB) UpdateServer(s *Server) error {
 	env, _ := json.Marshal(s.Env)
 	_, err := db.Exec(`UPDATE servers SET name=?, description=?, owner_id=?, template_id=?, image=?, startup=?, env=?,
-		memory_mb=?, cpu_millis=?, disk_mb=?, backup_limit=?, allocation_limit=?, suspended=? WHERE id=?`,
+		memory_mb=?, cpu_millis=?, disk_mb=?, backup_limit=?, allocation_limit=?, suspended=?, database_limit=? WHERE id=?`,
 		s.Name, s.Description, s.OwnerID, s.TemplateID, s.Image, s.Startup, string(env),
-		s.MemoryMB, s.CPUMillis, s.DiskMB, s.BackupLimit, s.AllocationLimit, s.Suspended, s.ID)
+		s.MemoryMB, s.CPUMillis, s.DiskMB, s.BackupLimit, s.AllocationLimit, s.Suspended, s.DatabaseLimit, s.ID)
 	return err
 }
 
@@ -678,7 +682,7 @@ func (db *DB) InsertAllocation(a *Allocation) error {
 
 // ---------- Subusers
 
-var AllPerms = []string{"console", "power", "files", "sftp", "backups", "schedules", "startup", "network", "activity"}
+var AllPerms = []string{"console", "power", "files", "sftp", "backups", "databases", "schedules", "startup", "network", "activity"}
 
 type SubUser struct {
 	UserID      int64    `json:"userId"`

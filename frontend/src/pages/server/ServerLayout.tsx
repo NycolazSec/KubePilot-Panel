@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import { Activity, CalendarClock, Gamepad2, Puzzle, ChevronRight, Copy, Folder, History, Network as NetIcon, Settings, SquareTerminal, Users, Wrench } from 'lucide-react';
+import { Activity, CalendarClock, Gamepad2, Puzzle, ChevronRight, Copy, Database, Folder, History, Network as NetIcon, Settings, SquareTerminal, Users, Wrench } from 'lucide-react';
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useParams } from 'react-router-dom';
 import { get, Server, State } from '../../api';
@@ -138,6 +138,7 @@ export default function ServerLayout() {
     ...(server.features?.includes('minecraft-java') ? [{ to: 'plugins', label: t('tab.plugins'), icon: Puzzle, perm: 'files' }] : []),
     { to: 'files', label: t('tab.files'), icon: Folder, perm: 'files' },
     { to: 'backups', label: t('tab.backups'), icon: History, perm: 'backups' },
+    { to: 'databases', label: t('tab.databases'), icon: Database, perm: 'databases' },
     { to: 'schedules', label: t('tab.schedules'), icon: CalendarClock, perm: 'schedules' },
     { to: 'network', label: t('tab.network'), icon: NetIcon, perm: 'network' },
     { to: 'startup', label: t('tab.startup'), icon: Wrench, perm: 'startup' },

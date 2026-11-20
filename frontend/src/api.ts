@@ -50,7 +50,7 @@ export interface Allocation { port: number; serverId: string; protocol: string; 
 
 export interface Server {
   id: string; name: string; description: string; ownerId: number; templateId: number; image: string; startup: string;
-  env: Record<string, string>; memory: number; cpu: number; disk: number; backupLimit: number; allocationLimit: number;
+  env: Record<string, string>; memory: number; cpu: number; disk: number; backupLimit: number; databaseLimit: number; allocationLimit: number;
   suspended: boolean; createdAt: number;
   template: string; templateSlug: string; consoleInput: boolean; owner: string; state: State; diskUsed: number;
   address: string; allocations: Allocation[]; permissions: string[]; features: string[];

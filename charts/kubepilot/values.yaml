@@ -79,6 +79,19 @@ sftp:
     annotations: {}
 
 
+# MySQL / MariaDB databases for the game servers (Databases tab): one MariaDB next to the servers, one database and
+# one user per request, reachable only by the game servers and the panel.
+databases:
+  enabled: true
+  image: { repository: mariadb, tag: "11.4", pullPolicy: IfNotPresent }
+  maxConnections: 300
+  persistence:
+    size: 10Gi
+    storageClass: "" # cluster default (k3s: local-path)
+  resources:
+    requests: { cpu: 50m, memory: 256Mi }
+    limits: { memory: 1Gi }
+
 # Minecraft router (itzg/mc-router): players join Java servers at <hostname>.<domain> on the standard port 25565
 # instead of <node>:<NodePort>. Set the domain in the admin settings and point a wildcard DNS record
 # (*.<domain>, DNS only — not proxied) at your nodes.

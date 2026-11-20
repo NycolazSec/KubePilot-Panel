@@ -34,6 +34,9 @@ data is ever lost by accident. Delete them by hand if you really want to.
 | `image.tag` | chart `appVersion` | Image tag |
 | `serversNamespace.name` | `kubepilot-servers` | Namespace of the game servers (kept on uninstall) |
 | `serversNamespace.create` | `true` | Create that namespace (Pod Security `restricted` audited) |
+| `databases.enabled` | `true` | MariaDB for the servers' databases, reachable only by game servers and the panel |
+| `databases.persistence.size` | `10Gi` | MariaDB volume (`databases.persistence.storageClass`: cluster default) |
+| `databases.resources` | 256Mi → 1Gi | MariaDB requests / limits |
 | `sftp.enabled` | `true` | Built-in SFTP server (`<username>.<server id>`, panel password or SSH key) |
 | `sftp.port` | `2022` | SFTP port (use another one if Pterodactyl Wings runs on the nodes) |
 | `sftp.hostPort` | `true` | Open `sftp.port` on the panel's node, keeping client IPs (k3s ServiceLB would hide them) |

@@ -8,6 +8,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
+- **MySQL / MariaDB databases per server** (*Databases* tab): one click creates a database and its own user
+  (LuckPerms, CoreProtect, bots…), with the host, a JDBC URL and a `mysql://` URL to copy. The chart deploys a MariaDB
+  next to the game servers (`databases.*`, Pod Security `restricted`, read-only root filesystem); only game servers and
+  the panel can reach it, and it reaches nothing. Each user only has rights on its own database (no `GRANT`, no
+  `FILE`, other databases not even listed), 30 connections at most. Passwords are shown once and never stored, and can
+  be rotated. A server's databases are deleted with it. New per-server limit *Max. databases* (default 1 for new
+  servers, 0 for existing ones) and sub-user permission *Databases*.
+
 - **Egg configuration files** (`config.files`): before each start, the game's own files get the server's port, IP,
   name, password… from its variables, like Wings — the 6 parsers (`properties`, `ini`, `json`, `yaml`, `xml`,
   `file`), dot paths with `[0]` indexes and `*` wildcards, conditional replacements, all of Wings' placeholders
