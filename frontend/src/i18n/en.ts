@@ -356,6 +356,8 @@ export const en = {
   "network.empty": "No public port",
   "network.emptyHint": "This server can't be reached from the Internet.",
   "network.footer": "Extra ports: {used} / {limit}. An added port is exposed with the same number inside the container: configure your plugin to listen on it.",
+  "network.internal": "Internal address",
+  "network.internalHint": "Your other servers reach this one at this address (a bot and its Lavalink, a game and its database…). Other users' servers can't.",
   "network.internalPort": "Internal port",
   "network.note": "Note",
   "network.notePlaceholder": "e.g. Dynmap, voice chat…",

@@ -103,9 +103,10 @@ type ServerView struct {
 	Address      string        `json:"address"`
 	Allocations  []*Allocation `json:"allocations"`
 	Permissions  []string      `json:"permissions"`
-	Features     []string      `json:"features"`     // game-specific pages (see templateFeatures)
-	NodeAddress  string        `json:"nodeAddress"`  // <node>:<NodePort>, always reachable
-	RouterDomain string        `json:"routerDomain"` // set when this server can get a <hostname>.<domain> address
+	Features     []string      `json:"features"`        // game-specific pages (see templateFeatures)
+	NodeAddress  string        `json:"nodeAddress"`     // <node>:<NodePort>, always reachable
+	Internal     string        `json:"internalAddress"` // reachable by the owner's other servers
+	RouterDomain string        `json:"routerDomain"`    // set when this server can get a <hostname>.<domain> address
 }
 
 func (a *App) view(s *Server, perms []string, host string, tpls map[int64]*Template, users map[int64]string) ServerView {
@@ -125,6 +126,11 @@ func (a *App) view(s *Server, perms []string, host string, tpls map[int64]*Templ
 		}
 	}
 	v.NodeAddress = v.Address
+	for _, al := range v.Allocations {
+		if al.IsPrimary {
+			v.Internal = a.kube.InternalAddress(s.ID, al.Port)
+		}
+	}
 	if a.routerAvailable(tpls[s.TemplateID], st) {
 		v.RouterDomain = st.MinecraftDomain
 		if routed := a.routedHost(s, tpls[s.TemplateID], st); routed != "" {
@@ -205,6 +211,9 @@ func (a *App) startServer(ctx context.Context, s *Server) error {
 		return err
 	}
 	if err := a.kube.EnsureService(ctx, sp); err != nil {
+		return err
+	}
+	if err := a.kube.EnsureOwnerNetwork(ctx, s.OwnerID); err != nil {
 		return err
 	}
 	go a.refreshDisk(a.ctx, s.ID)
