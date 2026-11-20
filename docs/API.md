@@ -143,6 +143,7 @@ Paths are relative to the server's data folder (`/` = its root) and can never le
 | `GET` / `PUT` | `/servers/{id}/startup` | `startup` | `{"env": {"MOTD": "Hi"}, "image": "…"}` (only editable variables, allowed images) |
 | `GET` / `POST` | `/servers/{id}/network` | `network` | `POST {"protocol": "tcp" \| "udp" \| "tcp+udp"}` adds a port |
 | `PUT` / `DELETE` | `/servers/{id}/network/{port}` | `network` | `PUT {"primary": true}` or `{"notes": "Dynmap"}` |
+| `PUT` | `/servers/{id}/exposure` | `network` | `{"internalOnly": true}` → no public port, reachable by the owner's other servers only |
 | `PUT` | `/servers/{id}/hostname` | `network` | `{"hostname": "survival"}` → `survival.<Minecraft domain>` on port 25565 (Minecraft router; `""` removes it) |
 | `GET` / `POST` | `/servers/{id}/users` | `users` | `POST {"username": "alice", "permissions": ["console", "power"]}` |
 | `PUT` / `DELETE` | `/servers/{id}/users/{uid}` | `users` | `PUT {"permissions": […]}` |

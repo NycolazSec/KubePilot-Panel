@@ -28,7 +28,7 @@ func (a *App) routerAvailable(t *Template, st Settings) bool {
 
 // routedHost is the full address of a routed server, "" when it isn't routed.
 func (a *App) routedHost(s *Server, t *Template, st Settings) string {
-	if s.Hostname == "" || !a.routerAvailable(t, st) {
+	if s.Hostname == "" || s.InternalOnly || !a.routerAvailable(t, st) {
 		return ""
 	}
 	return s.Hostname + "." + st.MinecraftDomain
@@ -131,4 +131,30 @@ func (a *App) syncRoutes(ctx context.Context) {
 			}
 		}
 	}
+}
+
+// PUT /api/servers/{id}/exposure {internalOnly}: remove (or give back) the server's public ports.
+func (a *App) handleExposure(w http.ResponseWriter, r *http.Request, c *Ctx) {
+	var in struct {
+		InternalOnly bool `json:"internalOnly"`
+	}
+	if err := readJSON(r, &in); err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	if _, err := a.db.Exec(`UPDATE servers SET internal_only=? WHERE id=?`, in.InternalOnly, c.Server.ID); err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	c.Server.InternalOnly = in.InternalOnly
+	sp, err := a.spec(c.Server)
+	if err == nil {
+		err = a.kube.EnsureService(r.Context(), sp)
+	}
+	if err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	c.log(a, "server.exposure", map[bool]string{true: "internal only", false: "public"}[in.InternalOnly])
+	writeJSON(w, 200, map[string]bool{"internalOnly": in.InternalOnly})
 }

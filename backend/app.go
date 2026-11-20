@@ -419,6 +419,7 @@ func (a *App) routes() http.Handler {
 	m.HandleFunc("POST /api/servers/{id}/network", a.srv("network", a.handleAllocAdd))
 	m.HandleFunc("PUT /api/servers/{id}/network/{port}", a.srv("network", a.handleAllocUpdate))
 	m.HandleFunc("PUT /api/servers/{id}/hostname", a.srv("network", a.handleHostname))
+	m.HandleFunc("PUT /api/servers/{id}/exposure", a.srv("network", a.handleExposure))
 	m.HandleFunc("DELETE /api/servers/{id}/network/{port}", a.srv("network", a.handleAllocDelete))
 
 	m.HandleFunc("GET /api/servers/{id}/users", a.srv("users", a.handleSubUsers))

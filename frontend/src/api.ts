@@ -54,7 +54,7 @@ export interface Server {
   suspended: boolean; createdAt: number;
   template: string; templateSlug: string; consoleInput: boolean; owner: string; state: State; diskUsed: number;
   address: string; allocations: Allocation[]; permissions: string[]; features: string[];
-  hostname: string; nodeAddress: string; routerDomain: string;
+  hostname: string; nodeAddress: string; routerDomain: string; internalAddress: string; internalOnly: boolean;
 }
 
 export interface FileEntry { name: string; dir: boolean; size: number; mode: string; modified: number; symlink: boolean }
