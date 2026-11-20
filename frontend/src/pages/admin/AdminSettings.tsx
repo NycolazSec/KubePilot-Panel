@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { get, put, Settings } from '../../api';
 import { Button, Card, ErrorBox, Field, Loading, useLoad, useUI } from '../../components/ui';
 import { useAuth } from '../../main';
+import BackupStorageCard from '../../components/BackupStorageCard';
 import { t } from '../../i18n';
 
 export default function AdminSettings() {
@@ -21,6 +22,7 @@ export default function AdminSettings() {
     try { await put('/admin/settings', s); toast(t('adminSettings.saved')); refresh(); } catch (e: any) { toast(e.message, 'err'); } finally { setBusy(false); }
   };
   return (
+    <div className="space-y-5">
     <Card title={t('adminSettings.title')} actions={<Button size="sm" variant="primary" icon={<Save className="h-3.5 w-3.5" />} loading={busy} onClick={save}>{t('common.save')}</Button>}>
       <div className="grid max-w-3xl gap-5 sm:grid-cols-2">
         <Field label={t('adminSettings.panelName')}><input className="input" value={s.panelName} onChange={(e) => setS({ ...s, panelName: e.target.value })} /></Field>
@@ -42,5 +44,7 @@ export default function AdminSettings() {
         </Field>
       </div>
     </Card>
+    <BackupStorageCard />
+    </div>
   );
 }

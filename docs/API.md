@@ -167,6 +167,7 @@ accounts with two-factor authentication). API keys can't be used over SFTP.
 
 | Method | Path | Description |
 |---|---|---|
+| `GET` | `/admin/backup-storage` | Where new backups go: `{"storage": "local"}` or `{"storage": "s3", "endpoint", "bucket", "prefix", "encrypted", "status"}` |
 | `GET` | `/admin/overview` | Nodes, allocated resources, ports |
 | `GET` / `POST` | `/admin/users` | List / create `{"username", "email", "password", "isAdmin"}` |
 | `PUT` / `DELETE` | `/admin/users/{uid}` | Update (also `"reset2fa": true`) / delete |

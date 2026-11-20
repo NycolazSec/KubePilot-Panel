@@ -79,6 +79,25 @@ sftp:
     annotations: {}
 
 
+# Backups on S3-compatible storage (AWS, Backblaze B2, OVH, Scaleway, Cloudflare R2, MinIO…) instead of the panel's
+# volume. Backups made before keep working from where they are.
+backups:
+  s3:
+    enabled: false
+    endpoint: "" # e.g. s3.eu-west-3.amazonaws.com, s3.gra.io.cloud.ovh.net, <account>.r2.cloudflarestorage.com
+    region: ""
+    bucket: ""
+    prefix: kubepilot
+    insecure: false # plain HTTP, for an in-cluster MinIO only
+    # Secret with the keys access-key, secret-key and optionally encryption-key; or set the values below and the
+    # chart creates it.
+    existingSecret: ""
+    accessKey: ""
+    secretKey: ""
+    # age secret key (age-keygen → AGE-SECRET-KEY-1…): archives are encrypted before they leave the panel. Keep a
+    # copy somewhere safe: without it, encrypted backups can't be restored (age -d -i key.txt also works by hand).
+    encryptionKey: ""
+
 # MySQL / MariaDB databases for the game servers (Databases tab): one MariaDB next to the servers, one database and
 # one user per request, reachable only by the game servers and the panel.
 databases:
