@@ -34,7 +34,9 @@ data is ever lost by accident. Delete them by hand if you really want to.
 | `image.tag` | chart `appVersion` | Image tag |
 | `serversNamespace.name` | `kubepilot-servers` | Namespace of the game servers (kept on uninstall) |
 | `serversNamespace.create` | `true` | Create that namespace, with Pod Security `restricted` |
-| `storage.className` | `local-path` | StorageClass of game volumes (must be hostPath-based) |
+| `storage.isolated` | `true` | Create a StorageClass that keeps game volumes in their own folder; the panel mounts only that folder, never other apps' volumes (local-path-provisioner ≥ v0.0.27) |
+| `storage.className` | `kubepilot-local` | StorageClass of game volumes (created when `isolated`, else an existing hostPath-based one) |
+| `storage.provisioner` | `rancher.io/local-path` | Provisioner of the created StorageClass |
 | `storage.hostPath` | `/var/lib/rancher/k3s/storage` | Directory where that provisioner creates volumes on the node |
 | `storage.node` | `""` | Node holding the volumes, where the panel runs. Empty on a single-node cluster |
 | `persistence.size` | `20Gi` | Panel data volume (database + backups) |
@@ -47,6 +49,8 @@ data is ever lost by accident. Delete them by hand if you really want to.
 | `ingress.annotations` | `{}` | Extra Ingress annotations |
 | `ingress.tls.enabled` | `true` | Serve the panel over HTTPS |
 | `ingress.tls.secretName` | `kubepilot-tls` | Secret holding the certificate |
+| `ingress.cloudflareOnly` | `false` | Traefik: only accept requests from Cloudflare's ranges (domain proxied by Cloudflare) — nobody can bypass Cloudflare by hitting the node directly |
+| `ingress.sourceRanges` | `[]` | Traefik: other networks allowed to reach the panel |
 | `service.type` / `service.port` | `ClusterIP` / `80` | Panel Service |
 | `secureCookies` | `true` | Send cookies over HTTPS only. Set `false` only to test over plain HTTP |
 | `resources` | 50m / 64Mi → 2 CPU / 1Gi | Panel resources |

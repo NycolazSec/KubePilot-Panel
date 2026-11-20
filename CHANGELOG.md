@@ -41,6 +41,9 @@ First public version of KubePilot, the Kubernetes-native game server panel.
 - `__Host-` session cookie over HTTPS; stricter headers (CSP `object-src 'none'`, `base-uri 'none'`, COOP, CORP,
   HSTS 2 years, `Cache-Control: no-store` on the API); HTTP idle timeout and header size limit.
 - React Router 7 (fixes CVE-2025-68470 and a related advisory).
+- Game volumes get their own folder through a dedicated `kubepilot-local` StorageClass and the panel only mounts that folder,
+  never the volumes of the other applications of the cluster.
+- Optional Cloudflare-only origin (`ingress.cloudflareOnly`, Traefik), seccomp `RuntimeDefault` on the panel pod.
 
 ### Fixed
 

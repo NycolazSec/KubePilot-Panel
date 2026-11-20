@@ -1,0 +1,13 @@
+{{- if .Values.storage.isolated }}
+# Game volumes in <hostPath>/<namespace>/<claim>/: the panel only mounts the folder of its own namespace.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: {{ .Values.storage.className }}
+  labels: {{- include "kubepilot.labels" . | nindent 4 }}
+provisioner: {{ .Values.storage.provisioner }}
+parameters:
+  pathPattern: {{ "{{ .PVC.Namespace }}/{{ .PVC.Name }}/" | quote }}
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Delete
+{{- end }}
