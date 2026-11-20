@@ -61,6 +61,20 @@ ingress:
     172.64.0.0/13, 131.0.72.0/22, 2400:cb00::/32, 2606:4700::/32, 2803:f800::/32, 2405:b500::/32, 2405:8100::/32,
     2a06:98c0::/29, 2c0f:f248::/32]
 
+# Built-in SFTP server (FileZilla, WinSCP, sftp…): users sign in as <username>.<server id> with their panel
+# password, or an SSH key added in My account (required for accounts with two-factor authentication).
+sftp:
+  enabled: true
+  # Port users connect to. 2022 is also Pterodactyl Wings' SFTP port: pick another one if Wings runs on the nodes.
+  port: 2022
+  service:
+    type: LoadBalancer # k3s ServiceLB, MetalLB, a cloud load balancer… (NodePort works too)
+    # Local keeps the client's IP: per-IP sign-in limits and a meaningful activity log
+    externalTrafficPolicy: Local
+    nodePort: null
+    annotations: {}
+
+
 # Minecraft router (itzg/mc-router): players join Java servers at <hostname>.<domain> on the standard port 25565
 # instead of <node>:<NodePort>. Set the domain in the admin settings and point a wildcard DNS record
 # (*.<domain>, DNS only — not proxied) at your nodes.

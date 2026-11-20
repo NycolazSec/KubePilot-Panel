@@ -9,13 +9,14 @@ import { toml } from '@codemirror/legacy-modes/mode/toml';
 import { oneDark } from '@codemirror/theme-one-dark';
 import CodeMirror from '@uiw/react-codemirror';
 import clsx from 'clsx';
-import { Archive, ChevronRight, Download, File, FileArchive, FilePlus, FileText, Folder, FolderPlus, House, Link, PackageOpen, Pencil, RefreshCw, Save, Trash2, Upload } from 'lucide-react';
+import { Archive, ChevronRight, Download, File, FileArchive, FilePlus, FileText, Folder, FolderPlus, HardDriveUpload, House, Link, PackageOpen, Pencil, RefreshCw, Save, Trash2, Upload } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api, get, FileEntry, post } from '../../api';
 import { Button, Empty, ErrorBox, IconButton, Loading, Modal, useLoad, useUI } from '../../components/ui';
 import { ago, bytes, joinPath } from '../../lib/format';
 import { useServer } from './ServerLayout';
+import SFTPDialog from '../../components/SFTPDialog';
 import { lang, locale, t } from '../../i18n';
 
 const archiveRe = /\.(zip|tar|tar\.gz|tgz)$/i;
@@ -98,6 +99,7 @@ function Editor({ path, onClose }: { path: string; onClose: (saved: boolean) => 
 export default function Files() {
   const { server } = useServer();
   const { toast, confirm, prompt } = useUI();
+  const [sftpOpen, setSftpOpen] = useState(false);
   const [params, setParams] = useSearchParams();
   const dir = params.get('path') || '/';
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -211,6 +213,7 @@ export default function Files() {
             <Button size="sm" variant="danger" icon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => remove(sel)}>{t('common.delete')}</Button>
           </>}
           <IconButton title={t('common.refresh')} onClick={() => reload()}><RefreshCw className="h-4 w-4" /></IconButton>
+          {server.permissions.includes('sftp') && <Button size="sm" icon={<HardDriveUpload className="h-3.5 w-3.5" />} onClick={() => setSftpOpen(true)}>{t('sftp.button')}</Button>}
           <Button size="sm" icon={<FolderPlus className="h-3.5 w-3.5" />} onClick={newFolder}>{t('files.folder')}</Button>
           <Button size="sm" icon={<FilePlus className="h-3.5 w-3.5" />} onClick={newFile}>{t('files.file')}</Button>
           <Button size="sm" variant="primary" icon={<Upload className="h-3.5 w-3.5" />} onClick={() => fileInput.current?.click()}>{t('files.upload')}</Button>
@@ -274,6 +277,7 @@ export default function Files() {
       )}
       {drag && <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-ink-950/70 text-lg font-medium text-brand-200"><Upload className="mr-3 h-6 w-6" /> {t('files.dropHere', { dir })}</div>}
       {editing && <Editor path={editing} onClose={(saved) => { setEditing(null); if (saved) reload(true); }} />}
+      <SFTPDialog serverId={server.id} open={sftpOpen} onClose={() => setSftpOpen(false)} />
     </div>
   );
 }

@@ -7,6 +7,7 @@ import { useAuth } from '../main';
 import LanguageSelect from '../components/LanguageSelect';
 import TwoFactorCard from '../components/TwoFactorCard';
 import APIKeysCard from '../components/APIKeysCard';
+import SSHKeysCard from '../components/SSHKeysCard';
 import { t } from '../i18n';
 
 export default function Account() {
@@ -54,6 +55,7 @@ export default function Account() {
           </form>
         </Card>
         <TwoFactorCard />
+        <SSHKeysCard />
         <APIKeysCard />
         <Card title={t('account.language')} description={t('account.languageHint')}>
           <LanguageSelect />

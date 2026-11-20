@@ -38,6 +38,7 @@ type App struct {
 	limiter  *rateLimiter // sign-in attempts per IP
 	accounts *rateLimiter // sign-in attempts per account, from IPs the account never signed in from
 	keyRate  *rateLimiter // requests per API key
+	sftp     *sftpServer  // nil when SFTP is off
 	tickets  loginTickets // sign-ins waiting for their second factor
 }
 
@@ -370,6 +371,10 @@ func (a *App) routes() http.Handler {
 	m.HandleFunc("GET /api/account/api-keys", a.authed(a.handleAPIKeys))
 	m.HandleFunc("POST /api/account/api-keys", a.authed(a.handleAPIKeyCreate))
 	m.HandleFunc("DELETE /api/account/api-keys/{kid}", a.authed(a.handleAPIKeyDelete))
+	m.HandleFunc("GET /api/account/ssh-keys", a.authed(a.handleSSHKeys))
+	m.HandleFunc("POST /api/account/ssh-keys", a.authed(a.handleSSHKeyAdd))
+	m.HandleFunc("DELETE /api/account/ssh-keys/{kid}", a.authed(a.handleSSHKeyDelete))
+	m.HandleFunc("GET /api/servers/{id}/sftp", a.srv("sftp", a.handleSFTPInfo))
 
 	m.HandleFunc("GET /api/servers", a.authed(a.handleServers))
 	m.HandleFunc("GET /api/servers/{id}", a.srv("", a.handleServer))

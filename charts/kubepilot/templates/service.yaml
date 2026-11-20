@@ -8,3 +8,29 @@ spec:
   type: {{ .Values.service.type }}
   selector: {{- include "kubepilot.selectorLabels" . | nindent 4 }}
   ports: [{ port: {{ .Values.service.port }}, targetPort: http, name: http }]
+{{- if .Values.sftp.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "kubepilot.fullname" . }}-sftp
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "kubepilot.labels" . | nindent 4 }}
+  {{- with .Values.sftp.service.annotations }}
+  annotations: {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.sftp.service.type }}
+  {{- if ne .Values.sftp.service.type "ClusterIP" }}
+  externalTrafficPolicy: {{ .Values.sftp.service.externalTrafficPolicy }}
+  {{- end }}
+  selector: {{- include "kubepilot.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: sftp
+      port: {{ .Values.sftp.port }}
+      targetPort: sftp
+      protocol: TCP
+      {{- with .Values.sftp.service.nodePort }}
+      nodePort: {{ . }}
+      {{- end }}
+{{- end }}

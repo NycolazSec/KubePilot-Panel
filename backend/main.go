@@ -7,10 +7,12 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"syscall"
 	"time"
 	_ "time/tzdata"
@@ -31,7 +33,10 @@ type Config struct {
 	// MinecraftRouter: the chart deployed mc-router, which routes players by hostname on port 25565
 	MinecraftRouter bool
 	// RootInstall: the game namespace allows root install containers (Pod Security "baseline"), for eggs
-	RootInstall   bool
+	RootInstall bool
+	// SFTPListen: address of the built-in SFTP server ("" = off); SFTPPort: the port users connect to
+	SFTPListen    string
+	SFTPPort      int
 	SecureCookies bool
 }
 
@@ -52,6 +57,8 @@ func main() {
 	flag.StringVar(&cfg.StorageClass, "storage-class", env("KUBEPILOT_STORAGE_CLASS", "local-path"), "StorageClass of game server volumes (hostPath-based provisioner)")
 	flag.BoolVar(&cfg.RootInstall, "root-install", env("KUBEPILOT_ROOT_INSTALL", "false") == "true", "install scripts of egg templates may run as root (namespace Pod Security baseline)")
 	flag.BoolVar(&cfg.MinecraftRouter, "minecraft-router", env("KUBEPILOT_MINECRAFT_ROUTER", "false") == "true", "mc-router is deployed: give Minecraft servers hostnames on port 25565")
+	flag.StringVar(&cfg.SFTPListen, "sftp-listen", env("KUBEPILOT_SFTP_LISTEN", ""), "SFTP listen address, e.g. :2022 (empty = SFTP off)")
+	flag.IntVar(&cfg.SFTPPort, "sftp-port", atoiOr(env("KUBEPILOT_SFTP_PORT", ""), 0), "SFTP port shown to users (default: the listen port)")
 	secure := flag.Bool("secure-cookies", env("KUBEPILOT_SECURE_COOKIES", "true") == "true", "set Secure flag on cookies")
 	flag.Parse()
 	cfg.SecureCookies = *secure
@@ -88,6 +95,23 @@ func main() {
 		log.Fatalf("kubernetes start: %v", err)
 	}
 	app.startBackground(ctx)
+
+	if cfg.SFTPListen != "" {
+		s, err := newSFTPServer(app, filepath.Join(cfg.DataDir, "sftp_host_ed25519_key"))
+		if err != nil {
+			log.Fatal(err)
+		}
+		ln, err := net.Listen("tcp", cfg.SFTPListen)
+		if err != nil {
+			log.Fatalf("sftp: %v", err)
+		}
+		if app.cfg.SFTPPort == 0 {
+			app.cfg.SFTPPort = ln.Addr().(*net.TCPAddr).Port
+		}
+		app.sftp = s
+		go s.serve(ctx, ln)
+		log.Printf("SFTP listening on %s (host key %s)", ln.Addr(), s.fingerprint)
+	}
 
 	srv := &http.Server{
 		Addr:              cfg.Listen,
@@ -155,4 +179,11 @@ func runCLI(db *DB, args []string) error {
 		return fmt.Errorf("unknown command %q (user:create, user:password, user:2fa-reset)", args[0])
 	}
 	return nil
+}
+
+func atoiOr(s string, def int) int {
+	if n, err := strconv.Atoi(s); err == nil {
+		return n
+	}
+	return def
 }

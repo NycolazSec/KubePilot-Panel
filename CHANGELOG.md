@@ -8,6 +8,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
+- **Built-in SFTP server** (FileZilla, WinSCP, `sftp`): sign in as `<username>.<server id>` with the panel password or an
+  SSH key added in *My account* (ed25519, ECDSA, security keys, RSA ≥ 3072 bits). Accounts with two-factor
+  authentication must use a key: a password alone can't bypass 2FA. Same rules as the web file manager — `os.Root`
+  (no escape, even through symlinks planted by a game), no symlink created, FIFOs refused, writes counted at once on a
+  disk quota shared by parallel transfers (a new file cut by the quota is removed), files owned by the game's user.
+  Only the `sftp` subsystem: no shell, command or port forwarding. Sign-in limits per IP and per account, 16
+  connections per IP, idle sessions closed after 15 min, every sign-in and a summary of the changes in the activity
+  log. New sub-user permission *SFTP access*; *Files* → **SFTP** shows the address, username and host key
+  fingerprint. Chart: `sftp.enabled`, `sftp.port` (default 2022), `sftp.service.*` (`LoadBalancer`,
+  `externalTrafficPolicy: Local`).
+
 - **Pterodactyl / Pelican eggs**: *Admin* → *Templates* → *Import an egg*, from the community catalog
   (~300 games and apps of github.com/pelican-eggs, searchable), a GitHub link or a `.json` file. PTDL_v1, PTDL_v2
   and PLCN_v3 are supported. The egg becomes a template draft to review: images (newest Java first), startup command

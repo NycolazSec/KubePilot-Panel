@@ -68,6 +68,27 @@ func (a *App) diskRemaining(s *Server) int64 {
 	return int64(s.DiskMB)<<20 - a.diskUsed(s.ID)
 }
 
+// reserveDisk counts n more bytes on a server if it stays within its quota. It's atomic, so parallel uploads
+// (several SFTP transfers, the web file manager) share the remaining space; the next measurement replaces the
+// estimate.
+func (a *App) reserveDisk(s *Server, n int64) bool {
+	a.diskMu.Lock()
+	defer a.diskMu.Unlock()
+	if s.DiskMB > 0 && a.disk[s.ID]+n > int64(s.DiskMB)<<20 {
+		return false
+	}
+	a.disk[s.ID] += n
+	return true
+}
+
+func (a *App) releaseDisk(id string, n int64) {
+	a.diskMu.Lock()
+	defer a.diskMu.Unlock()
+	if a.disk[id] -= n; a.disk[id] < 0 {
+		a.disk[id] = 0
+	}
+}
+
 // quotaWriter fails once more than `left` bytes have been written.
 type quotaWriter struct {
 	w    io.Writer
