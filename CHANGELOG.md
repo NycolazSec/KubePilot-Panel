@@ -36,6 +36,8 @@ First public version of KubePilot, the Kubernetes-native game server panel.
 
 ### Security
 
+- 2FA recovery codes are hashed with bcrypt (they're short enough to be brute-forced from a stolen database
+  with a fast hash); codes created before keep working.
 - CI: govulncheck, npm audit and CodeQL (security-extended) on every pull request; GitHub Actions pinned to commit SHAs,
   read-only workflow token by default.
 - Disk quotas are enforced: uploads, the editor, compression and extraction stop at the server's disk limit, and a
