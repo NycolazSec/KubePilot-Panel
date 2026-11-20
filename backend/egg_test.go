@@ -93,7 +93,11 @@ func TestEggURL(t *testing.T) {
 			t.Errorf("eggURL(%q) = %q, %v", in, got, err)
 		}
 	}
-	for _, bad := range []string{"http://raw.githubusercontent.com/a/b/c/d.json", "https://evil.com/egg.json", "https://169.254.169.254/latest", "https://github.com/a/b", "file:///etc/passwd"} {
+	if got, _ := eggURL("https://raw.githubusercontent.com/a/b/main/my egg.json?token=x#f"); got != "https://raw.githubusercontent.com/a/b/main/my%20egg.json" {
+		t.Errorf("query and fragment must be dropped, path escaped: %q", got)
+	}
+	for _, bad := range []string{"http://raw.githubusercontent.com/a/b/c/d.json", "https://evil.com/egg.json", "https://169.254.169.254/latest", "https://github.com/a/b",
+		"file:///etc/passwd", "https://raw.githubusercontent.com:8443/a/b/c/d.json", "https://user@raw.githubusercontent.com/a/b/c/d.json", "https://raw.githubusercontent.com.evil.com/a"} {
 		if _, err := eggURL(bad); err == nil {
 			t.Errorf("%q must be refused (only GitHub over https)", bad)
 		}

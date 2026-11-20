@@ -280,23 +280,26 @@ var eggHTTP = &http.Client{Timeout: 20 * time.Second, CheckRedirect: func(req *h
 // eggURL only accepts GitHub (raw files, blob pages converted to raw, gists): no request to arbitrary hosts.
 func eggURL(raw string) (string, error) {
 	u, err := url.Parse(strings.TrimSpace(raw))
-	if err != nil || u.Scheme != "https" {
+	if err != nil || u.Scheme != "https" || u.User != nil || u.Port() != "" {
 		return "", errCode(400, "Give an https link to a GitHub egg file")
 	}
+	p := strings.TrimPrefix(u.Path, "/")
+	// The URL is rebuilt from a fixed origin: only the path comes from the admin.
 	switch u.Host {
-	case "raw.githubusercontent.com", "gist.githubusercontent.com":
+	case "raw.githubusercontent.com":
+		return "https://raw.githubusercontent.com/" + escapePath(p), nil
+	case "gist.githubusercontent.com":
+		return "https://gist.githubusercontent.com/" + escapePath(p), nil
 	case "github.com":
-		parts := strings.SplitN(strings.TrimPrefix(u.Path, "/"), "/", 5) // owner/repo/blob/branch/path
-		if len(parts) < 5 || parts[2] != "blob" {
-			return "", errCode(400, "Give an https link to a GitHub egg file")
+		parts := strings.SplitN(p, "/", 5) // owner/repo/blob/branch/path
+		if len(parts) == 5 && parts[2] == "blob" {
+			return "https://raw.githubusercontent.com/" + escapePath(parts[0]+"/"+parts[1]+"/"+parts[3]+"/"+parts[4]), nil
 		}
-		u.Host, u.Path = "raw.githubusercontent.com", "/"+parts[0]+"/"+parts[1]+"/"+parts[3]+"/"+parts[4]
-	default:
-		return "", errCode(400, "Give an https link to a GitHub egg file")
 	}
-	u.RawQuery, u.Fragment = "", ""
-	return u.String(), nil
+	return "", errCode(400, "Give an https link to a GitHub egg file")
 }
+
+func escapePath(p string) string { return (&url.URL{Path: p}).EscapedPath() }
 
 func fetchEgg(ctx context.Context, u string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
