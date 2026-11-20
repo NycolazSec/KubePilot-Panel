@@ -67,9 +67,13 @@ sftp:
   enabled: true
   # Port users connect to. 2022 is also Pterodactyl Wings' SFTP port: pick another one if Wings runs on the nodes.
   port: 2022
+  # true: the port is opened on the panel's node (hostPort) and the panel sees the client's real IP, which the
+  # per-IP sign-in limits and the activity log need. k3s ServiceLB (klipper-lb) masquerades connections, so with
+  # it every client would share one IP. false: a Service of sftp.service.type is created instead.
+  hostPort: true
   service:
-    type: LoadBalancer # k3s ServiceLB, MetalLB, a cloud load balancer… (NodePort works too)
-    # Local keeps the client's IP: per-IP sign-in limits and a meaningful activity log
+    type: LoadBalancer # MetalLB, a cloud load balancer… (NodePort works too)
+    # Local keeps the client's IP with load balancers that support it
     externalTrafficPolicy: Local
     nodePort: null
     annotations: {}

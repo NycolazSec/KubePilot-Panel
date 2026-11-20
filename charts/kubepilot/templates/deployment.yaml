@@ -50,7 +50,7 @@ spec:
           ports:
             - { containerPort: 8080, name: http }
             {{- if .Values.sftp.enabled }}
-            - { containerPort: 2022, name: sftp }
+            - { containerPort: 2022, name: sftp{{ if .Values.sftp.hostPort }}, hostPort: {{ .Values.sftp.port }}{{ end }} }
             {{- end }}
           readinessProbe: { httpGet: { path: /healthz, port: http }, periodSeconds: 5 }
           livenessProbe: { httpGet: { path: /healthz, port: http }, periodSeconds: 20, failureThreshold: 6 }
