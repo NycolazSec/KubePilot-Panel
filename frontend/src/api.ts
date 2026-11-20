@@ -41,7 +41,7 @@ export const del = <T = any>(p: string) => api<T>(p, { method: 'DELETE' });
 // ---------- Types
 
 export interface User { id: number; username: string; email: string; isAdmin: boolean; twoFactor: boolean; createdAt: number; servers?: number }
-export interface Me { user: User; panelName: string; version: string }
+export interface Me { user: User; panelName: string; version: string; twoFactorRequired: boolean }
 
 export type Status = 'offline' | 'installing' | 'starting' | 'running' | 'stopping' | 'crashed';
 export interface State { status: Status; reason?: string; startedAt?: number; restarts: number; installError?: boolean; cpu: number; memory: number }
@@ -71,7 +71,7 @@ export interface Template {
   consoleInput: boolean; installImage: string; installScript: string; defaultMemory: number; defaultCpu: number; defaultDisk: number; updatedAt?: number;
 }
 
-export interface Settings { panelName: string; publicHost: string; portMin: number; portMax: number; timezone: string }
+export interface Settings { panelName: string; publicHost: string; portMin: number; portMax: number; timezone: string; twoFactorPolicy: '' | 'admins' | 'everyone' }
 export interface NodeInfo { name: string; ready: boolean; version: string; os: string; cpuCap: number; memCap: number; cpu: number; mem: number; pods: number; address: string }
 
 const templateOrder = ['minecraft-java', 'minecraft-bedrock', 'nodejs', 'python'];

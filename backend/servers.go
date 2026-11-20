@@ -588,8 +588,7 @@ func (a *App) handleSubUserSave(w http.ResponseWriter, r *http.Request, c *Ctx) 
 	perms := cleanPerms(in.Permissions)
 	if uidStr := r.PathValue("uid"); uidStr != "" {
 		uid, _ := strconv.ParseInt(uidStr, 10, 64)
-		res, err := a.db.Exec(`UPDATE server_users SET permissions=? WHERE server_id=? AND user_id=?`, perms, c.Server.ID, uid)
-		if n, _ := res.RowsAffected(); err != nil || n == 0 {
+		if affected(a.db.Exec(`UPDATE server_users SET permissions=? WHERE server_id=? AND user_id=?`, perms, c.Server.ID, uid)) == 0 {
 			writeErr(w, r, ErrNotFound)
 			return
 		}
@@ -1050,6 +1049,17 @@ func (a *App) handleAdminSettingsSave(w http.ResponseWriter, r *http.Request, u 
 		return
 	}
 	s.PublicHost = strings.TrimSpace(s.PublicHost)
+	switch s.TwoFactorPolicy {
+	case twoFactorOptional:
+	case twoFactorAdmins, twoFactorEveryone:
+		if !u.TwoFactor { // never let an admin lock themselves out
+			writeErr(w, r, errCode(400, "Enable two-factor authentication on your own account first"))
+			return
+		}
+	default:
+		writeErr(w, r, errCode(400, "Invalid two-factor authentication policy"))
+		return
+	}
 	if err := a.db.SaveSettings(s); err != nil {
 		writeErr(w, r, err)
 		return

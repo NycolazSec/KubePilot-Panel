@@ -87,6 +87,8 @@ func main() {
 		Addr:              cfg.Listen,
 		Handler:           app.routes(),
 		ReadHeaderTimeout: 15 * time.Second,
+		IdleTimeout:       2 * time.Minute,
+		MaxHeaderBytes:    64 << 10,
 	}
 	go func() {
 		<-ctx.Done()

@@ -375,9 +375,8 @@ func (a *App) handleScheduleSave(w http.ResponseWriter, r *http.Request, c *Ctx)
 	}
 	if sid := r.PathValue("sid"); sid != "" {
 		id, _ := strconv.ParseInt(sid, 10, 64)
-		res, err := a.db.Exec(`UPDATE schedules SET name=?, cron=?, action=?, payload=?, enabled=?, only_online=?, next_run=? WHERE id=? AND server_id=?`,
-			truncate(in.Name, 60), in.Cron, in.Action, truncate(in.Payload, 1000), in.Enabled, in.OnlyOnline, next, id, c.Server.ID)
-		if n, _ := res.RowsAffected(); err != nil || n == 0 {
+		if affected(a.db.Exec(`UPDATE schedules SET name=?, cron=?, action=?, payload=?, enabled=?, only_online=?, next_run=? WHERE id=? AND server_id=?`,
+			truncate(in.Name, 60), in.Cron, in.Action, truncate(in.Payload, 1000), in.Enabled, in.OnlyOnline, next, id, c.Server.ID)) == 0 {
 			writeErr(w, r, ErrNotFound)
 			return
 		}
