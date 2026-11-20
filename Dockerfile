@@ -9,7 +9,7 @@ RUN npm ci --no-audit --no-fund
 COPY frontend/ ./
 RUN ./node_modules/.bin/tsc --noEmit && ./node_modules/.bin/vite build --logLevel warn
 
-FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS build
+FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS build
 ARG TARGETOS TARGETARCH VERSION=dev
 WORKDIR /src/backend
 COPY backend/go.mod backend/go.sum ./
