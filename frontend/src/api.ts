@@ -70,7 +70,7 @@ export interface Template {
   id: number; slug: string; name: string; description: string; category: string; images: ImageOption[]; startup: string;
   dataPath: string; vars: TemplateVar[]; ports: TemplatePort[]; stopGrace: number; readyProbe: boolean; runAsUser: number;
   consoleInput: boolean; installImage: string; installScript: string; defaultMemory: number; defaultCpu: number; defaultDisk: number; updatedAt?: number;
-  features?: string[]; startupEnv?: boolean; installAsRoot?: boolean; installShell?: string; installPath?: string; stopCommand?: string; source?: string;
+  features?: string[]; configFiles?: ConfigFile[]; startupEnv?: boolean; installAsRoot?: boolean; installShell?: string; installPath?: string; stopCommand?: string; source?: string;
 }
 
 export interface Settings { panelName: string; publicHost: string; portMin: number; portMax: number; timezone: string; twoFactorPolicy: '' | 'admins' | 'everyone'; minecraftDomain: string }
@@ -80,4 +80,10 @@ const templateOrder = ['minecraft-java', 'minecraft-bedrock', 'nodejs', 'python'
 export function sortTemplates<T extends { slug: string; name: string }>(list: T[]): T[] {
   const rank = (t: T) => { const i = templateOrder.indexOf(t.slug); return i === -1 ? (t.slug === 'custom' ? 99 : 50) : i; };
   return [...list].sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
+}
+
+export interface ConfigFile {
+  file: string;
+  parser: 'properties' | 'ini' | 'json' | 'yaml' | 'xml' | 'file';
+  find: { match: string; value: unknown; ifValue?: string }[];
 }

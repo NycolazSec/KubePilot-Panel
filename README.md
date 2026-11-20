@@ -132,8 +132,8 @@ docs/       logo and banner
   them (`storage.node`). Multi-node storage would need a CSI driver with a file API.
 - Java heap is set to the memory limit minus max(640 MB, 20 %) to avoid OOM kills; templates get it as `SERVER_JVM_MEMORY`.
 - Disk limits are soft: usage is measured by the panel and a server over its quota can't be started.
-- Eggs: the configuration file edits Wings applies on start (`config.files`) are not applied yet; the import lists
-  them so you can check the files once. Extra ports an egg needs (query, RCON…) are added in the server's *Network*.
+- Eggs: extra ports an egg needs (query, RCON…) are added in the server's *Network*. Structured configuration files
+  (JSON, YAML, XML) are edited from the second start, once the game has written them.
 
 ## Roadmap
 

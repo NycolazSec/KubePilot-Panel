@@ -14,7 +14,7 @@ const testEgg = `{
   "features": ["eula"],
   "docker_images": {"Java 17": "ghcr.io/pterodactyl/yolks:java_17", "Java 21": "ghcr.io/pterodactyl/yolks:java_21"},
   "startup": "java -Xms128M -Xmx{{SERVER_MEMORY}}M -Dterminal.jline=false -jar {{SERVER_JARFILE}}",
-  "config": {"files": "{\"server.properties\":{\"parser\":\"properties\"}}", "startup": "{}", "logs": "{}", "stop": "stop"},
+  "config": {"files": "{\"server.properties\":{\"parser\":\"properties\",\"find\":{\"server-port\":\"{{server.build.default.port}}\"}}}", "startup": "{}", "logs": "{}", "stop": "stop"},
   "scripts": {"installation": {"script": "#!/bin/ash\r\napk add curl\r\ncurl -o server.jar https://example.com/paper.jar", "container": "ghcr.io/pterodactyl/installers:alpine", "entrypoint": "ash"}},
   "variables": [
     {"name": "Server Jar File", "env_variable": "SERVER_JARFILE", "default_value": "server.jar", "user_viewable": true, "user_editable": true, "rules": "required|regex:/^([\\w\\d._-]+)(\\.jar)$/"},
@@ -58,8 +58,11 @@ func TestConvertEgg(t *testing.T) {
 	if p := byKey["MAX_PLAYERS"].Pattern; p != `^$|^-?[0-9]+$` {
 		t.Errorf("optional numeric: %q", p)
 	}
-	if len(warnings) != 2 {
-		t.Errorf("config files + EULA warnings expected: %v", warnings)
+	if len(warnings) != 1 {
+		t.Errorf("only the EULA warning expected: %v", warnings)
+	}
+	if len(tpl.ConfigFiles) != 1 || tpl.ConfigFiles[0].File != "server.properties" || tpl.ConfigFiles[0].Find[0].Match != "server-port" {
+		t.Errorf("config.files must become the template's configuration files: %+v", tpl.ConfigFiles)
 	}
 	for _, bad := range []string{`{}`, `{"meta":{"version":"PTDL_v2"},"name":"x"}`, `not json`} {
 		if _, _, err := convertEgg([]byte(bad)); err == nil {
