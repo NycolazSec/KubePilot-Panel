@@ -2,7 +2,7 @@
 # Multi-arch build: the frontend and the Go binary are built on the build platform,
 # the binary is cross-compiled for the target platform (pure Go, no CGO).
 
-FROM --platform=$BUILDPLATFORM node:22-alpine AS web
+FROM --platform=$BUILDPLATFORM node:26-alpine AS web
 WORKDIR /src/frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci --no-audit --no-fund
