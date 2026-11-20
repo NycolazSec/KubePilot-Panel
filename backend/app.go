@@ -35,15 +35,16 @@ type App struct {
 
 	allocMu sync.Mutex
 
-	limiter *rateLimiter
-	tickets loginTickets // sign-ins waiting for their second factor
+	limiter  *rateLimiter // sign-in attempts per IP
+	accounts *rateLimiter // sign-in attempts per account, from IPs the account never signed in from
+	tickets  loginTickets // sign-ins waiting for their second factor
 }
 
 func newApp(cfg Config, db *DB, kube *Kube) *App {
 	return &App{
 		cfg: cfg, db: db, kube: kube, ctx: context.Background(),
 		hubs: map[string]*Hub{}, locks: map[string]*sync.Mutex{}, disk: map[string]int64{},
-		limiter: newRateLimiter(10, 10*time.Minute),
+		limiter: newRateLimiter(10, 10*time.Minute), accounts: newRateLimiter(20, 15*time.Minute),
 	}
 }
 
@@ -213,14 +214,12 @@ func (l *rateLimiter) reset(key string) {
 
 // ---------- Auth
 
-const cookieName = "kubepilot_session"
-
 type ctxKey int
 
 const userKey ctxKey = 1
 
 func (a *App) currentUser(r *http.Request) *User {
-	c, err := r.Cookie(cookieName)
+	c, err := r.Cookie(a.cookieName())
 	if err != nil {
 		return nil
 	}
@@ -238,6 +237,10 @@ func (a *App) authed(h authedHandler) http.HandlerFunc {
 		u := a.currentUser(r)
 		if u == nil {
 			writeErr(w, r, errCode(401, "Not signed in"))
+			return
+		}
+		if a.twoFactorRequired(u) && !twoFactorSetupRoute(r) {
+			writeErr(w, r, errCode(403, "Two-factor authentication is required: enable it in My account"))
 			return
 		}
 		h(w, r, u)
@@ -271,7 +274,14 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, errCode(429, "Too many attempts, try again in a few minutes"))
 		return
 	}
-	u, err := a.db.UserByLogin(strings.TrimSpace(in.Login))
+	login := strings.ToLower(strings.TrimSpace(in.Login))
+	u, err := a.db.UserByLogin(login)
+	// per-account limit against password spraying from many IPs; IPs the user already signed in from are
+	// exempt so nobody can lock the real user out. Unknown logins are counted the same way (no enumeration).
+	if (err != nil || !a.db.knownIP(u.ID, ip)) && !a.accounts.allow(login) {
+		writeErr(w, r, errCode(429, "Too many attempts, try again in a few minutes"))
+		return
+	}
 	if err != nil {
 		(&User{hash: dummyHash()}).CheckPassword(in.Password)
 		writeErr(w, r, errCode(401, "Invalid credentials"))
@@ -292,16 +302,16 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) handleLogout(w http.ResponseWriter, r *http.Request) {
-	if c, err := r.Cookie(cookieName); err == nil {
+	if c, err := r.Cookie(a.cookieName()); err == nil {
 		a.db.DeleteSession(c.Value)
 	}
-	http.SetCookie(w, &http.Cookie{Name: cookieName, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: a.cfg.SecureCookies})
+	http.SetCookie(w, &http.Cookie{Name: a.cookieName(), Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: a.cfg.SecureCookies, SameSite: http.SameSiteLaxMode})
 	writeJSON(w, 200, map[string]bool{"ok": true})
 }
 
 func (a *App) meView(u *User) map[string]any {
 	st := a.db.Settings()
-	return map[string]any{"user": u, "panelName": st.PanelName, "version": version}
+	return map[string]any{"user": u, "panelName": st.PanelName, "version": version, "twoFactorRequired": a.twoFactorRequired(u)}
 }
 
 func (a *App) handleMe(w http.ResponseWriter, r *http.Request, u *User) {
@@ -322,7 +332,7 @@ func (a *App) handlePassword(w http.ResponseWriter, r *http.Request, u *User) {
 		writeErr(w, r, err)
 		return
 	}
-	if c, err := r.Cookie(cookieName); err == nil {
+	if c, err := r.Cookie(a.cookieName()); err == nil {
 		a.db.DeleteOtherSessions(u.ID, c.Value)
 	}
 	a.db.LogActivity("", u, clientIP(r), "account.password", "")
@@ -417,15 +427,7 @@ func (a *App) routes() http.Handler {
 
 func (a *App) secure(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		h := w.Header()
-		h.Set("X-Frame-Options", "DENY")
-		h.Set("X-Content-Type-Options", "nosniff")
-		h.Set("Referrer-Policy", "same-origin")
-		h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-		h.Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self' ws: wss:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
-		if a.cfg.SecureCookies {
-			h.Set("Strict-Transport-Security", "max-age=31536000")
-		}
+		securityHeaders(w.Header(), r, a.cfg.SecureCookies)
 		// CSRF: state-changing API calls must carry a custom header (forces a CORS preflight cross-site).
 		if strings.HasPrefix(r.URL.Path, "/api/") && r.Method != http.MethodGet && r.Method != http.MethodHead {
 			if r.Header.Get("X-KubePilot") != "1" {

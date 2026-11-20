@@ -43,6 +43,7 @@ type testClient struct {
 	t      *testing.T
 	h      http.Handler
 	cookie string
+	ip     string // client address, 203.0.113.7 by default
 }
 
 func (c *testClient) do(method, path string, body any) (int, map[string]any) {
@@ -50,6 +51,9 @@ func (c *testClient) do(method, path string, body any) (int, map[string]any) {
 	b, _ := json.Marshal(body)
 	r := httptest.NewRequest(method, path, bytes.NewReader(b))
 	r.RemoteAddr = "203.0.113.7:1234"
+	if c.ip != "" {
+		r.RemoteAddr = c.ip + ":1234"
+	}
 	r.Header.Set("X-KubePilot", "1")
 	r.Header.Set("Content-Type", "application/json")
 	if c.cookie != "" {
@@ -58,7 +62,7 @@ func (c *testClient) do(method, path string, body any) (int, map[string]any) {
 	w := httptest.NewRecorder()
 	c.h.ServeHTTP(w, r)
 	for _, ck := range w.Result().Cookies() {
-		if ck.Name == cookieName {
+		if strings.HasSuffix(ck.Name, "kubepilot_session") {
 			c.cookie = ck.Name + "=" + ck.Value
 		}
 	}

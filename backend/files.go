@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log"
 	"net/http"
 	"os"
 	"path"
@@ -118,15 +119,11 @@ func (a *App) handleFileList(w http.ResponseWriter, r *http.Request, c *Ctx) {
 
 func (a *App) handleFileRead(w http.ResponseWriter, r *http.Request, c *Ctx) {
 	a.withRoot(w, r, c, func(root *os.Root, _ int) error {
-		f, err := root.Open(rel(r.URL.Query().Get("path")))
+		f, st, err := openRegular(root, rel(r.URL.Query().Get("path")))
 		if err != nil {
 			return err
 		}
 		defer f.Close()
-		st, err := f.Stat()
-		if err != nil {
-			return err
-		}
 		if st.IsDir() {
 			return errCode(400, "This is a folder")
 		}
@@ -158,12 +155,24 @@ func (a *App) handleFileWrite(w http.ResponseWriter, r *http.Request, c *Ctx) {
 		writeErr(w, r, errCode(400, "Invalid path"))
 		return
 	}
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxEditSize+1))
+	if err != nil || len(body) > maxEditSize {
+		writeErr(w, r, errCode(413, "File too large for the editor (8 MB max): download it instead"))
+		return
+	}
 	a.withRoot(w, r, c, func(root *os.Root, uid int) error {
-		f, err := root.OpenFile(p, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
+		grow := int64(len(body))
+		if st, err := root.Stat(p); err == nil {
+			grow -= st.Size()
+		}
+		if grow > 0 && grow > a.diskRemaining(c.Server) {
+			return errQuota()
+		}
+		f, err := createRegular(root, p, 0o644)
 		if err != nil {
 			return err
 		}
-		_, err = io.Copy(f, io.LimitReader(r.Body, maxEditSize+1))
+		_, err = f.Write(body)
 		if cerr := f.Close(); err == nil {
 			err = cerr
 		}
@@ -252,6 +261,10 @@ func (a *App) handleUpload(w http.ResponseWriter, r *http.Request, c *Ctx) {
 		return
 	}
 	a.withRoot(w, r, c, func(root *os.Root, uid int) error {
+		left := a.diskRemaining(c.Server)
+		if left <= 0 {
+			return errQuota()
+		}
 		names := []string{}
 		for {
 			part, err := mr.NextPart()
@@ -267,16 +280,23 @@ func (a *App) handleUpload(w http.ResponseWriter, r *http.Request, c *Ctx) {
 				continue
 			}
 			target := path.Join(dir, name)
-			f, err := root.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
+			f, err := createRegular(root, target, 0o644)
 			if err != nil {
 				part.Close()
 				return err
 			}
-			_, err = io.Copy(f, part)
+			qw := &quotaWriter{w: f, left: left}
+			_, err = io.Copy(qw, part)
+			left = qw.left
 			f.Close()
 			part.Close()
 			if err != nil {
 				_ = root.Remove(target)
+				go a.refreshDisk(a.ctx, c.Server.ID)
+				var ae *apiError
+				if errors.As(err, &ae) {
+					return err // quota reached
+				}
 				return errCode(400, "Upload interrupted or too large (2 GB max)")
 			}
 			chownNew(root, target, uid)
@@ -307,7 +327,7 @@ func (a *App) handleDownload(w http.ResponseWriter, r *http.Request, c *Ctx) {
 			return err
 		}
 		if !st.IsDir() {
-			f, err := root.Open(p)
+			f, st, err := openRegular(root, p)
 			if err != nil {
 				return err
 			}
@@ -360,7 +380,7 @@ func writeZip(zw *zip.Writer, root *os.Root, base string) error {
 		if err != nil {
 			return err
 		}
-		f, err := fsys.Open(p)
+		f, _, err := openRegular(root, p)
 		if err != nil {
 			return nil
 		}
@@ -405,7 +425,7 @@ func writeTarGz(w io.Writer, root *os.Root, paths []string) error {
 				return err
 			}
 			if info.Mode().IsRegular() {
-				f, err := fsys.Open(p)
+				f, _, err := openRegular(root, p)
 				if err != nil {
 					return err
 				}
@@ -431,13 +451,16 @@ func writeTarGz(w io.Writer, root *os.Root, paths []string) error {
 func extractTar(r io.Reader, root *os.Root, dest string, uid int, maxBytes int64) error {
 	tr := tar.NewReader(r)
 	var total int64
-	for {
+	for entries := 0; ; entries++ {
 		hdr, err := tr.Next()
 		if err == io.EOF {
 			return nil
 		}
 		if err != nil {
 			return errCode(400, "Corrupted archive")
+		}
+		if entries >= maxArchiveEntries {
+			return errCode(413, "The archive contains too many files (%d max)", maxArchiveEntries)
 		}
 		target := rel(path.Join(dest, hdr.Name))
 		if target == "." {
@@ -455,7 +478,7 @@ func extractTar(r io.Reader, root *os.Root, dest string, uid int, maxBytes int64
 			if dir := path.Dir(target); dir != "." {
 				_ = root.MkdirAll(dir, 0o755)
 			}
-			f, err := root.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, hdr.FileInfo().Mode().Perm()|0o600)
+			f, err := createRegular(root, target, hdr.FileInfo().Mode().Perm()|0o600)
 			if err != nil {
 				return err
 			}
@@ -471,6 +494,9 @@ func extractTar(r io.Reader, root *os.Root, dest string, uid int, maxBytes int64
 }
 
 func extractZip(zr *zip.Reader, root *os.Root, dest string, uid int, maxBytes int64) error {
+	if len(zr.File) > maxArchiveEntries {
+		return errCode(413, "The archive contains too many files (%d max)", maxArchiveEntries)
+	}
 	var total int64
 	for _, zf := range zr.File {
 		target := rel(path.Join(dest, zf.Name))
@@ -497,7 +523,7 @@ func extractZip(zr *zip.Reader, root *os.Root, dest string, uid int, maxBytes in
 		if err != nil {
 			return errCode(400, "Corrupted archive")
 		}
-		f, err := root.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
+		f, err := createRegular(root, target, 0o644)
 		if err != nil {
 			src.Close()
 			return err
@@ -537,11 +563,15 @@ func (a *App) handleCompress(w http.ResponseWriter, r *http.Request, c *Ctx) {
 			}
 		}
 		// paths inside the archive are relative to the server root
+		left := a.diskRemaining(c.Server)
+		if left <= 0 {
+			return errQuota()
+		}
 		f, err := root.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 		if err != nil {
 			return err
 		}
-		err = writeTarGz(f, root, paths)
+		err = writeTarGz(&quotaWriter{w: f, left: left}, root, paths)
 		f.Close()
 		if err != nil {
 			_ = root.Remove(target)
@@ -569,17 +599,16 @@ func (a *App) handleDecompress(w http.ResponseWriter, r *http.Request, c *Ctx) {
 	a.withRoot(w, r, c, func(root *os.Root, uid int) error {
 		dest := path.Dir(p)
 		lower := strings.ToLower(p)
-		f, err := root.Open(p)
+		f, st, err := openRegular(root, p)
 		if err != nil {
 			return err
 		}
 		defer f.Close()
+		if st.IsDir() {
+			return errCode(400, "This is a folder")
+		}
 		switch {
 		case strings.HasSuffix(lower, ".zip"):
-			st, err := f.Stat()
-			if err != nil {
-				return err
-			}
 			zr, err := zip.NewReader(f, st.Size())
 			if err != nil {
 				return errCode(400, "Invalid ZIP file")
@@ -651,6 +680,7 @@ func (a *App) diskLoop(ctx context.Context) {
 		if servers, err := a.db.AllServers(); err == nil {
 			for _, s := range servers {
 				a.refreshDisk(ctx, s.ID)
+				a.enforceQuota(s)
 			}
 		}
 		select {
@@ -659,4 +689,22 @@ func (a *App) diskLoop(ctx context.Context) {
 		case <-t.C:
 		}
 	}
+}
+
+// enforceQuota stops a running server that writes far beyond its disk limit: local-path volumes have no
+// size limit of their own, so this is what keeps one server from filling the node's disk.
+func (a *App) enforceQuota(s *Server) {
+	used := a.diskUsed(s.ID)
+	if !overQuota(used, s.DiskMB) {
+		return
+	}
+	if st := a.kube.State(s.ID).Status; st != "running" && st != "starting" {
+		return
+	}
+	h := a.hub(s.ID)
+	h.daemonErr("Disk quota exceeded (%s used, limit %s): the server is being stopped.", bytesArg(used), bytesArg(int64(s.DiskMB)<<20))
+	if err := a.power(s, "stop"); err != nil {
+		log.Printf("quota: stopping %s: %v", s.ID, err)
+	}
+	a.db.LogActivity(s.ID, nil, "", "server.disk.stop", humanBytes("en", used))
 }

@@ -242,7 +242,7 @@ func (a *App) handleWS(w http.ResponseWriter, r *http.Request, c *Ctx) {
 	defer conn.Close()
 	conn.SetReadLimit(8192)
 	tok := ""
-	if ck, err := r.Cookie(cookieName); err == nil {
+	if ck, err := r.Cookie(a.cookieName()); err == nil {
 		tok = ck.Value
 	}
 

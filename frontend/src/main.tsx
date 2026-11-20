@@ -66,6 +66,14 @@ function App() {
       <BrowserRouter>
         {!me ? (
           <Routes><Route path="*" element={<Login />} /></Routes>
+        ) : me.twoFactorRequired ? (
+          // 2FA is mandatory and not set up yet: only the account page is reachable
+          <Routes>
+            <Route element={<Layout />}>
+              <Route path="account" element={<Account />} />
+              <Route path="*" element={<Navigate to="/account" replace />} />
+            </Route>
+          </Routes>
         ) : (
           <Routes>
             <Route element={<Layout />}>

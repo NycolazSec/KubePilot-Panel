@@ -237,9 +237,11 @@ func (a *App) startSession(w http.ResponseWriter, r *http.Request, u *User) {
 		return
 	}
 	http.SetCookie(w, &http.Cookie{
-		Name: cookieName, Value: tok, Path: "/", HttpOnly: true, Secure: a.cfg.SecureCookies,
+		Name: a.cookieName(), Value: tok, Path: "/", HttpOnly: true, Secure: a.cfg.SecureCookies,
 		SameSite: http.SameSiteLaxMode, MaxAge: int(sessionTTL.Seconds()),
 	})
+	a.accounts.reset(strings.ToLower(u.Username))
+	a.accounts.reset(strings.ToLower(u.Email))
 	a.db.LogActivity("", u, clientIP(r), "auth.login", "")
 	writeJSON(w, 200, a.meView(u))
 }

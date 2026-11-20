@@ -1,7 +1,7 @@
 import { KeyRound } from 'lucide-react';
 import { useState } from 'react';
 import { put } from '../api';
-import { Button, Card, Field, PageHeader, useUI } from '../components/ui';
+import { Button, Card, ErrorBox, Field, PageHeader, useUI } from '../components/ui';
 import { dateTime } from '../lib/format';
 import { useAuth } from '../main';
 import LanguageSelect from '../components/LanguageSelect';
@@ -34,6 +34,7 @@ export default function Account() {
   return (
     <>
       <PageHeader title={t('nav.account')} subtitle={t('account.subtitle')} />
+      {me?.twoFactorRequired && <div className="mb-5"><ErrorBox error={t('twofa.requiredBanner')} /></div>}
       <div className="grid gap-6 lg:grid-cols-2">
         <Card title={t('account.profile')}>
           <dl className="space-y-3 text-sm">

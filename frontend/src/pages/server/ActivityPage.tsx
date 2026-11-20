@@ -49,6 +49,7 @@ const labels: Record<string, string> = {
   'auth.login': t('act.auth.login'),
   'auth.fail': t('act.auth.fail'),
   'account.password': t('act.account.password'),
+  'server.disk.stop': t('act.server.disk.stop'),
   'auth.2fa.fail': t('act.auth.2fa.fail'),
   'auth.2fa.recovery': t('act.auth.2fa.recovery'),
   'account.2fa.enable': t('act.account.2fa.enable'),
