@@ -37,6 +37,7 @@ type App struct {
 
 	limiter  *rateLimiter // sign-in attempts per IP
 	accounts *rateLimiter // sign-in attempts per account, from IPs the account never signed in from
+	keyRate  *rateLimiter // requests per API key
 	tickets  loginTickets // sign-ins waiting for their second factor
 }
 
@@ -44,7 +45,7 @@ func newApp(cfg Config, db *DB, kube *Kube) *App {
 	return &App{
 		cfg: cfg, db: db, kube: kube, ctx: context.Background(),
 		hubs: map[string]*Hub{}, locks: map[string]*sync.Mutex{}, disk: map[string]int64{},
-		limiter: newRateLimiter(10, 10*time.Minute), accounts: newRateLimiter(20, 15*time.Minute),
+		limiter: newRateLimiter(10, 10*time.Minute), accounts: newRateLimiter(20, 15*time.Minute), keyRate: newRateLimiter(apiRatePerMin, time.Minute),
 	}
 }
 
@@ -234,8 +235,16 @@ type authedHandler func(w http.ResponseWriter, r *http.Request, u *User)
 
 func (a *App) authed(h authedHandler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		u := a.currentUser(r)
-		if u == nil {
+		var u *User
+		if tok := bearerToken(r); tok != "" {
+			// API key: never mixed with a browser session
+			if u, r = a.authKey(w, r, tok); u == nil {
+				return
+			}
+		} else if strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") {
+			writeErr(w, r, errCode(401, "Invalid API key"))
+			return
+		} else if u = a.currentUser(r); u == nil {
 			writeErr(w, r, errCode(401, "Not signed in"))
 			return
 		}
@@ -251,6 +260,10 @@ func (a *App) admin(h authedHandler) http.HandlerFunc {
 	return a.authed(func(w http.ResponseWriter, r *http.Request, u *User) {
 		if !u.IsAdmin {
 			writeErr(w, r, errCode(403, "Administrators only"))
+			return
+		}
+		if k := keyFrom(r); k != nil && !k.can("admin") {
+			writeErr(w, r, errCode(403, "This API key doesn't have the admin permission"))
 			return
 		}
 		h(w, r, u)
@@ -353,12 +366,16 @@ func (a *App) routes() http.Handler {
 	m.HandleFunc("POST /api/account/2fa/enable", a.authed(a.handle2FAEnable))
 	m.HandleFunc("POST /api/account/2fa/disable", a.authed(a.handle2FADisable))
 	m.HandleFunc("POST /api/account/2fa/recovery", a.authed(a.handle2FARecovery))
+	m.HandleFunc("GET /api/account/api-keys", a.authed(a.handleAPIKeys))
+	m.HandleFunc("POST /api/account/api-keys", a.authed(a.handleAPIKeyCreate))
+	m.HandleFunc("DELETE /api/account/api-keys/{kid}", a.authed(a.handleAPIKeyDelete))
 
 	m.HandleFunc("GET /api/servers", a.authed(a.handleServers))
 	m.HandleFunc("GET /api/servers/{id}", a.srv("", a.handleServer))
 	m.HandleFunc("POST /api/servers/{id}/power", a.srv("power", a.handlePower))
 	m.HandleFunc("POST /api/servers/{id}/command", a.srv("console", a.handleCommand))
 	m.HandleFunc("GET /api/servers/{id}/ws", a.srv("console", a.handleWS))
+	m.HandleFunc("GET /api/servers/{id}/console", a.srv("console", a.handleConsoleHistory))
 
 	m.HandleFunc("GET /api/servers/{id}/files/list", a.srv("files", a.handleFileList))
 	m.HandleFunc("GET /api/servers/{id}/files/content", a.srv("files", a.handleFileRead))
@@ -429,7 +446,8 @@ func (a *App) secure(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		securityHeaders(w.Header(), r, a.cfg.SecureCookies)
 		// CSRF: state-changing API calls must carry a custom header (forces a CORS preflight cross-site).
-		if strings.HasPrefix(r.URL.Path, "/api/") && r.Method != http.MethodGet && r.Method != http.MethodHead {
+		// API keys travel in the Authorization header, which a cross-site page can't set: no CSRF risk.
+		if strings.HasPrefix(r.URL.Path, "/api/") && r.Method != http.MethodGet && r.Method != http.MethodHead && bearerToken(r) == "" {
 			if r.Header.Get("X-KubePilot") != "1" {
 				writeErr(w, r, errCode(403, "Request refused (CSRF)"))
 				return

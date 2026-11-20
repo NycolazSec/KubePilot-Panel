@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/crypto/bcrypt"
 	"rsc.io/qr"
 )
 
@@ -29,6 +30,7 @@ const (
 	recoveryCodeCount = 10
 	loginTicketTTL    = 5 * time.Minute
 	loginTicketTries  = 5
+	recoveryCodeCost  = 10 // bcrypt cost of recovery codes (checked rarely, up to 10 per attempt)
 )
 
 var b32 = base32.StdEncoding.WithPadding(base32.NoPadding)
@@ -139,7 +141,12 @@ func (db *DB) NewRecoveryCodes(userID int64) ([]string, error) {
 	codes := make([]string, recoveryCodeCount)
 	for i := range codes {
 		codes[i] = newRecoveryCode()
-		if _, err := db.Exec(`INSERT INTO recovery_codes(user_id,code_hash) VALUES(?,?)`, userID, sha(normalizeCode(codes[i]))); err != nil {
+		// ~50 bits of entropy: hashed like a password (bcrypt), so a stolen database can't be brute-forced
+		h, err := bcrypt.GenerateFromPassword([]byte(normalizeCode(codes[i])), recoveryCodeCost)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := db.Exec(`INSERT INTO recovery_codes(user_id,code_hash) VALUES(?,?)`, userID, string(h)); err != nil {
 			return nil, err
 		}
 	}
@@ -171,8 +178,25 @@ func (db *DB) CheckSecondFactor(userID int64, code string) (string, bool) {
 		return "", false
 	}
 	if len(code) == 10 {
-		if res, err := db.Exec(`DELETE FROM recovery_codes WHERE user_id=? AND code_hash=?`, userID, sha(code)); err == nil {
-			if n, _ := res.RowsAffected(); n == 1 {
+		var hashes []string
+		if rows, err := db.Query(`SELECT code_hash FROM recovery_codes WHERE user_id=?`, userID); err == nil {
+			for rows.Next() {
+				var h string
+				if rows.Scan(&h) == nil {
+					hashes = append(hashes, h)
+				}
+			}
+			rows.Close()
+		}
+		for _, h := range hashes {
+			match := false
+			if strings.HasPrefix(h, "$2") {
+				match = bcrypt.CompareHashAndPassword([]byte(h), []byte(code)) == nil
+			} else { // codes generated before bcrypt: SHA-256
+				match = subtle.ConstantTimeCompare([]byte(h), []byte(sha(code))) == 1
+			}
+			// conditional delete: a code can't be used twice, even by concurrent requests
+			if match && affected(db.Exec(`DELETE FROM recovery_codes WHERE user_id=? AND code_hash=?`, userID, h)) == 1 {
 				return "recovery", true
 			}
 		}

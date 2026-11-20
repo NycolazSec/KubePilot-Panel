@@ -44,6 +44,7 @@ type testClient struct {
 	h      http.Handler
 	cookie string
 	ip     string // client address, 203.0.113.7 by default
+	auth   string // Authorization header (API key); no CSRF header is sent with it, like a script
 }
 
 func (c *testClient) do(method, path string, body any) (int, map[string]any) {
@@ -54,7 +55,11 @@ func (c *testClient) do(method, path string, body any) (int, map[string]any) {
 	if c.ip != "" {
 		r.RemoteAddr = c.ip + ":1234"
 	}
-	r.Header.Set("X-KubePilot", "1")
+	if c.auth != "" {
+		r.Header.Set("Authorization", c.auth)
+	} else {
+		r.Header.Set("X-KubePilot", "1")
+	}
 	r.Header.Set("Content-Type", "application/json")
 	if c.cookie != "" {
 		r.Header.Set("Cookie", c.cookie)
@@ -160,5 +165,41 @@ func TestTwoFactorFlow(t *testing.T) {
 	}
 	if code, res := login(); code != 200 || res["twoFactor"] == true || c.cookie == "" {
 		t.Fatalf("after disabling, the password is enough again: %d %v", code, res)
+	}
+}
+
+func TestRecoveryCodesAreBcryptAndLegacyStillWork(t *testing.T) {
+	db, err := openDB(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	u, err := db.CreateUser("gina", "gina@example.com", "correct-horse", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO user_totp(user_id,secret,enabled,last_step,created_at) VALUES(?,?,1,0,0)`, u.ID, b32.EncodeToString([]byte("12345678901234567890"))); err != nil {
+		t.Fatal(err)
+	}
+	codes, err := db.NewRecoveryCodes(u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stored string
+	_ = db.QueryRow(`SELECT code_hash FROM recovery_codes WHERE user_id=? LIMIT 1`, u.ID).Scan(&stored)
+	if !strings.HasPrefix(stored, "$2") {
+		t.Fatalf("recovery codes must be stored with bcrypt, got %q", stored)
+	}
+	if m, ok := db.CheckSecondFactor(u.ID, codes[3]); !ok || m != "recovery" {
+		t.Fatal("a bcrypt recovery code must work")
+	}
+	if _, ok := db.CheckSecondFactor(u.ID, codes[3]); ok {
+		t.Fatal("and only once")
+	}
+	// codes created before the switch (SHA-256) keep working
+	if _, err := db.Exec(`INSERT INTO recovery_codes(user_id,code_hash) VALUES(?,?)`, u.ID, sha("abcdefghjk")); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := db.CheckSecondFactor(u.ID, "abcde-fghjk"); !ok {
+		t.Fatal("legacy SHA-256 recovery code must still work")
 	}
 }

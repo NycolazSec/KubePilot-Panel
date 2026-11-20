@@ -15,10 +15,11 @@ import (
 )
 
 type Ctx struct {
-	User   *User
-	Server *Server
-	Perms  []string
-	IP     string
+	User     *User
+	Server   *Server
+	Perms    []string
+	IP       string
+	ReadOnly bool // read-only API key: no console command or power action over the WebSocket either
 }
 
 func (c *Ctx) Can(p string) bool { return slices.Contains(c.Perms, p) }
@@ -52,7 +53,8 @@ func (a *App) srv(perm string, h srvHandler) http.HandlerFunc {
 			writeErr(w, r, errCode(403, "This server is suspended"))
 			return
 		}
-		c := &Ctx{User: u, Server: s, Perms: perms, IP: clientIP(r)}
+		k := keyFrom(r)
+		c := &Ctx{User: u, Server: s, Perms: keyPerms(perms, k), IP: clientIP(r), ReadOnly: k != nil && k.ReadOnly}
 		if perm != "" && !c.Can(perm) {
 			writeErr(w, r, errCode(403, "Missing permission: %s", perm))
 			return

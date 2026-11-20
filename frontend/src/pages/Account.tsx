@@ -6,6 +6,7 @@ import { dateTime } from '../lib/format';
 import { useAuth } from '../main';
 import LanguageSelect from '../components/LanguageSelect';
 import TwoFactorCard from '../components/TwoFactorCard';
+import APIKeysCard from '../components/APIKeysCard';
 import { t } from '../i18n';
 
 export default function Account() {
@@ -53,6 +54,7 @@ export default function Account() {
           </form>
         </Card>
         <TwoFactorCard />
+        <APIKeysCard />
         <Card title={t('account.language')} description={t('account.languageHint')}>
           <LanguageSelect />
         </Card>
