@@ -84,3 +84,12 @@ func TestAssignMissingHostnames(t *testing.T) {
 		}
 	}
 }
+
+func TestInternalOnlyIsNeverRouted(t *testing.T) {
+	app, _ := newTestApp(t, false)
+	app.cfg.MinecraftRouter = true
+	s := &Server{ID: "aaaa1111", Hostname: "survie", InternalOnly: true}
+	if got := app.routedHost(s, &Template{Slug: "minecraft-java"}, Settings{MinecraftDomain: "mc.example.com"}); got != "" {
+		t.Errorf("an internal-only server must not get a public address, got %q", got)
+	}
+}

@@ -49,6 +49,7 @@ const labels: Record<string, string> = {
   'auth.login': t('act.auth.login'),
   'auth.fail': t('act.auth.fail'),
   'account.password': t('act.account.password'),
+  'server.exposure': t('act.server.exposure'),
   'server.plugin.install': t('act.server.plugin.install'),
   'server.plugin.update': t('act.server.plugin.update'),
   'server.plugin.toggle': t('act.server.plugin.toggle'),
