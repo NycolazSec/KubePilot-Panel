@@ -6,6 +6,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-20
+
+**Pterodactyl parity**: hundreds of games through Pterodactyl / Pelican eggs, a built-in SFTP server, MySQL databases
+per server and backups on S3 — plus the Minecraft router, a plugin manager and an internal network between servers.
+
+### Upgrading from 0.1.0
+
+- `sftp.enabled` is on and opens **port 2022 on the panel's node** (`sftp.hostPort`). If Pterodactyl Wings runs on
+  the same node, set `sftp.port` to another port (e.g. 2222).
+- `databases.enabled` is on: the chart deploys a MariaDB (10 Gi volume) next to the game servers. Existing servers
+  get a database limit of 0: raise it in *Admin* → *Servers*.
+- `serversNamespace.rootInstall` is on: the servers' namespace is enforced at Pod Security `baseline` (games still
+  run non-root; `restricted` stays audited). Set it to `false` to keep `restricted` if you don't use eggs.
+- With Helm 4, the first upgrade of a namespace created by `kubectl` may need `--force-conflicts`.
+
 ### Added
 
 - **Backups on S3-compatible storage** (`backups.s3.*`: AWS, Backblaze B2, OVH, Scaleway, Cloudflare R2, MinIO,
@@ -136,5 +151,6 @@ First public version of KubePilot, the Kubernetes-native game server panel.
 - Long dialogs (new template, new server…) no longer get their top cut off on small screens: the dialog stays within
   the screen, its content scrolls and the title and buttons stay visible.
 
-[Unreleased]: https://github.com/NycolazSec/KubePilot-Panel/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/NycolazSec/KubePilot-Panel/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/NycolazSec/KubePilot-Panel/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/NycolazSec/KubePilot-Panel/releases/tag/v0.1.0

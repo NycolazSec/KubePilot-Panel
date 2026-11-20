@@ -17,17 +17,17 @@ Ideas and votes are welcome in the [issues](https://github.com/NycolazSec/KubePi
 - [x] Personal API keys (permissions, read-only, IP allow-list, expiry) and a documented REST API ([docs/API.md](docs/API.md))
 - [x] Backend test suite in CI, plus govulncheck, npm audit and CodeQL
 
-## v0.2 — Pterodactyl parity
+## v0.2 — Pterodactyl parity ✅
 
 - [x] Import Pterodactyl / Pelican **eggs** — hundreds of games out of the box (with their `config.files`)
 - [x] Built-in **SFTP** server (password or SSH keys, 2FA accounts key-only)
 - [x] Documented public REST API for bots and billing systems ([docs/API.md](docs/API.md))
 - [x] MySQL / MariaDB databases per server (MariaDB deployed by the chart)
 - [x] Backups to S3-compatible storage (optionally encrypted with age)
-- [ ] Password reset and notifications by email
 
 ## v0.3 and beyond — what Pterodactyl can't do
 
+- [ ] Password reset and notifications by email
 - [ ] **Multi-node**: add a machine by joining it to the cluster; servers are scheduled where there is room
 - [ ] One-click **server transfer** between nodes
 - [ ] Standard game ports (e.g. `25565`) instead of NodePorts
