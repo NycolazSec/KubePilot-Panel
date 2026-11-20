@@ -301,6 +301,8 @@ type Settings struct {
 	PortMin    int    `json:"portMin"`
 	PortMax    int    `json:"portMax"`
 	Timezone   string `json:"timezone"`
+	// TwoFactorPolicy: "" (optional), "admins" or "everyone" must use two-factor authentication
+	TwoFactorPolicy string `json:"twoFactorPolicy"`
 }
 
 func (db *DB) Settings() Settings {

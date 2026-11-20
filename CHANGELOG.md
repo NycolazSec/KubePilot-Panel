@@ -32,6 +32,15 @@ First public version of KubePilot, the Kubernetes-native game server panel.
 
 ### Security
 
+- Disk quotas are enforced: uploads, the editor, compression and extraction stop at the server's disk limit, and a
+  running server writing far beyond it (10 %, at least 256 MB) is stopped — one server can no longer fill the node.
+- FIFOs and device files planted by a game server are refused instead of hanging panel requests.
+- Archives are limited to 100,000 entries.
+- Optional mandatory two-factor authentication, for administrators or for everyone (admin settings).
+- Per-account sign-in limit against password spraying from many IPs (IPs the user already signed in from are exempt).
+- `__Host-` session cookie over HTTPS; stricter headers (CSP `object-src 'none'`, `base-uri 'none'`, COOP, CORP,
+  HSTS 2 years, `Cache-Control: no-store` on the API); HTTP idle timeout and header size limit.
+- React Router 7 (fixes CVE-2025-68470 and a related advisory).
 - Game volumes get their own folder through a dedicated `kubepilot-local` StorageClass and the panel only mounts that folder,
   never the volumes of the other applications of the cluster.
 - Optional Cloudflare-only origin (`ingress.cloudflareOnly`, Traefik), seccomp `RuntimeDefault` on the panel pod.

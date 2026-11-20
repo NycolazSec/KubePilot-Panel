@@ -30,6 +30,13 @@ export default function AdminSettings() {
         </Field>
         <Field label={t('adminSettings.portMin')} hint={t('adminSettings.portRangeHint')}><input type="number" className="input" value={s.portMin} onChange={(e) => setS({ ...s, portMin: +e.target.value })} /></Field>
         <Field label={t('adminSettings.portMax')}><input type="number" className="input" value={s.portMax} onChange={(e) => setS({ ...s, portMax: +e.target.value })} /></Field>
+        <Field label={t('adminSettings.twofaPolicy')} hint={t('adminSettings.twofaHint')} className="sm:col-span-2">
+          <select className="input" value={s.twoFactorPolicy ?? ''} onChange={(e) => setS({ ...s, twoFactorPolicy: e.target.value as Settings['twoFactorPolicy'] })}>
+            <option value="">{t('adminSettings.twofaOptional')}</option>
+            <option value="admins">{t('adminSettings.twofaAdmins')}</option>
+            <option value="everyone">{t('adminSettings.twofaEveryone')}</option>
+          </select>
+        </Field>
       </div>
     </Card>
   );

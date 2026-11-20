@@ -47,10 +47,10 @@ export default function Layout() {
   const nav = (
     <nav onClick={() => setOpen(false)}>
       <Section label={t('nav.workspace')}>
-        <Item to="/" end icon={Server}>{t('nav.servers')}</Item>
+        {!me?.twoFactorRequired && <Item to="/" end icon={Server}>{t('nav.servers')}</Item>}
         <Item to="/account" icon={User}>{t('nav.account')}</Item>
       </Section>
-      {me?.user.isAdmin && (
+      {me?.user.isAdmin && !me.twoFactorRequired && (
         <Section label={t('nav.admin')}>
           <Item to="/admin" end icon={Gauge}>{t('nav.overview')}</Item>
           <Item to="/admin/servers" icon={Boxes}>{t('nav.servers')}</Item>
