@@ -1089,6 +1089,9 @@ func (a *App) handleAdminSettingsSave(w http.ResponseWriter, r *http.Request, u 
 		return
 	}
 	if domainChanged {
+		if s.MinecraftDomain != "" {
+			a.assignMissingHostnames()
+		}
 		go a.syncRoutes(a.ctx)
 	}
 	a.db.LogActivity("", u, clientIP(r), "admin.settings.update", "")
