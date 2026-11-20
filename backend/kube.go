@@ -187,7 +187,7 @@ func (k *Kube) ensureNetworkPolicy(ctx context.Context) error {
 		}
 	}
 	udp, tcp := corev1.ProtocolUDP, corev1.ProtocolTCP
-	dns := intstr.FromInt32(53)
+	dns, mysqlPort := intstr.FromInt32(53), intstr.FromInt32(3306)
 	np := &networkingv1.NetworkPolicy{
 		ObjectMeta: metav1.ObjectMeta{Name: "kubepilot-isolation", Namespace: k.ns, Labels: map[string]string{lblManaged: managedBy}},
 		Spec: networkingv1.NetworkPolicySpec{
@@ -202,6 +202,10 @@ func (k *Kube) ensureNetworkPolicy(ctx context.Context) error {
 						PodSelector:       &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": "kube-dns"}},
 					}},
 					Ports: []networkingv1.NetworkPolicyPort{{Protocol: &udp, Port: &dns}, {Protocol: &tcp, Port: &dns}},
+				},
+				{ // the servers' databases (MariaDB deployed by the chart), and nothing else of the cluster
+					To:    []networkingv1.NetworkPolicyPeer{{PodSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"app.kubernetes.io/name": "kubepilot-mariadb"}}}},
+					Ports: []networkingv1.NetworkPolicyPort{{Protocol: &tcp, Port: &mysqlPort}},
 				},
 			},
 		},

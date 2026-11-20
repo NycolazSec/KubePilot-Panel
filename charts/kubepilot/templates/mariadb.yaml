@@ -1,0 +1,112 @@
+{{- if .Values.databases.enabled }}
+{{- /* The root password is generated once and kept across upgrades (and uninstalls: resource-policy keep). */}}
+{{- $existing := lookup "v1" "Secret" .Release.Namespace "kubepilot-mariadb" }}
+{{- $password := randAlphaNum 32 }}
+{{- if $existing }}{{ $password = index $existing.data "root-password" | b64dec }}{{ end }}
+{{- $ns := .Values.serversNamespace.name }}
+{{- range $i, $secretNs := list .Release.Namespace $ns }}
+{{- if $i }}
+---
+{{- end }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: kubepilot-mariadb
+  namespace: {{ $secretNs }}
+  labels: {{- include "kubepilot.labels" $ | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+type: Opaque
+data:
+  root-password: {{ $password | b64enc | quote }}
+{{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kubepilot-mariadb
+  namespace: {{ $ns }}
+  labels: {{- include "kubepilot.labels" . | nindent 4 }}
+spec:
+  selector: { app.kubernetes.io/name: kubepilot-mariadb }
+  ports: [{ name: mysql, port: 3306, targetPort: mysql }]
+---
+# Only the game servers (and the panel) reach MariaDB; MariaDB itself reaches nothing.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: kubepilot-mariadb
+  namespace: {{ $ns }}
+  labels: {{- include "kubepilot.labels" . | nindent 4 }}
+spec:
+  podSelector: { matchLabels: { app.kubernetes.io/name: kubepilot-mariadb } }
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app.kubernetes.io/managed-by: kubepilot } }
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: {{ .Release.Namespace }} }
+          podSelector:
+            matchLabels: {{- include "kubepilot.selectorLabels" . | nindent 14 }}
+      ports: [{ protocol: TCP, port: 3306 }]
+  egress: []
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kubepilot-mariadb
+  namespace: {{ $ns }}
+  labels: {{- include "kubepilot.labels" . | nindent 4 }}
+spec:
+  serviceName: kubepilot-mariadb
+  replicas: 1
+  selector: { matchLabels: { app.kubernetes.io/name: kubepilot-mariadb } }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: kubepilot-mariadb, app.kubernetes.io/part-of: kubepilot }
+      annotations:
+        checksum/password: {{ $password | sha256sum | trunc 12 }}
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: mariadb
+          image: "{{ .Values.databases.image.repository }}:{{ .Values.databases.image.tag }}"
+          imagePullPolicy: {{ .Values.databases.image.pullPolicy }}
+          args: [--skip-name-resolve, --character-set-server=utf8mb4, --collation-server=utf8mb4_unicode_ci, --max-connections={{ .Values.databases.maxConnections }}]
+          env:
+            - name: MARIADB_ROOT_PASSWORD
+              valueFrom: { secretKeyRef: { name: kubepilot-mariadb, key: root-password } }
+            - { name: MARIADB_AUTO_UPGRADE, value: "1" }
+          ports: [{ containerPort: 3306, name: mysql }]
+          readinessProbe: { tcpSocket: { port: mysql }, periodSeconds: 5 }
+          livenessProbe: { tcpSocket: { port: mysql }, initialDelaySeconds: 60, periodSeconds: 20, failureThreshold: 6 }
+          resources: {{- toYaml .Values.databases.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/mysql }
+            - { name: run, mountPath: /run/mysqld }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - { name: run, emptyDir: {} }
+        - { name: tmp, emptyDir: {} }
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels: { app.kubernetes.io/name: kubepilot-mariadb }
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- with .Values.databases.persistence.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources: { requests: { storage: {{ .Values.databases.persistence.size }} } }
+{{- end }}

@@ -9,7 +9,7 @@ import { t, tx } from '../../i18n';
 
 type Form = {
   id?: string; name: string; description: string; ownerId: number; templateId: number; image: string; startup?: string;
-  memory: number; cpu: number; disk: number; backupLimit: number; allocationLimit: number; suspended: boolean;
+  memory: number; cpu: number; disk: number; backupLimit: number; databaseLimit: number; allocationLimit: number; suspended: boolean;
   env: Record<string, string>; startAfterInstall: boolean;
 };
 
@@ -51,6 +51,7 @@ function ServerForm({ form, setForm, users, templates }: { form: Form; setForm: 
         <Field label={t('adminServers.cpuMilli')} hint={t('adminServers.cpuHint', { cpu: cpuLabel(form.cpu || 0) })}><input type="number" className="input" min={0} step={250} value={form.cpu} onChange={(e) => set('cpu', +e.target.value)} /></Field>
         <Field label={t('adminServers.diskMb')} hint={mb(form.disk || 0)}><input type="number" className="input" min={256} step={1024} value={form.disk} onChange={(e) => set('disk', +e.target.value)} /></Field>
         <Field label={t('settings.maxBackups')}><input type="number" className="input" min={0} max={100} value={form.backupLimit} onChange={(e) => set('backupLimit', +e.target.value)} /></Field>
+        <Field label={t('settings.maxDatabases')}><input type="number" className="input" min={0} max={50} value={form.databaseLimit} onChange={(e) => set('databaseLimit', +e.target.value)} /></Field>
         <Field label={t('settings.maxPorts')}><input type="number" className="input" min={0} max={50} value={form.allocationLimit} onChange={(e) => set('allocationLimit', +e.target.value)} /></Field>
         <Field label={t('startup.image')}>
           <input className="input font-mono text-xs" list="tpl-images" value={form.image} onChange={(e) => set('image', e.target.value)} />
@@ -101,9 +102,9 @@ export default function AdminServers() {
   const openCreate = () => {
     const first = templates.data?.[0];
     if (!first || !users.data?.length) return;
-    setForm({ name: '', description: '', ownerId: users.data[0].id, templateId: first.id, image: first.images[0]?.image, memory: first.defaultMemory, cpu: first.defaultCpu, disk: first.defaultDisk, backupLimit: 3, allocationLimit: 1, suspended: false, env: {}, startAfterInstall: true });
+    setForm({ name: '', description: '', ownerId: users.data[0].id, templateId: first.id, image: first.images[0]?.image, memory: first.defaultMemory, cpu: first.defaultCpu, disk: first.defaultDisk, backupLimit: 3, databaseLimit: 1, allocationLimit: 1, suspended: false, env: {}, startAfterInstall: true });
   };
-  const openEdit = (s: Server) => setForm({ id: s.id, name: s.name, description: s.description, ownerId: s.ownerId, templateId: s.templateId, image: s.image, startup: s.startup, memory: s.memory, cpu: s.cpu, disk: s.disk, backupLimit: s.backupLimit, allocationLimit: s.allocationLimit, suspended: s.suspended, env: s.env, startAfterInstall: false });
+  const openEdit = (s: Server) => setForm({ id: s.id, name: s.name, description: s.description, ownerId: s.ownerId, templateId: s.templateId, image: s.image, startup: s.startup, memory: s.memory, cpu: s.cpu, disk: s.disk, backupLimit: s.backupLimit, databaseLimit: s.databaseLimit, allocationLimit: s.allocationLimit, suspended: s.suspended, env: s.env, startAfterInstall: false });
 
   const save = async () => {
     if (!form) return;

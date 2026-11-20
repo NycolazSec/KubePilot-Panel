@@ -13,7 +13,7 @@ export interface APIKey {
 const DOCS = 'https://github.com/NycolazSec/KubePilot-Panel/blob/main/docs/API.md';
 const scopeLabel = (s: string) => {
   const labels: Record<string, string> = {
-    console: t('perm.console'), power: t('perm.power'), files: t('perm.files'), backups: t('perm.backups'), schedules: t('perm.schedules'),
+    console: t('perm.console'), power: t('perm.power'), files: t('perm.files'), backups: t('perm.backups'), databases: t('perm.databases'), schedules: t('perm.schedules'),
     startup: t('perm.startup'), network: t('perm.network'), activity: t('perm.activity'), users: t('perm.users'), settings: t('perm.settings'), admin: t('perm.admin'),
   };
   return labels[s] || s;

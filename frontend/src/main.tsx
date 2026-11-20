@@ -18,6 +18,7 @@ import Files from './pages/server/Files';
 import Players from './pages/server/Players';
 import Plugins from './pages/server/Plugins';
 import Backups from './pages/server/Backups';
+import Databases from './pages/server/Databases';
 import Schedules from './pages/server/Schedules';
 import Network from './pages/server/Network';
 import Startup from './pages/server/Startup';
@@ -87,6 +88,7 @@ function App() {
                 <Route path="plugins" element={<Plugins />} />
                 <Route path="files" element={<Files />} />
                 <Route path="backups" element={<Backups />} />
+                <Route path="databases" element={<Databases />} />
                 <Route path="schedules" element={<Schedules />} />
                 <Route path="network" element={<Network />} />
                 <Route path="startup" element={<Startup />} />

@@ -39,6 +39,7 @@ type App struct {
 	accounts *rateLimiter // sign-in attempts per account, from IPs the account never signed in from
 	keyRate  *rateLimiter // requests per API key
 	sftp     *sftpServer  // nil when SFTP is off
+	dbHost   dbHost       // MariaDB for the servers' databases (empty address: off)
 	tickets  loginTickets // sign-ins waiting for their second factor
 }
 
@@ -46,6 +47,7 @@ func newApp(cfg Config, db *DB, kube *Kube) *App {
 	return &App{
 		cfg: cfg, db: db, kube: kube, ctx: context.Background(),
 		hubs: map[string]*Hub{}, locks: map[string]*sync.Mutex{}, disk: map[string]int64{},
+		dbHost:  dbHost{addr: cfg.DatabaseAddr, pass: cfg.DatabasePassword},
 		limiter: newRateLimiter(10, 10*time.Minute), accounts: newRateLimiter(20, 15*time.Minute), keyRate: newRateLimiter(apiRatePerMin, time.Minute),
 	}
 }
@@ -375,6 +377,10 @@ func (a *App) routes() http.Handler {
 	m.HandleFunc("POST /api/account/ssh-keys", a.authed(a.handleSSHKeyAdd))
 	m.HandleFunc("DELETE /api/account/ssh-keys/{kid}", a.authed(a.handleSSHKeyDelete))
 	m.HandleFunc("GET /api/servers/{id}/sftp", a.srv("sftp", a.handleSFTPInfo))
+	m.HandleFunc("GET /api/servers/{id}/databases", a.srv("databases", a.handleDatabases))
+	m.HandleFunc("POST /api/servers/{id}/databases", a.srv("databases", a.handleDatabaseCreate))
+	m.HandleFunc("POST /api/servers/{id}/databases/{did}/rotate", a.srv("databases", a.handleDatabaseRotate))
+	m.HandleFunc("DELETE /api/servers/{id}/databases/{did}", a.srv("databases", a.handleDatabaseDelete))
 
 	m.HandleFunc("GET /api/servers", a.authed(a.handleServers))
 	m.HandleFunc("GET /api/servers/{id}", a.srv("", a.handleServer))

@@ -122,6 +122,15 @@ Paths are relative to the server's data folder (`/` = its root) and can never le
 | `POST` | `/servers/{id}/files/compress` | `{"dir": "/", "paths": ["/world"]}` → `{"name": "archive-….tar.gz"}` |
 | `POST` | `/servers/{id}/files/decompress` | `{"path": "/modpack.zip"}` (`.zip`, `.tar`, `.tar.gz`, `.tgz`) |
 
+### Databases (`databases`)
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/servers/{id}/databases` | `{"enabled", "host", "port", "limit", "databases": [{"id", "name", "username", "createdAt"}]}` |
+| `POST` | `/servers/{id}/databases` | `{"name": "luckperms"}` → `{"database", "password"}` (the password is only returned here) |
+| `POST` | `/servers/{id}/databases/{did}/rotate` | New password → `{"password"}` |
+| `DELETE` | `/servers/{id}/databases/{did}` | Deletes the database and its user |
+
 ### SFTP (`sftp`)
 
 `GET /servers/{id}/sftp` → `{"enabled", "host", "port", "username", "fingerprint", "passwordAllowed"}`: how to connect
@@ -165,7 +174,7 @@ accounts with two-factor authentication). API keys can't be used over SFTP.
 | `PUT` / `DELETE` | `/admin/templates/{tid}` | Update / delete |
 | `POST` | `/admin/templates/egg` | Convert a Pterodactyl / Pelican egg `{"url"}` (GitHub only) or `{"egg": <egg JSON>}` into a template draft → `{"template", "warnings"}` (not saved) |
 | `GET` | `/admin/eggs/catalog` | Community eggs of github.com/pelican-eggs `[{"repo", "name", "group", "url"}]` (cached 6 h) |
-| `POST` | `/admin/servers` | Create `{"name", "ownerId", "templateId", "image", "memory", "cpu", "disk", "backupLimit", "allocationLimit", "env", "startAfterInstall"}` |
+| `POST` | `/admin/servers` | Create `{"name", "ownerId", "templateId", "image", "memory", "cpu", "disk", "backupLimit", "databaseLimit", "allocationLimit", "env", "startAfterInstall"}` |
 | `PUT` / `DELETE` | `/admin/servers/{id}` | Update / delete (volume and backups included) |
 | `GET` / `PUT` | `/admin/settings` | Panel settings |
 | `GET` | `/admin/activity` | Global activity log |

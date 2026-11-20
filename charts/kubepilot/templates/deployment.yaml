@@ -40,6 +40,11 @@ spec:
             - { name: KUBEPILOT_SECURE_COOKIES, value: {{ .Values.secureCookies | toString | quote }} }
             - { name: KUBEPILOT_MINECRAFT_ROUTER, value: {{ .Values.minecraftRouter.enabled | toString | quote }} }
             - { name: KUBEPILOT_ROOT_INSTALL, value: {{ .Values.serversNamespace.rootInstall | toString | quote }} }
+            {{- if .Values.databases.enabled }}
+            - { name: KUBEPILOT_DATABASE_ADDR, value: "kubepilot-mariadb.{{ .Values.serversNamespace.name }}.svc.cluster.local:3306" }
+            - name: KUBEPILOT_DATABASE_PASSWORD
+              valueFrom: { secretKeyRef: { name: kubepilot-mariadb, key: root-password } }
+            {{- end }}
             {{- if .Values.sftp.enabled }}
             - { name: KUBEPILOT_SFTP_LISTEN, value: ":2022" }
             - { name: KUBEPILOT_SFTP_PORT, value: {{ .Values.sftp.port | toString | quote }} }

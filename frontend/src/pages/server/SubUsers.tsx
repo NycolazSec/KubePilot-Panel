@@ -7,7 +7,7 @@ import { useServer } from './ServerLayout';
 import { t } from '../../i18n';
 
 export const permLabels: Record<string, string> = {
-  console: t('perm.console'), power: t('perm.power'), files: t('perm.files'), sftp: t('perm.sftp'), backups: t('perm.backups'), schedules: t('perm.schedules'),
+  console: t('perm.console'), power: t('perm.power'), files: t('perm.files'), sftp: t('perm.sftp'), databases: t('perm.databases'), backups: t('perm.backups'), schedules: t('perm.schedules'),
   startup: t('perm.startup'), network: t('perm.network'), activity: t('perm.activity'),
 };
 
