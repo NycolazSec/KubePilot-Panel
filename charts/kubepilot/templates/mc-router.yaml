@@ -56,7 +56,6 @@ spec:
             - { name: KUBE_NAMESPACE, value: {{ .Values.serversNamespace.name | quote }} }
             - { name: PORT, value: "25565" }
           ports: [{ containerPort: 25565, name: minecraft }]
-          readinessProbe: { tcpSocket: { port: minecraft }, periodSeconds: 10 }
           resources: {{- toYaml .Values.minecraftRouter.resources | nindent 12 }}
           securityContext:
             allowPrivilegeEscalation: false

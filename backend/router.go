@@ -95,6 +95,24 @@ func (a *App) handleHostname(w http.ResponseWriter, r *http.Request, c *Ctx) {
 	writeJSON(w, 200, map[string]string{"address": sp.Routed})
 }
 
+// assignMissingHostnames gives an address to the Minecraft servers that have none (servers created before
+// the router or the domain existed). Called when the Minecraft domain is set.
+func (a *App) assignMissingHostnames() {
+	servers, err := a.db.AllServers()
+	if err != nil {
+		return
+	}
+	st := a.db.Settings()
+	for _, s := range servers {
+		if s.Hostname != "" {
+			continue
+		}
+		if t, err := a.db.Template(s.TemplateID); err == nil && a.routerAvailable(t, st) {
+			_, _ = a.db.Exec(`UPDATE servers SET hostname=? WHERE id=? AND hostname=''`, a.freeHostname(s.Name, s.ID), s.ID)
+		}
+	}
+}
+
 // syncRoutes re-applies every server's Service, so router annotations follow the settings (domain changed,
 // router enabled or disabled).
 func (a *App) syncRoutes(ctx context.Context) {

@@ -52,3 +52,35 @@ func TestHostnames(t *testing.T) {
 		t.Error("two servers can't share a hostname (unique index)")
 	}
 }
+
+func TestAssignMissingHostnames(t *testing.T) {
+	app, db := newTestApp(t, false)
+	app.cfg.MinecraftRouter = true
+	if _, err := db.Exec(`PRAGMA foreign_keys=OFF`); err != nil {
+		t.Fatal(err)
+	}
+	java := &Template{Slug: "minecraft-java", Name: "MC", Images: []ImageOption{{Image: "itzg/minecraft-server"}}, DataPath: "/data", RunAsUser: 1000}
+	node := &Template{Slug: "nodejs", Name: "Node", Images: []ImageOption{{Image: "node:22"}}, DataPath: "/app", RunAsUser: 1000}
+	for _, tpl := range []*Template{java, node} {
+		if err := db.SaveTemplate(tpl); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, s := range [][4]any{{"aaaa1111", "Survie", java.ID, ""}, {"bbbb2222", "Bot", node.ID, ""}, {"cccc3333", "Créa", java.ID, "crea-custom"}} {
+		if _, err := db.Exec(`INSERT INTO servers(id,name,owner_id,template_id,image,memory_mb,cpu_millis,disk_mb,created_at,hostname) VALUES(?,?,0,?,'x',1,1,1,0,?)`, s[0], s[1], s[2], s[3]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := db.SaveSettings(Settings{MinecraftDomain: "mc.example.com"}); err != nil {
+		t.Fatal(err)
+	}
+	app.assignMissingHostnames()
+	want := map[string]string{"aaaa1111": "survie", "bbbb2222": "", "cccc3333": "crea-custom"}
+	for id, h := range want {
+		var got string
+		_ = db.QueryRow(`SELECT hostname FROM servers WHERE id=?`, id).Scan(&got)
+		if got != h {
+			t.Errorf("%s: hostname %q, want %q", id, got, h)
+		}
+	}
+}
