@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -387,7 +388,9 @@ type Template struct {
 	DefMemory     int            `json:"defaultMemory"`
 	DefCPU        int            `json:"defaultCpu"`
 	DefDisk       int            `json:"defaultDisk"`
-	UpdatedAt     int64          `json:"updatedAt"`
+	// Features turn on game-specific pages in the panel: "minecraft-java", "minecraft-bedrock"
+	Features  []string `json:"features,omitempty"`
+	UpdatedAt int64    `json:"updatedAt"`
 }
 
 var slugRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{1,40}$`)
@@ -420,6 +423,11 @@ func (t *Template) Validate() error {
 			if _, err := regexp.Compile(v.Pattern); err != nil {
 				return errCode(400, "Invalid regex for %s", v.Key)
 			}
+		}
+	}
+	for _, f := range t.Features {
+		if !slices.Contains(knownFeatures, f) {
+			return errCode(400, "Unknown feature: %s", f)
 		}
 	}
 	for i, p := range t.Ports {

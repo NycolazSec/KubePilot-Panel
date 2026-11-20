@@ -34,6 +34,8 @@ Rules that always apply:
 - If two-factor authentication is mandatory on the panel and you haven't enabled it, your keys are refused (`403`).
 - Every action is in the activity log with the name of the key.
 - No anti-CSRF header is needed with a key (it is required for browser sessions only).
+- Behind Cloudflare, the default User-Agent of Python's `urllib` is blocked (error `1010`): set your own
+  `User-Agent`, or use `requests`, `aiohttp` or `websockets`, which go through.
 
 ## Servers
 
@@ -77,6 +79,20 @@ millicores (`0` = unlimited).
 | `error` | `data`: why a command or power action was refused |
 
 Send `{"type": "command", "data": "say Hello"}` or `{"type": "power", "data": "restart"}`.
+
+## Minecraft (`console`)
+
+For servers whose template has the Minecraft Java or Bedrock panel.
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/servers/{id}/minecraft` | Live status (version, MOTD, icon, players with UUIDs, latency), whitelist / allowlist, operators, bans, main `server.properties` values |
+| `POST` | `/servers/{id}/minecraft/action` | `{"action": "kick" \| "ban" \| "pardon" \| "pardon-ip" \| "op" \| "deop" \| "whitelist-add" \| "whitelist-remove" \| "whitelist-on" \| "whitelist-off", "player": "Notch", "reason": "…"}` → `{"output": "Made Notch a server operator"}` (server running) |
+| `GET` | `/minecraft/avatar/{uuid}` | 64×64 PNG of a player's head, from their Mojang skin (any signed-in user) |
+
+Java servers are queried with the Server List Ping protocol and RCON (the panel reads the password from
+`.rcon-cli.env`, written by the `itzg/minecraft-server` image, or from the `RCON_PASSWORD` variable); Bedrock servers
+with a RakNet ping. Player names are validated and reasons cleaned before anything reaches the console.
 
 ## Files (`files`)
 

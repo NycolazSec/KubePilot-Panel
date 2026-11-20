@@ -102,6 +102,7 @@ type ServerView struct {
 	Address      string        `json:"address"`
 	Allocations  []*Allocation `json:"allocations"`
 	Permissions  []string      `json:"permissions"`
+	Features     []string      `json:"features"` // game-specific pages (see templateFeatures)
 }
 
 func (a *App) view(s *Server, perms []string, host string, tpls map[int64]*Template, users map[int64]string) ServerView {
@@ -109,6 +110,7 @@ func (a *App) view(s *Server, perms []string, host string, tpls map[int64]*Templ
 	if t := tpls[s.TemplateID]; t != nil {
 		v.Template, v.TemplateSlug, v.ConsoleInput = t.Name, t.Slug, t.ConsoleInput
 	}
+	v.Features = templateFeatures(tpls[s.TemplateID])
 	a.diskMu.RLock()
 	v.DiskUsed = a.disk[s.ID]
 	a.diskMu.RUnlock()

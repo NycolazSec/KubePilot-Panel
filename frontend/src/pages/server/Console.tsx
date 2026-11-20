@@ -4,11 +4,14 @@ import { SearchAddon } from '@xterm/addon-search';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { Terminal } from '@xterm/xterm';
 import clsx from 'clsx';
-import { ChevronRight, Cpu, Download, Eraser, HardDrive, MemoryStick, Search, Timer } from 'lucide-react';
+import { ChevronRight, Cpu, Download, Eraser, HardDrive, MemoryStick, Search, Timer, Users } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { IconButton, useUI } from '../../components/ui';
 import { bytes, cpuPct, duration } from '../../lib/format';
 import { useServer } from './ServerLayout';
+import PlayerHead from '../../components/minecraft/PlayerHead';
+import { get } from '../../api';
+import { Link } from 'react-router-dom';
 import { t, tn } from '../../i18n';
 
 function Sparkline({ data, max }: { data: number[]; max: number }) {
@@ -38,6 +41,33 @@ function Stat({ icon, label, value, sub, children }: { icon: React.ReactNode; la
 }
 
 const HISTORY_KEY = 'kubepilot-cmd-history';
+
+// Minecraft servers: who is playing, refreshed every 15 s
+function PlayersStat() {
+  const { server, state } = useServer();
+  const [mc, setMc] = useState<{ status: { playersOnline: number; playersMax: number; players: { name: string; uuid?: string }[] } | null } | null>(null);
+  useEffect(() => {
+    if (state.status !== 'running') { setMc(null); return; }
+    let alive = true;
+    const load = () => get(`/servers/${server.id}/minecraft`).then((r) => alive && setMc(r)).catch(() => {});
+    load();
+    const timer = setInterval(load, 15000);
+    return () => { alive = false; clearInterval(timer); };
+  }, [server.id, state.status]);
+  const st = mc?.status;
+  return (
+    <Link to="players" className="card block px-4 pb-3 pt-3 transition-colors hover:border-ink-500">
+      <div className="flex items-center gap-1.5 text-2xs font-medium uppercase tracking-wider text-ink-400"><Users className="h-3.5 w-3.5" />{t('console.players')}</div>
+      <div className="mt-1 text-lg font-semibold tabular-nums text-ink-100">{st ? `${st.playersOnline} / ${st.playersMax}` : '—'}</div>
+      {st && st.players.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1">
+          {st.players.slice(0, 16).map((p) => <PlayerHead key={p.uuid || p.name} uuid={p.uuid} name={p.name} size={24} />)}
+          {st.players.length > 16 && <span className="self-center text-xs text-ink-400">+{st.players.length - 16}</span>}
+        </div>
+      )}
+    </Link>
+  );
+}
 
 export default function Console() {
   const { server, state, disk, bus, connected, send, can } = useServer();
@@ -167,6 +197,7 @@ export default function Console() {
         <Stat icon={<HardDrive className="h-3.5 w-3.5" />} label={t('common.disk')} value={bytes(disk)} sub={`/ ${bytes(server.disk * 1048576, 0)}`} />
         <Stat icon={<Timer className="h-3.5 w-3.5" />} label={t('console.uptime')} value={state.status === 'running' && state.startedAt ? duration(Date.now() / 1000 - state.startedAt) : '—'}
           sub={state.restarts ? tn('console.autoRestarts', state.restarts) : undefined} />
+        {server.features?.some((f) => f.startsWith('minecraft')) && can('console') && <PlayersStat />}
       </div>
     </div>
   );

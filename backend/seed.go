@@ -16,7 +16,7 @@ func boolOpts() []string { return []string{"TRUE", "FALSE"} }
 func defaultTemplates() []*Template {
 	return []*Template{
 		{
-			Slug: "minecraft-java", Name: "Minecraft Java", Category: "Minecraft",
+			Slug: "minecraft-java", Name: "Minecraft Java", Category: "Minecraft", Features: []string{featureMinecraftJava},
 			Description: "Paper, Purpur, Vanilla, Fabric, Forge, NeoForge… Automatic download and updates (itzg/minecraft-server).",
 			Images: []ImageOption{
 				{Name: "Recommended Java (auto)", Image: "itzg/minecraft-server:latest"},
@@ -49,7 +49,7 @@ func defaultTemplates() []*Template {
 			DefMemory: 4096, DefCPU: 2000, DefDisk: 10240,
 		},
 		{
-			Slug: "minecraft-bedrock", Name: "Minecraft Bedrock", Category: "Minecraft",
+			Slug: "minecraft-bedrock", Name: "Minecraft Bedrock", Category: "Minecraft", Features: []string{featureMinecraftBedrock},
 			Description: "Official Bedrock server (mobile, consoles, Windows). Automatic updates.",
 			Images:      []ImageOption{{Name: "Bedrock", Image: "itzg/minecraft-bedrock-server:latest"}},
 			DataPath:    "/data",

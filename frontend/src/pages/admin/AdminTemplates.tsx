@@ -50,6 +50,13 @@ function TemplateEditor({ t, setT }: { t: Template; setT: (t: Template) => void 
           <Toggle checked={t.consoleInput} onChange={(v) => set('consoleInput', v)} label={tr('tpl.consoleInput')} />
           <Toggle checked={t.readyProbe} onChange={(v) => set('readyProbe', v)} label={tr('tpl.readyProbe')} />
         </div>
+        <Field label={tr('tpl.features')} hint={tr('tpl.featuresHint')} className="sm:col-span-2">
+          <select className="input" value={t.features?.[0] ?? ''} onChange={(e) => set('features', e.target.value ? [e.target.value] : [])}>
+            <option value="">{tr('tpl.featureNone')}</option>
+            <option value="minecraft-java">{tr('tpl.featureJava')}</option>
+            <option value="minecraft-bedrock">{tr('tpl.featureBedrock')}</option>
+          </select>
+        </Field>
       </section>
 
       <section className="grid gap-4 sm:grid-cols-3">

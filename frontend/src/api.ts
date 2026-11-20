@@ -53,7 +53,7 @@ export interface Server {
   env: Record<string, string>; memory: number; cpu: number; disk: number; backupLimit: number; allocationLimit: number;
   suspended: boolean; createdAt: number;
   template: string; templateSlug: string; consoleInput: boolean; owner: string; state: State; diskUsed: number;
-  address: string; allocations: Allocation[]; permissions: string[];
+  address: string; allocations: Allocation[]; permissions: string[]; features: string[];
 }
 
 export interface FileEntry { name: string; dir: boolean; size: number; mode: string; modified: number; symlink: boolean }
@@ -69,6 +69,7 @@ export interface Template {
   id: number; slug: string; name: string; description: string; category: string; images: ImageOption[]; startup: string;
   dataPath: string; vars: TemplateVar[]; ports: TemplatePort[]; stopGrace: number; readyProbe: boolean; runAsUser: number;
   consoleInput: boolean; installImage: string; installScript: string; defaultMemory: number; defaultCpu: number; defaultDisk: number; updatedAt?: number;
+  features?: string[];
 }
 
 export interface Settings { panelName: string; publicHost: string; portMin: number; portMax: number; timezone: string; twoFactorPolicy: '' | 'admins' | 'everyone' }
