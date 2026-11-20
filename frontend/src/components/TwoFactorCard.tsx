@@ -94,7 +94,7 @@ export default function TwoFactorCard() {
     </Field>
   );
   const codeField = (hint?: string) => (
-    <Field label={t('twofa.codeLabel')} hint={hint}>
+    <Field label={flow?.kind === 'enable' ? t('login.code') : t('twofa.codeLabel')} hint={hint}>
       <input className="input font-mono" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value)} placeholder="000000" required
         autoFocus={flow?.kind === 'enable'} />
     </Field>
