@@ -40,6 +40,7 @@ const (
 	lblManaged = "app.kubernetes.io/managed-by"
 	lblServer  = "kubepilot.io/server"
 	lblRole    = "kubepilot.io/role"
+	lblOwner   = "kubepilot.io/owner" // on server pods: servers of the same owner may talk to each other
 	managedBy  = "kubepilot"
 	mainCtr    = "server"
 	installCtr = "install"
@@ -131,6 +132,43 @@ func (k *Kube) start(ctx context.Context) error {
 }
 
 // ---------- Network isolation for tenant pods
+
+func ownerLabels(l map[string]string, owner int64) map[string]string {
+	l[lblOwner] = strconv.FormatInt(owner, 10)
+	return l
+}
+
+// EnsureOwnerNetwork lets the servers of one owner reach each other (a bot and its Lavalink, a game and its
+// database…) through their internal address, while they stay cut off from everybody else's servers and from
+// the cluster. Network policies add up: this one only opens traffic between pods of the same owner.
+func (k *Kube) EnsureOwnerNetwork(ctx context.Context, owner int64) error {
+	id := strconv.FormatInt(owner, 10)
+	sel := metav1.LabelSelector{MatchLabels: map[string]string{lblManaged: managedBy, lblOwner: id}}
+	np := &networkingv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: "kubepilot-owner-" + id, Namespace: k.ns, Labels: map[string]string{lblManaged: managedBy}},
+		Spec: networkingv1.NetworkPolicySpec{
+			PodSelector: sel,
+			PolicyTypes: []networkingv1.PolicyType{networkingv1.PolicyTypeEgress},
+			Egress:      []networkingv1.NetworkPolicyEgressRule{{To: []networkingv1.NetworkPolicyPeer{{PodSelector: &sel}}}},
+		},
+	}
+	api := k.cs.NetworkingV1().NetworkPolicies(k.ns)
+	cur, err := api.Get(ctx, np.Name, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		_, err = api.Create(ctx, np, metav1.CreateOptions{})
+		return err
+	} else if err != nil {
+		return err
+	}
+	cur.Spec = np.Spec
+	_, err = api.Update(ctx, cur, metav1.UpdateOptions{})
+	return err
+}
+
+// InternalAddress is how a server is reached by its owner's other servers.
+func (k *Kube) InternalAddress(id string, port int) string {
+	return fmt.Sprintf("%s.%s.svc.cluster.local:%d", stsName(id), k.ns, port)
+}
 
 func (k *Kube) ensureNetworkPolicy(ctx context.Context) error {
 	except := []string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "169.254.0.0/16"}
@@ -348,7 +386,7 @@ func (sp Spec) podTemplate() corev1.PodTemplateSpec {
 	}
 	tmpLimit := resource.MustParse("1Gi")
 	return corev1.PodTemplateSpec{
-		ObjectMeta: metav1.ObjectMeta{Labels: srvLabels(s.ID, "server")},
+		ObjectMeta: metav1.ObjectMeta{Labels: ownerLabels(srvLabels(s.ID, "server"), s.OwnerID)},
 		Spec: corev1.PodSpec{
 			AutomountServiceAccountToken:  boolp(false),
 			EnableServiceLinks:            boolp(false),

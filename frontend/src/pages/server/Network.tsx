@@ -34,6 +34,14 @@ export default function Network() {
   return (
     <div className="space-y-5">
     {server.routerDomain && <HostnameCard />}
+    {server.internalAddress && (
+      <Card title={t('network.internal')} description={t('network.internalHint')}>
+        <button onClick={async () => { await copy(server.internalAddress); toast(t('common.addressCopied')); }}
+          className="inline-flex max-w-full items-center gap-2 break-all rounded-md border border-ink-700 bg-ink-950 px-3 py-1.5 text-left font-mono text-sm text-ink-200 hover:border-ink-500">
+          <Copy className="h-3.5 w-3.5 shrink-0 text-ink-400" />{server.internalAddress}
+        </button>
+      </Card>
+    )}
     <Card padded={false} title={t('network.ports')}
       actions={data && (data.limit > 0 || server.permissions.includes('settings')) && (
         <div className="flex items-center gap-2">

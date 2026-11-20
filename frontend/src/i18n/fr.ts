@@ -357,6 +357,8 @@ export const fr: Messages = {
   "network.empty": "Aucun port public",
   "network.emptyHint": "Ce serveur n'est pas joignable depuis Internet.",
   "network.footer": "Ports supplémentaires : {used} / {limit}. Un port ajouté est exposé avec le même numéro à l'intérieur du conteneur : configure ton plugin pour écouter dessus.",
+  "network.internal": "Adresse interne",
+  "network.internalHint": "Tes autres serveurs joignent celui-ci à cette adresse (un bot et son Lavalink, un jeu et sa base…). Les serveurs des autres utilisateurs ne le peuvent pas.",
   "network.internalPort": "Port interne",
   "network.note": "Note",
   "network.notePlaceholder": "ex : Dynmap, voice chat…",
