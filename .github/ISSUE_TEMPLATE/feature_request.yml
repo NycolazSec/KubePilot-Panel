@@ -1,0 +1,20 @@
+name: Feature request
+description: Suggest an idea or a game template for KubePilot
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would it solve?
+      description: Describe the use case — who needs it and why.
+    validations: { required: true }
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: How you imagine it working in KubePilot.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives and references
+      description: Workarounds you use today, or how other panels (Pterodactyl, Pelican…) handle it.

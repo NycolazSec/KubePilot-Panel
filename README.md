@@ -5,11 +5,12 @@
 <p align="center">
   <a href="https://github.com/NycolazSec/KubePilot-Panel/actions/workflows/ci.yml"><img src="https://github.com/NycolazSec/KubePilot-Panel/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <img src="https://img.shields.io/badge/Kubernetes-native-7c3aed" alt="Kubernetes native">
-  <img src="https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white" alt="Go">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="License: AGPL-3.0"></a>
+  <img src="https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white" alt="Go">
   <img src="https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black" alt="React">
 </p>
 
-**KubePilot** is a homemade, Kubernetes-native game server panel, built as an alternative to Pterodactyl.
+**KubePilot** is an open-source, Kubernetes-native game server panel — an alternative to Pterodactyl.
 There is no Wings daemon and no Docker socket: **every game server is a Kubernetes `StatefulSet`** with its own
 volume and `NodePort` service, and the panel drives the cluster through the Kubernetes API.
 
@@ -69,7 +70,7 @@ flowchart LR
 
 - A Kubernetes cluster — developed on **k3s** (local-path provisioner, metrics-server, Traefik)
 - [cert-manager](https://cert-manager.io) with a `ClusterIssuer` for HTTPS
-- Go ≥ 1.25, Node.js ≥ 20 and Docker on the machine that builds the image
+- Go ≥ 1.26, Node.js ≥ 20 and Docker on the machine that builds the image
 
 ## Getting started
 
@@ -112,3 +113,20 @@ docs/       logo and banner
   them (`KUBEPILOT_NODE`). Multi-node storage would need a CSI driver with a file API.
 - Java heap is set to the memory limit minus max(640 MB, 20 %) to avoid OOM kills; templates get it as `SERVER_JVM_MEMORY`.
 - Disk limits are soft: usage is measured by the panel and a server over its quota can't be started.
+
+## Roadmap
+
+Coming next: published images and a Helm chart, English interface, 2FA and API keys (v0.1), then Pterodactyl egg
+import, SFTP and a public API (v0.2), then multi-node, server transfers and auto-sleep (v0.3).
+See the full [roadmap](ROADMAP.md).
+
+## Contributing
+
+Contributions are welcome — read the [contributing guide](CONTRIBUTING.md) to get started.
+Found a security issue? Please follow the [security policy](SECURITY.md) and report it privately.
+
+## License
+
+KubePilot is free software, licensed under the [GNU Affero General Public License v3.0](LICENSE).
+You can use, modify and host it, but if you offer a modified version to users over a network, you must publish your
+source code under the same license.

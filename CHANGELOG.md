@@ -1,0 +1,22 @@
+# Changelog
+
+All notable changes to KubePilot are documented in this file.
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
+[Semantic Versioning](https://semver.org/).
+
+## [Unreleased]
+
+First public version of KubePilot, the Kubernetes-native game server panel.
+
+### Added
+
+- Game servers run as Kubernetes StatefulSets with their own volume and NodePort service — no Wings, no Docker socket.
+- Real-time console over WebSocket, power actions, crash detection (OOMKilled, exit codes, image errors).
+- File manager with code editor, drag & drop upload, zip download, archive / extract.
+- Backups with restore, download, lock and automatic rotation; cron schedules for commands, power actions and backups.
+- Startup variables, image selection, extra ports, sub-users with fine-grained permissions, per-server activity log.
+- Admin area: overview, servers, users, editable templates with JSON import/export, settings, global activity log.
+- Built-in templates: Minecraft Java & Bedrock, Node.js, Python, custom Docker image.
+- Security: Pod Security `restricted`, NetworkPolicy isolation, least-privilege RBAC, `os.Root` file access, CSRF
+  protection, strict CSP, login rate limiting.
+- Open-source license (AGPL-3.0), contribution guide, security policy and public roadmap.

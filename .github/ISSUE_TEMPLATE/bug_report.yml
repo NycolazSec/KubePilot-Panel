@@ -1,0 +1,41 @@
+name: Bug report
+description: Something doesn't work as expected
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! **Security issues must be reported privately** — see SECURITY.md.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: A clear description of the bug, and what you expected instead.
+    validations: { required: true }
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Create a server from the "Minecraft Java" template
+        2. Click on …
+        3. See the error
+    validations: { required: true }
+  - type: input
+    id: version
+    attributes:
+      label: KubePilot version
+      description: Shown at the bottom of the admin overview, or `kubectl -n kubepilot-system get deploy kubepilot -o jsonpath='{..image}'`.
+    validations: { required: true }
+  - type: input
+    id: cluster
+    attributes:
+      label: Kubernetes distribution and version
+      placeholder: k3s v1.33.1, kubeadm 1.32, Talos…
+    validations: { required: true }
+  - type: textarea
+    id: logs
+    attributes:
+      label: Panel logs
+      description: "`kubectl -n kubepilot-system logs deploy/kubepilot --tail=200` — remove anything sensitive."
+      render: text
