@@ -1,0 +1,12 @@
+{{- if and .Values.ingress.enabled (or .Values.ingress.cloudflareOnly .Values.ingress.sourceRanges) }}
+# Traefik: only accept requests from the allowed networks (e.g. Cloudflare), see ingress.cloudflareOnly
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ include "kubepilot.fullname" . }}-allowlist
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "kubepilot.labels" . | nindent 4 }}
+spec:
+  ipAllowList:
+    sourceRange: {{ include "kubepilot.sourceRanges" . }}
+{{- end }}

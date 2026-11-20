@@ -30,6 +30,12 @@ First public version of KubePilot, the Kubernetes-native game server panel.
 - English and French interface: the language follows the browser and can be changed from the account page or the
   sign-in page. Server errors and console messages are translated for each viewer. New installs get English templates.
 
+### Security
+
+- Game volumes get their own folder through a dedicated `kubepilot-local` StorageClass and the panel only mounts that folder,
+  never the volumes of the other applications of the cluster.
+- Optional Cloudflare-only origin (`ingress.cloudflareOnly`, Traefik), seccomp `RuntimeDefault` on the panel pod.
+
 ### Fixed
 
 - Long dialogs (new template, new server…) no longer get their top cut off on small screens: the dialog stays within

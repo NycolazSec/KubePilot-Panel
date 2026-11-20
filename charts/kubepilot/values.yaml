@@ -12,8 +12,14 @@ serversNamespace:
 # Game server volumes. The file manager and backups read them directly on the node,
 # so they must come from a hostPath-based provisioner such as local-path.
 storage:
-  className: local-path
-  # Directory where that provisioner creates volumes on the node:
+  # Isolation (recommended): the chart creates a StorageClass that puts game volumes in their own folder
+  # (<hostPath>/<serversNamespace>/<claim>/), and the panel only mounts that folder — never the volumes
+  # of the other applications of the cluster. Needs rancher/local-path-provisioner >= v0.0.27 (k3s ≥ 1.30).
+  isolated: true
+  # StorageClass of game volumes: created by the chart when `isolated`, an existing hostPath-based one otherwise
+  className: kubepilot-local
+  provisioner: rancher.io/local-path
+  # Directory where the provisioner creates volumes on the node:
   #   k3s: /var/lib/rancher/k3s/storage — rancher/local-path-provisioner: /opt/local-path-provisioner
   hostPath: /var/lib/rancher/k3s/storage
   # Node that holds the volumes; the panel runs there. Leave empty on a single-node cluster.
@@ -39,6 +45,16 @@ ingress:
   tls:
     enabled: true
     secretName: kubepilot-tls
+  # Traefik only: refuse every request that doesn't come from these networks (direct hits on the origin IP).
+  # `cloudflareOnly` fills the list with Cloudflare's ranges: use it when the domain is proxied by Cloudflare,
+  # so nobody can bypass Cloudflare's protections by reaching the node directly.
+  cloudflareOnly: false
+  sourceRanges: []
+  # https://www.cloudflare.com/ips/
+  cloudflareRanges: [173.245.48.0/20, 103.21.244.0/22, 103.22.200.0/22, 103.31.4.0/22, 141.101.64.0/18, 108.162.192.0/18,
+    190.93.240.0/20, 188.114.96.0/20, 197.234.240.0/22, 198.41.128.0/17, 162.158.0.0/15, 104.16.0.0/13, 104.24.0.0/14,
+    172.64.0.0/13, 131.0.72.0/22, 2400:cb00::/32, 2606:4700::/32, 2803:f800::/32, 2405:b500::/32, 2405:8100::/32,
+    2a06:98c0::/29, 2c0f:f248::/32]
 
 service:
   type: ClusterIP

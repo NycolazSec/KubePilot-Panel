@@ -21,3 +21,18 @@ helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" }}
 {{- define "kubepilot.dataClaim" -}}
 {{- .Values.persistence.existingClaim | default (printf "%s-data" (include "kubepilot.fullname" .)) -}}
 {{- end -}}
+
+{{/* Folder of the game volumes on the node, the only one the panel mounts */}}
+{{- define "kubepilot.volumesPath" -}}
+{{- if .Values.storage.isolated -}}
+{{- printf "%s/%s" (trimSuffix "/" .Values.storage.hostPath) .Values.serversNamespace.name -}}
+{{- else -}}
+{{- .Values.storage.hostPath -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "kubepilot.sourceRanges" -}}
+{{- $r := .Values.ingress.sourceRanges -}}
+{{- if .Values.ingress.cloudflareOnly -}}{{- $r = concat $r .Values.ingress.cloudflareRanges -}}{{- end -}}
+{{- toJson $r -}}
+{{- end -}}
