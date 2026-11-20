@@ -1,0 +1,12 @@
+.git
+.github
+**/node_modules
+backend/web
+kubepilot
+deploy
+docs
+charts
+dev-data
+migration-backup
+.admin-password
+*.db*

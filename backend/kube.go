@@ -61,10 +61,11 @@ type Usage struct {
 }
 
 type Kube struct {
-	cs          *kubernetes.Clientset
-	rc          *rest.Config
-	ns          string
-	storageRoot string
+	cs           *kubernetes.Clientset
+	rc           *rest.Config
+	ns           string
+	storageRoot  string
+	storageClass string
 
 	pods corelisters.PodLister
 	sts  appslisters.StatefulSetLister
@@ -95,7 +96,7 @@ func newKube(cfg Config) (*Kube, error) {
 		return nil, err
 	}
 	return &Kube{
-		cs: cs, rc: rc, ns: cfg.Namespace, storageRoot: filepath.Clean(cfg.StorageRoot),
+		cs: cs, rc: rc, ns: cfg.Namespace, storageRoot: filepath.Clean(cfg.StorageRoot), storageClass: cfg.StorageClass,
 		metrics: map[string]Usage{}, pvPaths: map[string]string{}, attach: map[string]*attachSess{},
 	}, nil
 }
@@ -247,7 +248,9 @@ func (sp Spec) env() []corev1.EnvVar {
 	return list
 }
 
-func mi(mb int) resource.Quantity { return *resource.NewQuantity(int64(mb)*1024*1024, resource.BinarySI) }
+func mi(mb int) resource.Quantity {
+	return *resource.NewQuantity(int64(mb)*1024*1024, resource.BinarySI)
+}
 func milli(m int) resource.Quantity { return *resource.NewMilliQuantity(int64(m), resource.DecimalSI) }
 
 func (sp Spec) resources() corev1.ResourceRequirements {
@@ -357,7 +360,7 @@ func (k *Kube) EnsurePVC(ctx context.Context, s *Server) error {
 	} else if !apierrors.IsNotFound(err) {
 		return err
 	}
-	sc := "local-path"
+	sc := k.storageClass
 	pvc := &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{Name: pvcName(s.ID), Labels: srvLabels(s.ID, "data")},
 		Spec: corev1.PersistentVolumeClaimSpec{
@@ -598,11 +601,11 @@ func (k *Kube) DataDir(ctx context.Context, id string) (string, error) {
 // ---------- State
 
 type State struct {
-	Status       string `json:"status"` // offline, installing, starting, running, stopping, crashed
-	Reason       string `json:"reason,omitempty"`
-	StartedAt    int64  `json:"startedAt,omitempty"`
-	Restarts     int32  `json:"restarts"`
-	InstallError bool   `json:"installError,omitempty"`
+	Status       string  `json:"status"` // offline, installing, starting, running, stopping, crashed
+	Reason       string  `json:"reason,omitempty"`
+	StartedAt    int64   `json:"startedAt,omitempty"`
+	Restarts     int32   `json:"restarts"`
+	InstallError bool    `json:"installError,omitempty"`
 	CPU          float64 `json:"cpu"`
 	Memory       int64   `json:"memory"`
 }
@@ -788,16 +791,16 @@ func (k *Kube) fetchMetrics(ctx context.Context) {
 }
 
 type NodeInfo struct {
-	Name     string  `json:"name"`
-	Ready    bool    `json:"ready"`
-	Version  string  `json:"version"`
-	OS       string  `json:"os"`
-	CPUCap   float64 `json:"cpuCap"`
-	MemCap   int64   `json:"memCap"`
-	CPU      float64 `json:"cpu"`
-	Mem      int64   `json:"mem"`
-	Pods     int     `json:"pods"`
-	Address  string  `json:"address"`
+	Name    string  `json:"name"`
+	Ready   bool    `json:"ready"`
+	Version string  `json:"version"`
+	OS      string  `json:"os"`
+	CPUCap  float64 `json:"cpuCap"`
+	MemCap  int64   `json:"memCap"`
+	CPU     float64 `json:"cpu"`
+	Mem     int64   `json:"mem"`
+	Pods    int     `json:"pods"`
+	Address string  `json:"address"`
 }
 
 func (k *Kube) Nodes(ctx context.Context) ([]NodeInfo, error) {

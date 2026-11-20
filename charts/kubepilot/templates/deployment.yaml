@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "kubepilot.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "kubepilot.labels" . | nindent 4 }}
+spec:
+  # SQLite database: a single replica, replaced (not rolled) on upgrade
+  replicas: 1
+  strategy: { type: Recreate }
+  selector:
+    matchLabels: {{- include "kubepilot.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "kubepilot.selectorLabels" . | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+      annotations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "kubepilot.fullname" . }}
+      {{- with .Values.storage.node }}
+      # The file manager reads the game volumes: same node as the servers
+      nodeSelector:
+        kubernetes.io/hostname: {{ . | quote }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: panel
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - { name: KUBEPILOT_NAMESPACE, value: {{ .Values.serversNamespace.name | quote }} }
+            - { name: KUBEPILOT_STORAGE_ROOT, value: {{ .Values.storage.hostPath | quote }} }
+            - { name: KUBEPILOT_STORAGE_CLASS, value: {{ .Values.storage.className | quote }} }
+            - { name: KUBEPILOT_DATA, value: /data }
+            - { name: KUBEPILOT_SECURE_COOKIES, value: {{ .Values.secureCookies | toString | quote }} }
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          ports: [{ containerPort: 8080, name: http }]
+          readinessProbe: { httpGet: { path: /healthz, port: http }, periodSeconds: 5 }
+          livenessProbe: { httpGet: { path: /healthz, port: http }, periodSeconds: 20, failureThreshold: 6 }
+          resources: {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+              # chown files created for the game user + access to their files
+              add: [CHOWN, DAC_OVERRIDE, FOWNER]
+          volumeMounts:
+            - { name: data, mountPath: /data }
+            - { name: storage, mountPath: {{ .Values.storage.hostPath | quote }} }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: data
+          persistentVolumeClaim: { claimName: {{ include "kubepilot.dataClaim" . }} }
+        - name: storage
+          hostPath: { path: {{ .Values.storage.hostPath | quote }}, type: DirectoryOrCreate }
+        - name: tmp
+          emptyDir: { sizeLimit: 1Gi }

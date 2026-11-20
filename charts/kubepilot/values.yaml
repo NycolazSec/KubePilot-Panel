@@ -1,0 +1,56 @@
+image:
+  repository: ghcr.io/nycolazsec/kubepilot-panel
+  # Defaults to the chart's appVersion
+  tag: ""
+  pullPolicy: IfNotPresent
+
+# Namespace where game servers run. It is kept on `helm uninstall` so that game data is never lost.
+serversNamespace:
+  name: kubepilot-servers
+  create: true
+
+# Game server volumes. The file manager and backups read them directly on the node,
+# so they must come from a hostPath-based provisioner such as local-path.
+storage:
+  className: local-path
+  # Directory where that provisioner creates volumes on the node:
+  #   k3s: /var/lib/rancher/k3s/storage — rancher/local-path-provisioner: /opt/local-path-provisioner
+  hostPath: /var/lib/rancher/k3s/storage
+  # Node that holds the volumes; the panel runs there. Leave empty on a single-node cluster.
+  node: ""
+
+# Panel data: SQLite database and backups. The claim is kept on `helm uninstall`.
+persistence:
+  size: 20Gi
+  # Empty = the cluster's default StorageClass
+  storageClass: ""
+  # Use an existing PersistentVolumeClaim instead of creating one
+  existingClaim: ""
+
+ingress:
+  enabled: true
+  # Empty = the cluster's default IngressClass (Traefik on k3s)
+  className: ""
+  # Public domain of the panel, e.g. panel.example.com (required when the ingress is enabled)
+  host: ""
+  # cert-manager ClusterIssuer that issues the TLS certificate, e.g. letsencrypt-prod
+  clusterIssuer: ""
+  annotations: {}
+  tls:
+    enabled: true
+    secretName: kubepilot-tls
+
+service:
+  type: ClusterIP
+  port: 80
+
+# Keep true in production: cookies are only sent over HTTPS. Set false only to test over plain HTTP.
+secureCookies: true
+
+resources:
+  requests: { cpu: 50m, memory: 64Mi }
+  limits: { cpu: "2", memory: 1Gi }
+
+extraEnv: []
+podAnnotations: {}
+tolerations: []

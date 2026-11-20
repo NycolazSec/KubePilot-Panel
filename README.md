@@ -68,16 +68,21 @@ flowchart LR
 
 ## Requirements
 
-- A Kubernetes cluster — developed on **k3s** (local-path provisioner, metrics-server, Traefik)
-- [cert-manager](https://cert-manager.io) with a `ClusterIssuer` for HTTPS
-- Go ≥ 1.26, Node.js ≥ 20 and Docker on the machine that builds the image
+- A Kubernetes cluster (≥ 1.29) — developed on **k3s**, which ships everything below except cert-manager
+- A hostPath-based storage provisioner for game volumes: `local-path` (built into k3s, or
+  [local-path-provisioner](https://github.com/rancher/local-path-provisioner) elsewhere)
+- [metrics-server](https://github.com/kubernetes-sigs/metrics-server), an ingress controller and
+  [cert-manager](https://cert-manager.io) with a `ClusterIssuer` for HTTPS
 
 ## Getting started
 
+KubePilot is installed with Helm. Images are published for `amd64` and `arm64` on every release.
+
 ```sh
-git clone https://github.com/NycolazSec/KubePilot-Panel.git && cd KubePilot-Panel
-cp deploy/config.env.example deploy/config.env   # set your domain, node and ClusterIssuer
-./deploy.sh                                      # build → image → import into k3s → apply → rollout
+helm install kubepilot oci://ghcr.io/nycolazsec/charts/kubepilot \
+  --namespace kubepilot-system --create-namespace \
+  --set ingress.host=panel.example.com \
+  --set ingress.clusterIssuer=letsencrypt-prod
 
 # create the first admin account
 kubectl -n kubepilot-system exec deploy/kubepilot -- \
@@ -88,8 +93,8 @@ Then point a DNS record for your domain at the cluster and open `https://<your d
 Players connect to `<node address>:<port>`; game ports are NodePorts in `30100-30299` (configurable in the admin
 settings, within `30000-32767`). Open that range (TCP + UDP) if a firewall sits in front of the node.
 
-`deploy.sh` targets k3s (`k3s ctr images import`). On another distribution, push the image to a registry and set
-`image:` in `deploy/k8s.yaml`.
+All chart options (storage, node, ingress, resources…) are documented in the [chart README](charts/kubepilot/README.md).
+Upgrade with `helm upgrade kubepilot oci://ghcr.io/nycolazsec/charts/kubepilot -n kubepilot-system --reuse-values`.
 
 ## Development
 
@@ -98,19 +103,21 @@ settings, within `30000-32767`). Open that range (TCP + UDP) if a firewall sits 
 ./kubepilot -data ./dev-data -listen 127.0.0.1:8099 -secure-cookies=false \
   -kubeconfig ~/.kube/config       # run locally against your cluster
 cd frontend && npm run dev         # Vite dev server, proxies /api to 127.0.0.1:8099
+./deploy.sh                        # k3s: build the image from source and deploy it with the chart (deploy/config.env)
 ```
 
 ```
 backend/    Go: HTTP API, auth, Kubernetes driver (client-go), console hub, files, backups, schedules
 frontend/   React + TypeScript + Tailwind, xterm.js console, CodeMirror editor
-deploy/     Dockerfile, Kubernetes manifests, config example
+charts/     Helm chart
+deploy/     config example for ./deploy.sh
 docs/       logo and banner
 ```
 
 ## Notes & limitations
 
 - The file manager and backups read `local-path` volumes directly, so the panel is pinned to the node that holds
-  them (`KUBEPILOT_NODE`). Multi-node storage would need a CSI driver with a file API.
+  them (`storage.node`). Multi-node storage would need a CSI driver with a file API.
 - Java heap is set to the memory limit minus max(640 MB, 20 %) to avoid OOM kills; templates get it as `SERVER_JVM_MEMORY`.
 - Disk limits are soft: usage is measured by the panel and a server over its quota can't be started.
 
