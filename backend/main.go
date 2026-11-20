@@ -60,7 +60,7 @@ func main() {
 
 	if args := flag.Args(); len(args) > 0 {
 		if err := runCLI(db, args); err != nil {
-			fmt.Fprintln(os.Stderr, "erreur:", err)
+			fmt.Fprintln(os.Stderr, "error:", err)
 			os.Exit(1)
 		}
 		return
@@ -116,7 +116,7 @@ func runCLI(db *DB, args []string) error {
 		if err != nil {
 			return err
 		}
-		fmt.Printf("Utilisateur créé : %s (id %d, admin=%v)\n", u.Username, u.ID, u.IsAdmin)
+		fmt.Printf("User created: %s (id %d, admin=%v)\n", u.Username, u.ID, u.IsAdmin)
 	case "user:password":
 		fs := flag.NewFlagSet("user:password", flag.ExitOnError)
 		username := fs.String("username", "", "")
@@ -129,9 +129,9 @@ func runCLI(db *DB, args []string) error {
 		if err := db.SetPassword(u.ID, *password); err != nil {
 			return err
 		}
-		fmt.Println("Mot de passe mis à jour pour", u.Username)
+		fmt.Println("Password updated for", u.Username)
 	default:
-		return fmt.Errorf("commande inconnue %q (user:create, user:password)", args[0])
+		return fmt.Errorf("unknown command %q (user:create, user:password)", args[0])
 	}
 	return nil
 }

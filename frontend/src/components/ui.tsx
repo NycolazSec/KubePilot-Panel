@@ -3,6 +3,7 @@ import { CircleAlert, CircleCheck, Info, LoaderCircle, X } from 'lucide-react';
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Status } from '../api';
 import { statusLabel } from '../lib/format';
+import { t } from '../i18n';
 
 // ---------- Button
 
@@ -98,7 +99,7 @@ export function Spinner({ className }: { className?: string }) {
   return <LoaderCircle className={clsx('h-4 w-4 animate-spin text-ink-400', className)} />;
 }
 
-export function Loading({ label = 'Chargement…' }: { label?: string }) {
+export function Loading({ label = t('common.loading') }: { label?: string }) {
   return <div className="flex items-center justify-center gap-2.5 py-14 text-[13px] text-ink-400"><Spinner /> {label}</div>;
 }
 
@@ -182,7 +183,7 @@ export function Modal({ open, onClose, title, children, footer, wide }: { open: 
       <div role="dialog" aria-modal="true" className={clsx('my-8 w-full animate-fade-in rounded-lg border border-ink-600 bg-ink-850 shadow-2xl shadow-black/50', wide === 'xl' ? 'max-w-5xl' : wide ? 'max-w-3xl' : 'max-w-lg')}>
         <div className="flex items-center justify-between border-b border-ink-700 px-5 py-3">
           <h3 className="text-[15px] font-semibold">{title}</h3>
-          <IconButton title="Fermer" onClick={onClose}><X /></IconButton>
+          <IconButton title={t('common.close')} onClick={onClose}><X /></IconButton>
         </div>
         <div className="p-5">{children}</div>
         {footer && <div className="flex justify-end gap-2 rounded-b-lg border-t border-ink-700 bg-ink-900/40 px-5 py-3">{footer}</div>}
@@ -233,15 +234,15 @@ export function UIProvider({ children }: { children: React.ReactNode }) {
       </div>
       <Modal open={!!conf} onClose={() => closeConf(false)} title={conf?.title}
         footer={<>
-          <Button variant="ghost" onClick={() => closeConf(false)}>Annuler</Button>
-          <Button variant={conf?.danger ? 'danger' : 'primary'} onClick={() => closeConf(true)} autoFocus>{conf?.confirm || 'Confirmer'}</Button>
+          <Button variant="ghost" onClick={() => closeConf(false)}>{t('common.cancel')}</Button>
+          <Button variant={conf?.danger ? 'danger' : 'primary'} onClick={() => closeConf(true)} autoFocus>{conf?.confirm || t('common.confirm')}</Button>
         </>}>
         <div className="text-[13px] leading-relaxed text-ink-300">{conf?.body}</div>
       </Modal>
       <Modal open={!!prm} onClose={() => closePrm(null)} title={prm?.title}
         footer={<>
-          <Button variant="ghost" onClick={() => closePrm(null)}>Annuler</Button>
-          <Button variant="primary" onClick={() => closePrm(prm?.value ?? '')}>Valider</Button>
+          <Button variant="ghost" onClick={() => closePrm(null)}>{t('common.cancel')}</Button>
+          <Button variant="primary" onClick={() => closePrm(prm?.value ?? '')}>{t('common.ok')}</Button>
         </>}>
         <form onSubmit={(e) => { e.preventDefault(); closePrm(prm?.value ?? ''); }}>
           {prm?.label && <span className="label">{prm.label}</span>}

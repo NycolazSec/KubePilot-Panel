@@ -23,7 +23,9 @@ type Ctx struct {
 
 func (c *Ctx) Can(p string) bool { return slices.Contains(c.Perms, p) }
 
-func (c *Ctx) log(a *App, action, meta string) { a.db.LogActivity(c.Server.ID, c.User, c.IP, action, meta) }
+func (c *Ctx) log(a *App, action, meta string) {
+	a.db.LogActivity(c.Server.ID, c.User, c.IP, action, meta)
+}
 
 func (a *App) permsFor(u *User, s *Server) ([]string, bool) {
 	if u.IsAdmin || s.OwnerID == u.ID {
@@ -38,21 +40,21 @@ func (a *App) srv(perm string, h srvHandler) http.HandlerFunc {
 	return a.authed(func(w http.ResponseWriter, r *http.Request, u *User) {
 		s, err := a.db.Server(r.PathValue("id"))
 		if err != nil {
-			writeErr(w, err)
+			writeErr(w, r, err)
 			return
 		}
 		perms, ok := a.permsFor(u, s)
 		if !ok {
-			writeErr(w, ErrNotFound) // don't reveal existence
+			writeErr(w, r, ErrNotFound) // don't reveal existence
 			return
 		}
 		if s.Suspended && !u.IsAdmin {
-			writeErr(w, errCode(403, "Ce serveur est suspendu"))
+			writeErr(w, r, errCode(403, "This server is suspended"))
 			return
 		}
 		c := &Ctx{User: u, Server: s, Perms: perms, IP: clientIP(r)}
 		if perm != "" && !c.Can(perm) {
-			writeErr(w, errCode(403, "Permission manquante : "+perm))
+			writeErr(w, r, errCode(403, "Missing permission: %s", perm))
 			return
 		}
 		h(w, r, c)
@@ -62,7 +64,7 @@ func (a *App) srv(perm string, h srvHandler) http.HandlerFunc {
 func (a *App) spec(s *Server) (Spec, error) {
 	t, err := a.db.Template(s.TemplateID)
 	if err != nil {
-		return Spec{}, fmt.Errorf("template : %w", err)
+		return Spec{}, fmt.Errorf("template: %w", err)
 	}
 	allocs, err := a.db.Allocations(s.ID)
 	if err != nil {
@@ -147,7 +149,7 @@ func (a *App) handleServers(w http.ResponseWriter, r *http.Request, u *User) {
 		list, err = a.db.ServersForUser(u.ID)
 	}
 	if err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	host := a.publicHost(r)
@@ -175,10 +177,10 @@ func (a *App) diskUsed(id string) int64 {
 
 func (a *App) startServer(ctx context.Context, s *Server) error {
 	if s.Suspended {
-		return errCode(403, "Serveur suspendu")
+		return errCode(403, "Server suspended")
 	}
 	if used := a.diskUsed(s.ID); s.DiskMB > 0 && used > int64(s.DiskMB)*1024*1024 {
-		return errCode(409, "Limite d'espace disque dépassée : libère de la place avant de démarrer")
+		return errCode(409, "Disk limit exceeded: free some space before starting")
 	}
 	sp, err := a.spec(s)
 	if err != nil {
@@ -213,12 +215,12 @@ func (a *App) waitPodGone(ctx context.Context, id string, timeout time.Duration)
 func (a *App) power(s *Server, action string) error {
 	lock := a.serverLock(s.ID)
 	if !lock.TryLock() {
-		return errCode(409, "Une action est déjà en cours sur ce serveur")
+		return errCode(409, "Another action is already running on this server")
 	}
 	st := a.kube.State(s.ID)
 	if st.Status == "installing" {
 		lock.Unlock()
-		return errCode(409, "Installation en cours, patiente")
+		return errCode(409, "Installation in progress, please wait")
 	}
 	ctx := a.ctx
 	switch action {
@@ -232,15 +234,15 @@ func (a *App) power(s *Server, action string) error {
 			break
 		}
 		defer lock.Unlock()
-		a.hub(s.ID).daemon("Démarrage demandé…")
+		a.hub(s.ID).daemon("Start requested…")
 		return a.startServer(ctx, s)
 	case "stop":
 		defer lock.Unlock()
-		a.hub(s.ID).daemon("Arrêt demandé…")
+		a.hub(s.ID).daemon("Stop requested…")
 		return a.kube.SetReplicas(ctx, s.ID, 0)
 	case "kill":
 		defer lock.Unlock()
-		a.hub(s.ID).daemon("Arrêt forcé (kill)…")
+		a.hub(s.ID).daemon("Forced stop (kill)…")
 		if err := a.kube.SetReplicas(ctx, s.ID, 0); err != nil {
 			return err
 		}
@@ -248,14 +250,14 @@ func (a *App) power(s *Server, action string) error {
 	case "restart":
 	default:
 		lock.Unlock()
-		return errCode(400, "Action inconnue")
+		return errCode(400, "Unknown action")
 	}
 	// restart
 	if s.Suspended {
 		lock.Unlock()
-		return errCode(403, "Serveur suspendu")
+		return errCode(403, "Server suspended")
 	}
-	a.hub(s.ID).daemon("Redémarrage demandé…")
+	a.hub(s.ID).daemon("Restart requested…")
 	go func() {
 		defer lock.Unlock()
 		if err := a.kube.SetReplicas(ctx, s.ID, 0); err != nil {
@@ -275,7 +277,7 @@ func (a *App) power(s *Server, action string) error {
 			return
 		}
 		if err := a.startServer(ctx, fresh); err != nil {
-			a.hub(s.ID).daemon("Erreur au démarrage : " + err.Error())
+			a.hub(s.ID).daemonErr("Failed to start: %s", err.Error())
 		}
 	}()
 	return nil
@@ -284,11 +286,11 @@ func (a *App) power(s *Server, action string) error {
 func (a *App) handlePower(w http.ResponseWriter, r *http.Request, c *Ctx) {
 	var in struct{ Action string }
 	if err := readJSON(r, &in); err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	if err := a.power(c.Server, in.Action); err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	c.log(a, "server.power."+in.Action, "")
@@ -298,14 +300,14 @@ func (a *App) handlePower(w http.ResponseWriter, r *http.Request, c *Ctx) {
 func (a *App) sendCommand(s *Server, cmd string) error {
 	cmd = strings.TrimRight(cmd, "\r\n")
 	if cmd == "" || len(cmd) > 2000 || strings.ContainsAny(cmd, "\n\r") {
-		return errCode(400, "Commande invalide")
+		return errCode(400, "Invalid command")
 	}
 	t, err := a.db.Template(s.TemplateID)
 	if err != nil {
 		return err
 	}
 	if !t.ConsoleInput {
-		return errCode(400, "Ce type de serveur n'accepte pas de commandes console")
+		return errCode(400, "This type of server doesn't accept console commands")
 	}
 	if err := a.kube.SendStdin(s.ID, cmd); err != nil {
 		return errCode(409, err.Error())
@@ -316,11 +318,11 @@ func (a *App) sendCommand(s *Server, cmd string) error {
 func (a *App) handleCommand(w http.ResponseWriter, r *http.Request, c *Ctx) {
 	var in struct{ Command string }
 	if err := readJSON(r, &in); err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	if err := a.sendCommand(c.Server, in.Command); err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	c.log(a, "server.console.command", in.Command)
@@ -337,7 +339,7 @@ type VarView struct {
 func (a *App) handleStartup(w http.ResponseWriter, r *http.Request, c *Ctx) {
 	t, err := a.db.Template(c.Server.TemplateID)
 	if err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	vals := EffectiveVars(c.Server, t)
@@ -364,12 +366,12 @@ func (a *App) handleStartupSave(w http.ResponseWriter, r *http.Request, c *Ctx) 
 		Startup *string           `json:"startup"`
 	}
 	if err := readJSON(r, &in); err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	t, err := a.db.Template(c.Server.TemplateID)
 	if err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	s := c.Server
@@ -388,16 +390,16 @@ func (a *App) handleStartupSave(w http.ResponseWriter, r *http.Request, c *Ctx) 
 			continue
 		}
 		if len(val) > 4096 {
-			writeErr(w, errCode(400, tv.Name+" : valeur trop longue"))
+			writeErr(w, r, errCode(400, "%s: value too long", tv.Name))
 			return
 		}
 		if len(tv.Options) > 0 && !slices.Contains(tv.Options, val) {
-			writeErr(w, errCode(400, tv.Name+" : valeur non autorisée"))
+			writeErr(w, r, errCode(400, "%s: value not allowed", tv.Name))
 			return
 		}
 		if tv.Pattern != "" {
 			if ok, _ := regexp.MatchString(tv.Pattern, val); !ok {
-				writeErr(w, errCode(400, tv.Name+" : format invalide"))
+				writeErr(w, r, errCode(400, "%s: invalid format", tv.Name))
 				return
 			}
 		}
@@ -418,7 +420,7 @@ func (a *App) handleStartupSave(w http.ResponseWriter, r *http.Request, c *Ctx) 
 			}
 		}
 		if !ok || strings.TrimSpace(*in.Image) == "" {
-			writeErr(w, errCode(400, "Image non autorisée"))
+			writeErr(w, r, errCode(400, "Image not allowed"))
 			return
 		}
 		s.Image = strings.TrimSpace(*in.Image)
@@ -429,7 +431,7 @@ func (a *App) handleStartupSave(w http.ResponseWriter, r *http.Request, c *Ctx) 
 		changed = append(changed, "startup")
 	}
 	if err := a.db.UpdateServer(s); err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	c.log(a, "server.startup.update", strings.Join(changed, ", "))
@@ -456,13 +458,13 @@ func (a *App) allocatePort(ctx context.Context) (int, error) {
 			return p, nil
 		}
 	}
-	return 0, errCode(409, fmt.Sprintf("Plus aucun port libre dans la plage %d-%d", st.PortMin, st.PortMax))
+	return 0, errCode(409, "No free port left in the range %d-%d", st.PortMin, st.PortMax)
 }
 
 func (a *App) handleNetwork(w http.ResponseWriter, r *http.Request, c *Ctx) {
 	allocs, err := a.db.Allocations(c.Server.ID)
 	if err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	writeJSON(w, 200, map[string]any{"host": a.publicHost(r), "allocations": allocs, "limit": c.Server.AllocationLimit})
@@ -471,7 +473,7 @@ func (a *App) handleNetwork(w http.ResponseWriter, r *http.Request, c *Ctx) {
 func (a *App) handleAllocAdd(w http.ResponseWriter, r *http.Request, c *Ctx) {
 	var in struct{ Protocol, Notes string }
 	if err := readJSON(r, &in); err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	if in.Protocol != "udp" && in.Protocol != "tcp+udp" {
@@ -487,17 +489,17 @@ func (a *App) handleAllocAdd(w http.ResponseWriter, r *http.Request, c *Ctx) {
 		}
 	}
 	if !c.User.IsAdmin && extra >= c.Server.AllocationLimit {
-		writeErr(w, errCode(403, fmt.Sprintf("Limite de ports supplémentaires atteinte (%d)", c.Server.AllocationLimit)))
+		writeErr(w, r, errCode(403, "Extra port limit reached (%d)", c.Server.AllocationLimit))
 		return
 	}
 	port, err := a.allocatePort(r.Context())
 	if err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	al := &Allocation{Port: port, ServerID: c.Server.ID, Protocol: in.Protocol, Name: "extra", TargetPort: port, IsPrimary: len(allocs) == 0, Notes: truncate(in.Notes, 100)}
 	if err := a.db.InsertAllocation(al); err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	if sp, err := a.spec(c.Server); err == nil {
@@ -514,7 +516,7 @@ func (a *App) handleAllocUpdate(w http.ResponseWriter, r *http.Request, c *Ctx) 
 		Primary bool    `json:"primary"`
 	}
 	if err := readJSON(r, &in); err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	allocs, _ := a.db.Allocations(c.Server.ID)
@@ -525,7 +527,7 @@ func (a *App) handleAllocUpdate(w http.ResponseWriter, r *http.Request, c *Ctx) 
 		}
 	}
 	if target == nil {
-		writeErr(w, ErrNotFound)
+		writeErr(w, r, ErrNotFound)
 		return
 	}
 	if in.Notes != nil {
@@ -542,11 +544,11 @@ func (a *App) handleAllocDelete(w http.ResponseWriter, r *http.Request, c *Ctx) 
 	port, _ := strconv.Atoi(r.PathValue("port"))
 	res, err := a.db.Exec(`DELETE FROM allocations WHERE port=? AND server_id=? AND is_primary=0`, port, c.Server.ID)
 	if err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		writeErr(w, errCode(400, "Port introuvable ou port principal (non supprimable)"))
+		writeErr(w, r, errCode(400, "Port not found, or primary port (can't be removed)"))
 		return
 	}
 	if sp, err := a.spec(c.Server); err == nil {
@@ -568,7 +570,7 @@ func truncate(s string, n int) string {
 func (a *App) handleSubUsers(w http.ResponseWriter, r *http.Request, c *Ctx) {
 	list, err := a.db.SubUsers(c.Server.ID)
 	if err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	writeJSON(w, 200, map[string]any{"users": list, "permissions": AllPerms})
@@ -580,7 +582,7 @@ func (a *App) handleSubUserSave(w http.ResponseWriter, r *http.Request, c *Ctx) 
 		Permissions []string `json:"permissions"`
 	}
 	if err := readJSON(r, &in); err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	perms := cleanPerms(in.Permissions)
@@ -588,7 +590,7 @@ func (a *App) handleSubUserSave(w http.ResponseWriter, r *http.Request, c *Ctx) 
 		uid, _ := strconv.ParseInt(uidStr, 10, 64)
 		res, err := a.db.Exec(`UPDATE server_users SET permissions=? WHERE server_id=? AND user_id=?`, perms, c.Server.ID, uid)
 		if n, _ := res.RowsAffected(); err != nil || n == 0 {
-			writeErr(w, ErrNotFound)
+			writeErr(w, r, ErrNotFound)
 			return
 		}
 		c.log(a, "server.subuser.update", fmt.Sprintf("#%d : %s", uid, perms))
@@ -597,15 +599,15 @@ func (a *App) handleSubUserSave(w http.ResponseWriter, r *http.Request, c *Ctx) 
 	}
 	u, err := a.db.UserByLogin(strings.TrimSpace(in.Username))
 	if err != nil {
-		writeErr(w, errCode(404, "Aucun utilisateur avec ce nom ou cet email"))
+		writeErr(w, r, errCode(404, "No user with this username or email"))
 		return
 	}
 	if u.ID == c.Server.OwnerID {
-		writeErr(w, errCode(400, "C'est déjà le propriétaire"))
+		writeErr(w, r, errCode(400, "This user is already the owner"))
 		return
 	}
 	if _, err := a.db.Exec(`INSERT INTO server_users(server_id,user_id,permissions,created_at) VALUES(?,?,?,?)`, c.Server.ID, u.ID, perms, now()); err != nil {
-		writeErr(w, errCode(400, "Cet utilisateur a déjà accès"))
+		writeErr(w, r, errCode(400, "This user already has access"))
 		return
 	}
 	c.log(a, "server.subuser.create", u.Username+" : "+perms)
@@ -624,7 +626,7 @@ func (a *App) handleSubUserDelete(w http.ResponseWriter, r *http.Request, c *Ctx
 func (a *App) handleServerActivity(w http.ResponseWriter, r *http.Request, c *Ctx) {
 	list, err := a.db.ActivityList(c.Server.ID, 200)
 	if err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	if !c.User.IsAdmin {
@@ -640,17 +642,17 @@ func (a *App) handleServerActivity(w http.ResponseWriter, r *http.Request, c *Ct
 func (a *App) handleServerSettings(w http.ResponseWriter, r *http.Request, c *Ctx) {
 	var in struct{ Name, Description string }
 	if err := readJSON(r, &in); err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	in.Name = strings.TrimSpace(in.Name)
 	if in.Name == "" || len(in.Name) > 60 {
-		writeErr(w, errCode(400, "Nom requis (60 caractères max)"))
+		writeErr(w, r, errCode(400, "Name required (60 characters max)"))
 		return
 	}
 	c.Server.Name, c.Server.Description = in.Name, truncate(strings.TrimSpace(in.Description), 300)
 	if err := a.db.UpdateServer(c.Server); err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	c.log(a, "server.settings.rename", in.Name)
@@ -668,14 +670,14 @@ func (a *App) install(ctx context.Context, s *Server) error {
 	if err := a.kube.EnsureService(ctx, sp); err != nil {
 		return err
 	}
-	a.hub(s.ID).daemon("Lancement de l'installation…")
+	a.hub(s.ID).daemon("Starting the installation…")
 	return a.kube.RunInstall(ctx, sp)
 }
 
 func (a *App) handleReinstall(w http.ResponseWriter, r *http.Request, c *Ctx) {
 	st := a.kube.State(c.Server.ID)
 	if st.Status != "offline" && st.Status != "crashed" {
-		writeErr(w, errCode(409, "Arrête le serveur avant de le réinstaller"))
+		writeErr(w, r, errCode(409, "Stop the server before reinstalling it"))
 		return
 	}
 	if st.Status == "crashed" {
@@ -683,7 +685,7 @@ func (a *App) handleReinstall(w http.ResponseWriter, r *http.Request, c *Ctx) {
 		a.waitPodGone(r.Context(), c.Server.ID, 30*time.Second)
 	}
 	if err := a.install(r.Context(), c.Server); err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	c.log(a, "server.reinstall", "")
@@ -713,15 +715,15 @@ func (in *serverInput) validate() error {
 	in.Name = strings.TrimSpace(in.Name)
 	switch {
 	case in.Name == "" || len(in.Name) > 60:
-		return errCode(400, "Nom requis (60 caractères max)")
+		return errCode(400, "Name required (60 characters max)")
 	case in.Memory < 128 || in.Memory > 262144:
-		return errCode(400, "Mémoire entre 128 Mo et 256 Go")
+		return errCode(400, "Memory must be between 128 MB and 256 GB")
 	case in.CPU != 0 && (in.CPU < 100 || in.CPU > 128000):
-		return errCode(400, "CPU : 0 (illimité) ou entre 100 et 128000 millicores")
+		return errCode(400, "CPU: 0 (unlimited) or between 100 and 128000 millicores")
 	case in.Disk < 256 || in.Disk > 4194304:
-		return errCode(400, "Disque entre 256 Mo et 4 To")
+		return errCode(400, "Disk must be between 256 MB and 4 TB")
 	case in.BackupLimit < 0 || in.BackupLimit > 100 || in.AllocationLimit < 0 || in.AllocationLimit > 50:
-		return errCode(400, "Limites invalides")
+		return errCode(400, "Invalid limits")
 	}
 	return nil
 }
@@ -729,20 +731,20 @@ func (in *serverInput) validate() error {
 func (a *App) handleAdminServerCreate(w http.ResponseWriter, r *http.Request, u *User) {
 	var in serverInput
 	if err := readJSON(r, &in); err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	if err := in.validate(); err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	if _, err := a.db.UserByID(in.OwnerID); err != nil {
-		writeErr(w, errCode(400, "Propriétaire introuvable"))
+		writeErr(w, r, errCode(400, "Owner not found"))
 		return
 	}
 	t, err := a.db.Template(in.TemplateID)
 	if err != nil {
-		writeErr(w, errCode(400, "Template introuvable"))
+		writeErr(w, r, errCode(400, "Template not found"))
 		return
 	}
 	s := &Server{
@@ -762,7 +764,7 @@ func (a *App) handleAdminServerCreate(w http.ResponseWriter, r *http.Request, u 
 	a.allocMu.Lock()
 	if err := a.db.InsertServer(s); err != nil {
 		a.allocMu.Unlock()
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	for i, tp := range t.Ports {
@@ -773,14 +775,14 @@ func (a *App) handleAdminServerCreate(w http.ResponseWriter, r *http.Request, u 
 		if err != nil {
 			a.allocMu.Unlock()
 			_, _ = a.db.Exec(`DELETE FROM servers WHERE id=?`, s.ID)
-			writeErr(w, err)
+			writeErr(w, r, err)
 			return
 		}
 	}
 	a.allocMu.Unlock()
 
 	if err := a.install(r.Context(), s); err != nil {
-		writeErr(w, fmt.Errorf("serveur créé mais l'installation a échoué : %w", err))
+		writeErr(w, r, errCode(500, "Server created, but the installation failed: %s", err.Error()))
 		return
 	}
 	a.db.LogActivity(s.ID, u, clientIP(r), "server.create", s.Name)
@@ -797,12 +799,12 @@ func (a *App) startAfterInstall(id string) {
 		st := a.kube.State(id)
 		if st.Status != "installing" {
 			if st.InstallError {
-				a.hub(id).daemon("L'installation a échoué : démarrage automatique annulé.")
+				a.hub(id).daemonErr("The installation failed: automatic start cancelled.")
 				return
 			}
 			if s, err := a.db.Server(id); err == nil {
 				if err := a.power(s, "start"); err != nil {
-					a.hub(id).daemon("Démarrage automatique impossible : " + err.Error())
+					a.hub(id).daemonErr("Automatic start failed: %s", err.Error())
 				}
 			}
 			return
@@ -814,20 +816,20 @@ func (a *App) startAfterInstall(id string) {
 func (a *App) handleAdminServerUpdate(w http.ResponseWriter, r *http.Request, u *User) {
 	s, err := a.db.Server(r.PathValue("id"))
 	if err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	var in serverInput
 	if err := readJSON(r, &in); err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	if err := in.validate(); err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	if _, err := a.db.UserByID(in.OwnerID); err != nil {
-		writeErr(w, errCode(400, "Propriétaire introuvable"))
+		writeErr(w, r, errCode(400, "Owner not found"))
 		return
 	}
 	wasSuspended := s.Suspended
@@ -841,12 +843,12 @@ func (a *App) handleAdminServerUpdate(w http.ResponseWriter, r *http.Request, u 
 		s.Startup = *in.Startup
 	}
 	if err := a.db.UpdateServer(s); err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	if s.Suspended && !wasSuspended {
 		_ = a.kube.SetReplicas(r.Context(), s.ID, 0)
-		a.hub(s.ID).daemon("Serveur suspendu par un administrateur.")
+		a.hub(s.ID).daemon("Server suspended by an administrator.")
 	}
 	a.db.LogActivity(s.ID, u, clientIP(r), "admin.server.update", s.Name)
 	writeJSON(w, 200, s)
@@ -855,16 +857,16 @@ func (a *App) handleAdminServerUpdate(w http.ResponseWriter, r *http.Request, u 
 func (a *App) handleAdminServerDelete(w http.ResponseWriter, r *http.Request, u *User) {
 	s, err := a.db.Server(r.PathValue("id"))
 	if err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	if err := a.kube.DeleteServer(r.Context(), s.ID); err != nil {
-		writeErr(w, fmt.Errorf("suppression Kubernetes : %w", err))
+		writeErr(w, r, errCode(500, "Kubernetes deletion failed: %s", err.Error()))
 		return
 	}
 	_ = os.RemoveAll(filepath.Join(a.cfg.DataDir, "backups", s.ID))
 	if _, err := a.db.Exec(`DELETE FROM servers WHERE id=?`, s.ID); err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	a.dropHub(s.ID)
@@ -880,7 +882,7 @@ func (a *App) handleAdminServerDelete(w http.ResponseWriter, r *http.Request, u 
 func (a *App) handleAdminUsers(w http.ResponseWriter, r *http.Request, u *User) {
 	users, err := a.db.Users()
 	if err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	counts := map[int64]int{}
@@ -906,31 +908,31 @@ func (a *App) handleAdminUserSave(w http.ResponseWriter, r *http.Request, u *Use
 		IsAdmin                   bool `json:"isAdmin"`
 	}
 	if err := readJSON(r, &in); err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	if uidStr := r.PathValue("uid"); uidStr != "" {
 		uid, _ := strconv.ParseInt(uidStr, 10, 64)
 		target, err := a.db.UserByID(uid)
 		if err != nil {
-			writeErr(w, err)
+			writeErr(w, r, err)
 			return
 		}
 		if target.ID == u.ID && !in.IsAdmin {
-			writeErr(w, errCode(400, "Tu ne peux pas retirer ton propre rôle admin"))
+			writeErr(w, r, errCode(400, "You can't remove your own admin role"))
 			return
 		}
 		if !usernameRe.MatchString(in.Username) || !strings.Contains(in.Email, "@") {
-			writeErr(w, errCode(400, "Nom d'utilisateur ou email invalide"))
+			writeErr(w, r, errCode(400, "Invalid username or email"))
 			return
 		}
 		if _, err := a.db.Exec(`UPDATE users SET username=?, email=?, is_admin=? WHERE id=?`, in.Username, strings.ToLower(in.Email), in.IsAdmin, uid); err != nil {
-			writeErr(w, errCode(400, "Nom d'utilisateur ou email déjà utilisé"))
+			writeErr(w, r, errCode(400, "Username or email already in use"))
 			return
 		}
 		if in.Password != "" {
 			if err := a.db.SetPassword(uid, in.Password); err != nil {
-				writeErr(w, err)
+				writeErr(w, r, err)
 				return
 			}
 			_, _ = a.db.Exec(`DELETE FROM sessions WHERE user_id=?`, uid)
@@ -941,7 +943,7 @@ func (a *App) handleAdminUserSave(w http.ResponseWriter, r *http.Request, u *Use
 	}
 	nu, err := a.db.CreateUser(in.Username, in.Email, in.Password, in.IsAdmin)
 	if err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	a.db.LogActivity("", u, clientIP(r), "admin.user.create", nu.Username)
@@ -951,17 +953,17 @@ func (a *App) handleAdminUserSave(w http.ResponseWriter, r *http.Request, u *Use
 func (a *App) handleAdminUserDelete(w http.ResponseWriter, r *http.Request, u *User) {
 	uid, _ := strconv.ParseInt(r.PathValue("uid"), 10, 64)
 	if uid == u.ID {
-		writeErr(w, errCode(400, "Tu ne peux pas supprimer ton propre compte"))
+		writeErr(w, r, errCode(400, "You can't delete your own account"))
 		return
 	}
 	var n int
 	_ = a.db.QueryRow(`SELECT COUNT(*) FROM servers WHERE owner_id=?`, uid).Scan(&n)
 	if n > 0 {
-		writeErr(w, errCode(400, fmt.Sprintf("Cet utilisateur possède %d serveur(s) : transfère-les ou supprime-les d'abord", n)))
+		writeErr(w, r, errCode(400, "This user owns %d server(s): transfer or delete them first", n))
 		return
 	}
 	if _, err := a.db.Exec(`DELETE FROM users WHERE id=?`, uid); err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	a.db.LogActivity("", u, clientIP(r), "admin.user.delete", fmt.Sprintf("#%d", uid))
@@ -973,7 +975,7 @@ func (a *App) handleAdminUserDelete(w http.ResponseWriter, r *http.Request, u *U
 func (a *App) handleAdminTemplates(w http.ResponseWriter, r *http.Request, u *User) {
 	list, err := a.db.Templates()
 	if err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	writeJSON(w, 200, list)
@@ -982,19 +984,19 @@ func (a *App) handleAdminTemplates(w http.ResponseWriter, r *http.Request, u *Us
 func (a *App) handleAdminTemplateSave(w http.ResponseWriter, r *http.Request, u *User) {
 	var t Template
 	if err := readJSON(r, &t); err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	t.ID = 0
 	if tid := r.PathValue("tid"); tid != "" {
 		t.ID, _ = strconv.ParseInt(tid, 10, 64)
 		if _, err := a.db.Template(t.ID); err != nil {
-			writeErr(w, err)
+			writeErr(w, r, err)
 			return
 		}
 	}
 	if err := a.db.SaveTemplate(&t); err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	a.db.LogActivity("", u, clientIP(r), "admin.template.save", t.Name)
@@ -1006,7 +1008,7 @@ func (a *App) handleAdminTemplateDelete(w http.ResponseWriter, r *http.Request, 
 	var n int
 	_ = a.db.QueryRow(`SELECT COUNT(*) FROM servers WHERE template_id=?`, tid).Scan(&n)
 	if n > 0 {
-		writeErr(w, errCode(400, fmt.Sprintf("%d serveur(s) utilisent ce template", n)))
+		writeErr(w, r, errCode(400, "%d server(s) use this template", n))
 		return
 	}
 	_, _ = a.db.Exec(`DELETE FROM templates WHERE id=?`, tid)
@@ -1023,25 +1025,25 @@ func (a *App) handleAdminSettings(w http.ResponseWriter, r *http.Request, u *Use
 func (a *App) handleAdminSettingsSave(w http.ResponseWriter, r *http.Request, u *User) {
 	var s Settings
 	if err := readJSON(r, &s); err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	s.PanelName = strings.TrimSpace(s.PanelName)
 	if s.PanelName == "" || len(s.PanelName) > 40 {
-		writeErr(w, errCode(400, "Nom du panel requis (40 caractères max)"))
+		writeErr(w, r, errCode(400, "Panel name required (40 characters max)"))
 		return
 	}
 	if s.PortMin < 30000 || s.PortMax > 32767 || s.PortMin > s.PortMax {
-		writeErr(w, errCode(400, "La plage de ports doit être dans 30000-32767 (NodePort Kubernetes)"))
+		writeErr(w, r, errCode(400, "The port range must be within 30000-32767 (Kubernetes NodePorts)"))
 		return
 	}
 	if _, err := time.LoadLocation(s.Timezone); err != nil {
-		writeErr(w, errCode(400, "Fuseau horaire invalide"))
+		writeErr(w, r, errCode(400, "Invalid time zone"))
 		return
 	}
 	s.PublicHost = strings.TrimSpace(s.PublicHost)
 	if err := a.db.SaveSettings(s); err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	a.db.LogActivity("", u, clientIP(r), "admin.settings.update", "")
@@ -1079,7 +1081,7 @@ func (a *App) handleAdminOverview(w http.ResponseWriter, r *http.Request, u *Use
 func (a *App) handleAdminActivity(w http.ResponseWriter, r *http.Request, u *User) {
 	list, err := a.db.ActivityList("", 300)
 	if err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	writeJSON(w, 200, list)

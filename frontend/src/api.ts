@@ -1,3 +1,4 @@
+import { lang, t } from './i18n';
 export class ApiError extends Error {
   status: number;
   constructor(status: number, message: string) {
@@ -9,7 +10,7 @@ export class ApiError extends Error {
 type Opts = { method?: string; body?: unknown; raw?: BodyInit; headers?: Record<string, string>; text?: boolean };
 
 export async function api<T = any>(path: string, opts: Opts = {}): Promise<T> {
-  const headers: Record<string, string> = { 'X-KubePilot': '1', ...(opts.headers || {}) };
+  const headers: Record<string, string> = { 'X-KubePilot': '1', 'X-KubePilot-Lang': lang, ...(opts.headers || {}) };
   let body: BodyInit | undefined = opts.raw;
   if (opts.body !== undefined) {
     headers['Content-Type'] = 'application/json';
@@ -20,7 +21,7 @@ export async function api<T = any>(path: string, opts: Opts = {}): Promise<T> {
     window.dispatchEvent(new Event('kubepilot:unauthorized'));
   }
   if (!res.ok) {
-    let msg = `Erreur ${res.status}`;
+    let msg = t('error.http', { status: res.status });
     try {
       const j = await res.json();
       if (j.error) msg = j.error;

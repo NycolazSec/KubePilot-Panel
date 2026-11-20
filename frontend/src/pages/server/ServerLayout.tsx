@@ -7,6 +7,7 @@ import PowerButtons from '../../components/PowerButtons';
 import { Badge, ErrorBox, Loading, StatusPill, useUI } from '../../components/ui';
 import { copy, duration } from '../../lib/format';
 import TemplateIcon from '../../components/TemplateIcon';
+import { lang, t } from '../../i18n';
 
 type LineListener = (line: string | null) => void; // null = reset (history reloaded)
 
@@ -82,7 +83,7 @@ export default function ServerLayout() {
     let timer: ReturnType<typeof setTimeout>;
     const connect = () => {
       const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-      const sock = new WebSocket(`${proto}://${location.host}/api/servers/${server.id}/ws`);
+      const sock = new WebSocket(`${proto}://${location.host}/api/servers/${server.id}/ws?lang=${lang}`);
       ws.current = sock;
       sock.onopen = () => { retry = 0; setConnected(true); };
       sock.onmessage = (ev) => {
@@ -132,23 +133,23 @@ export default function ServerLayout() {
 
   const can = (p: string) => server.permissions.includes(p);
   const tabs = [
-    { to: '', label: 'Console', icon: SquareTerminal, perm: 'console' },
-    { to: 'files', label: 'Fichiers', icon: Folder, perm: 'files' },
-    { to: 'backups', label: 'Sauvegardes', icon: History, perm: 'backups' },
-    { to: 'schedules', label: 'Tâches', icon: CalendarClock, perm: 'schedules' },
-    { to: 'network', label: 'Réseau', icon: NetIcon, perm: 'network' },
-    { to: 'startup', label: 'Démarrage', icon: Wrench, perm: 'startup' },
-    { to: 'users', label: 'Utilisateurs', icon: Users, perm: 'users' },
-    { to: 'activity', label: 'Activité', icon: Activity, perm: 'activity' },
-    { to: 'settings', label: 'Paramètres', icon: Settings, perm: 'settings' },
-  ].filter((t) => can(t.perm));
+    { to: '', label: t('tab.console'), icon: SquareTerminal, perm: 'console' },
+    { to: 'files', label: t('tab.files'), icon: Folder, perm: 'files' },
+    { to: 'backups', label: t('tab.backups'), icon: History, perm: 'backups' },
+    { to: 'schedules', label: t('tab.schedules'), icon: CalendarClock, perm: 'schedules' },
+    { to: 'network', label: t('tab.network'), icon: NetIcon, perm: 'network' },
+    { to: 'startup', label: t('tab.startup'), icon: Wrench, perm: 'startup' },
+    { to: 'users', label: t('tab.users'), icon: Users, perm: 'users' },
+    { to: 'activity', label: t('tab.activity'), icon: Activity, perm: 'activity' },
+    { to: 'settings', label: t('tab.settings'), icon: Settings, perm: 'settings' },
+  ].filter((tab) => can(tab.perm));
 
   const uptime = state.status === 'running' && state.startedAt ? duration(Date.now() / 1000 - state.startedAt) : null;
 
   return (
     <ServerCtx.Provider value={{ server, reload, state, disk, bus, connected, send, can }}>
-      <nav aria-label="Fil d'Ariane" className="mb-3 flex items-center gap-1.5 text-xs text-ink-400">
-        <Link to="/" className="hover:text-ink-200">Serveurs</Link>
+      <nav aria-label={t('common.breadcrumb')} className="mb-3 flex items-center gap-1.5 text-xs text-ink-400">
+        <Link to="/" className="hover:text-ink-200">{t('nav.servers')}</Link>
         <ChevronRight className="h-3 w-3 text-ink-500" />
         <span className="truncate text-ink-200">{server.name}</span>
       </nav>
@@ -158,17 +159,17 @@ export default function ServerLayout() {
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2.5">
               <h1 className="truncate text-xl font-semibold tracking-tight">{server.name}</h1>
-              {server.suspended ? <Badge color="red">Suspendu</Badge> : <StatusPill status={state.status} />}
+              {server.suspended ? <Badge color="red">{t('server.suspended')}</Badge> : <StatusPill status={state.status} />}
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-400">
               <span>{server.template}</span>
               {server.address && <>
                 <span className="text-ink-600">•</span>
-                <button onClick={async () => { await copy(server.address); toast('Adresse copiée'); }} className="inline-flex items-center gap-1 font-mono text-ink-300 hover:text-ink-100" title="Copier l'adresse">
+                <button onClick={async () => { await copy(server.address); toast(t('common.addressCopied')); }} className="inline-flex items-center gap-1 font-mono text-ink-300 hover:text-ink-100" title={t('server.copyAddress')}>
                   {server.address}<Copy className="h-3 w-3" />
                 </button>
               </>}
-              {uptime && <><span className="text-ink-600">•</span><span className="tabular-nums">En ligne depuis {uptime}</span></>}
+              {uptime && <><span className="text-ink-600">•</span><span className="tabular-nums">{t('server.onlineFor', { duration: uptime })}</span></>}
               <span className="text-ink-600">•</span>
               <span className="font-mono text-ink-500">{server.id}</span>
             </div>
@@ -180,14 +181,14 @@ export default function ServerLayout() {
         <div className={clsx('mb-4 rounded-md border px-3 py-2 text-xs', state.status === 'crashed' ? 'border-red-500/30 bg-red-500/[.07] text-red-200' : 'border-amber-500/30 bg-amber-500/[.07] text-amber-200')}>{state.reason}</div>
       )}
       {state.installError && state.status === 'offline' && (
-        <div className="mb-4 rounded-md border border-red-500/30 bg-red-500/[.07] px-3 py-2 text-xs text-red-200">La dernière installation a échoué. Consulte la console puis réinstalle depuis Paramètres.</div>
+        <div className="mb-4 rounded-md border border-red-500/30 bg-red-500/[.07] px-3 py-2 text-xs text-red-200">{t('server.installFailed')}</div>
       )}
       <nav className="mb-5 flex gap-0.5 overflow-x-auto border-b border-ink-700">
-        {tabs.map((t) => (
-          <NavLink key={t.to} to={t.to} end={t.to === ''}
+        {tabs.map((tab) => (
+          <NavLink key={tab.to} to={tab.to} end={tab.to === ''}
             className={({ isActive }) => clsx('-mb-px flex h-10 shrink-0 items-center gap-2 border-b-2 px-3 text-[13px] font-medium transition-colors',
               isActive ? 'border-brand-500 text-ink-100' : 'border-transparent text-ink-400 hover:text-ink-200')}>
-            <t.icon className="h-4 w-4" /> {t.label}
+            <tab.icon className="h-4 w-4" /> {tab.label}
           </NavLink>
         ))}
       </nav>

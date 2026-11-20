@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { get, ImageOption, put, TemplateVar } from '../../api';
 import { Button, Card, ErrorBox, Field, Loading, useLoad, useUI } from '../../components/ui';
 import { useServer } from './ServerLayout';
+import { t } from '../../i18n';
 
 type Var = TemplateVar & { value: string };
 type Data = { startup: string; image: string; images: ImageOption[]; vars: Var[]; dataPath: string; canEditAll: boolean };
@@ -32,7 +33,7 @@ export default function Startup() {
     try {
       const changed = Object.fromEntries(data.vars.filter((v) => env[v.key] !== v.value).map((v) => [v.key, env[v.key]]));
       const r = await put<{ restartRequired: boolean }>(`/servers/${server.id}/startup`, { env: changed, image, ...(data.canEditAll ? { startup } : {}) });
-      toast(r.restartRequired ? 'Enregistré : redémarre le serveur pour appliquer' : 'Enregistré', r.restartRequired ? 'info' : 'ok');
+      toast(r.restartRequired ? t('startup.savedRestart') : t('common.saved'), r.restartRequired ? 'info' : 'ok');
       reload(true);
     } catch (e: any) { toast(e.message, 'err'); } finally { setBusy(false); }
   };
@@ -41,9 +42,9 @@ export default function Startup() {
 
   return (
     <div className="space-y-5">
-      <Card title="Configuration de démarrage" actions={<Button size="sm" variant="primary" icon={<Save className="h-3.5 w-3.5" />} loading={busy} disabled={!dirty} onClick={save}>Enregistrer</Button>}>
+      <Card title={t('startup.title')} actions={<Button size="sm" variant="primary" icon={<Save className="h-3.5 w-3.5" />} loading={busy} disabled={!dirty} onClick={save}>{t('common.save')}</Button>}>
         <div className="grid gap-4 md:grid-cols-2">
-          <Field label="Image Docker" hint={`Dossier des données dans le conteneur : ${data.dataPath}`}>
+          <Field label={t('startup.image')} hint={t('startup.dataPath', { path: data.dataPath })}>
             {data.canEditAll ? (
               <input className="input font-mono" list="images" value={image} onChange={(e) => setImage(e.target.value)} />
             ) : (
@@ -56,7 +57,7 @@ export default function Startup() {
           </Field>
         </div>
         {(data.startup || data.canEditAll) && (
-          <Field label="Commande de démarrage" className="mt-4" hint={data.canEditAll ? 'Script shell (sh -c). Vide = commande par défaut de l\'image. Les variables sont accessibles avec $NOM.' : undefined}>
+          <Field label={t('startup.command')} className="mt-4" hint={data.canEditAll ? t('startup.commandHint') : undefined}>
             <textarea className="input min-h-[110px] font-mono text-xs" value={startup} readOnly={!data.canEditAll} onChange={(e) => setStartup(e.target.value)} spellCheck={false} />
           </Field>
         )}

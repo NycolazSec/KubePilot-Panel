@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { post } from '../api';
 import { useAuth } from '../main';
+import { t } from '../i18n';
 
 export function Logo({ name, size = 28 }: { name: string; size?: number }) {
   return (
@@ -45,18 +46,18 @@ export default function Layout() {
 
   const nav = (
     <nav onClick={() => setOpen(false)}>
-      <Section label="Espace">
-        <Item to="/" end icon={Server}>Serveurs</Item>
-        <Item to="/account" icon={User}>Mon compte</Item>
+      <Section label={t('nav.workspace')}>
+        <Item to="/" end icon={Server}>{t('nav.servers')}</Item>
+        <Item to="/account" icon={User}>{t('nav.account')}</Item>
       </Section>
       {me?.user.isAdmin && (
-        <Section label="Administration">
-          <Item to="/admin" end icon={Gauge}>Vue d'ensemble</Item>
-          <Item to="/admin/servers" icon={Boxes}>Serveurs</Item>
-          <Item to="/admin/users" icon={Users}>Utilisateurs</Item>
-          <Item to="/admin/templates" icon={Layers}>Templates</Item>
-          <Item to="/admin/settings" icon={Settings}>Réglages</Item>
-          <Item to="/admin/activity" icon={Activity}>Journal</Item>
+        <Section label={t('nav.admin')}>
+          <Item to="/admin" end icon={Gauge}>{t('nav.overview')}</Item>
+          <Item to="/admin/servers" icon={Boxes}>{t('nav.servers')}</Item>
+          <Item to="/admin/users" icon={Users}>{t('nav.users')}</Item>
+          <Item to="/admin/templates" icon={Layers}>{t('nav.templates')}</Item>
+          <Item to="/admin/settings" icon={Settings}>{t('nav.settings')}</Item>
+          <Item to="/admin/activity" icon={Activity}>{t('nav.activity')}</Item>
         </Section>
       )}
     </nav>
@@ -69,9 +70,9 @@ export default function Layout() {
       </div>
       <div className="min-w-0 flex-1 leading-tight">
         <p className="truncate text-[13px] font-medium text-ink-100">{me?.user.username}</p>
-        <p className="truncate text-2xs text-ink-400">{me?.user.isAdmin ? 'Administrateur' : 'Utilisateur'}</p>
+        <p className="truncate text-2xs text-ink-400">{me?.user.isAdmin ? t('role.admin') : t('role.user')}</p>
       </div>
-      <button onClick={logout} title="Se déconnecter" aria-label="Se déconnecter" className="rounded-md p-1.5 text-ink-400 hover:bg-ink-800 hover:text-ink-100"><LogOut className="h-4 w-4" /></button>
+      <button onClick={logout} title={t('nav.logout')} aria-label={t('nav.logout')} className="rounded-md p-1.5 text-ink-400 hover:bg-ink-800 hover:text-ink-100"><LogOut className="h-4 w-4" /></button>
     </div>
   );
 
@@ -86,7 +87,7 @@ export default function Layout() {
 
       <div className="fixed inset-x-0 top-0 z-40 flex h-14 items-center justify-between border-b border-ink-700 bg-ink-950 px-4 lg:hidden">
         <Logo name={name} />
-        <button onClick={() => setOpen(!open)} aria-label="Menu" className="rounded-md p-2 text-ink-300 hover:bg-ink-800">{open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}</button>
+        <button onClick={() => setOpen(!open)} aria-label={t('nav.menu')} className="rounded-md p-2 text-ink-300 hover:bg-ink-800">{open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}</button>
       </div>
       {open && (
         <div className="fixed inset-x-0 top-14 z-40 max-h-[calc(100vh-3.5rem)] overflow-y-auto border-b border-ink-700 bg-ink-950 p-3 lg:hidden">

@@ -24,3 +24,5 @@ First public version of KubePilot, the Kubernetes-native game server panel.
 - Multi-arch image (`linux/amd64`, `linux/arm64`) `ghcr.io/nycolazsec/kubepilot-panel`, signed with cosign, with SBOM
   and build provenance.
 - Configurable StorageClass for game volumes (`KUBEPILOT_STORAGE_CLASS`).
+- English and French interface: the language follows the browser and can be changed from the account page or the
+  sign-in page. Server errors and console messages are translated for each viewer. New installs get English templates.

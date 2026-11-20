@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from 'react';
 import { IconButton, useUI } from '../../components/ui';
 import { bytes, cpuPct, duration } from '../../lib/format';
 import { useServer } from './ServerLayout';
+import { t, tn } from '../../i18n';
 
 function Sparkline({ data, max }: { data: number[]; max: number }) {
   if (data.length < 2) return <div className="h-10" />;
@@ -92,7 +93,7 @@ export default function Console() {
     e.preventDefault();
     const c = cmd.trim();
     if (!c) return;
-    if (!send('command', c)) return toast('Console déconnectée, nouvelle tentative…', 'err');
+    if (!send('command', c)) return toast(t('console.disconnected'), 'err');
     term.current?.write(`\x1b[38;5;245m> ${c}\x1b[0m\r\n`);
     const nh = [c, ...hist.filter((x) => x !== c)].slice(0, 50);
     setHist(nh);
@@ -132,17 +133,17 @@ export default function Console() {
         <div className="flex items-center justify-between gap-2 border-b border-ink-700 px-3 py-2">
           <div className="flex items-center gap-2 pl-1 text-xs text-ink-400">
             <span className={clsx('h-1.5 w-1.5 rounded-full', connected ? 'bg-emerald-400' : 'bg-red-500 animate-pulse')} />
-            {connected ? 'Connecté en direct' : 'Reconnexion…'}
+            {connected ? t('console.live') : t('console.reconnecting')}
           </div>
           <div className="flex items-center gap-1">
             {showSearch && (
-              <input autoFocus className="input !h-7 !w-48 text-xs" placeholder="Rechercher…" value={needle}
+              <input autoFocus className="input !h-7 !w-48 text-xs" placeholder={t('common.searchPlaceholder')} value={needle}
                 onChange={(e) => { setNeedle(e.target.value); search.current?.findNext(e.target.value, { incremental: true }); }}
                 onKeyDown={(e) => e.key === 'Enter' && search.current?.findNext(needle)} />
             )}
-            <IconButton title="Rechercher" onClick={() => setShowSearch(!showSearch)}><Search className="h-4 w-4" /></IconButton>
-            <IconButton title="Télécharger les logs" onClick={download}><Download className="h-4 w-4" /></IconButton>
-            <IconButton title="Vider l'affichage" onClick={() => term.current?.clear()}><Eraser className="h-4 w-4" /></IconButton>
+            <IconButton title={t('common.search')} onClick={() => setShowSearch(!showSearch)}><Search className="h-4 w-4" /></IconButton>
+            <IconButton title={t('console.downloadLogs')} onClick={download}><Download className="h-4 w-4" /></IconButton>
+            <IconButton title={t('console.clear')} onClick={() => term.current?.clear()}><Eraser className="h-4 w-4" /></IconButton>
           </div>
         </div>
         <div className="relative min-h-0 flex-1 bg-ink-950">
@@ -151,21 +152,21 @@ export default function Console() {
         <form onSubmit={submit} className="flex h-11 items-center gap-2 border-t border-ink-700 bg-ink-900 px-3">
           <ChevronRight className="h-4 w-4 shrink-0 text-ink-400" />
           <input value={cmd} onChange={(e) => setCmd(e.target.value)} onKeyDown={onKey} disabled={inputDisabled}
-            placeholder={!server.consoleInput ? 'Ce serveur n\'accepte pas de commandes' : inputDisabled ? 'Le serveur doit être démarré pour envoyer des commandes' : 'Tape une commande… (↑ ↓ pour l\'historique)'}
+            placeholder={!server.consoleInput ? t('console.noInput') : inputDisabled ? t('console.mustRun') : t('console.typeCommand')}
             className="min-w-0 flex-1 bg-transparent font-mono text-sm text-ink-100 outline-none placeholder:text-ink-500 disabled:cursor-not-allowed" />
         </form>
       </div>
 
       <div className="grid content-start gap-4 sm:grid-cols-2 xl:grid-cols-1">
-        <Stat icon={<Cpu className="h-3.5 w-3.5" />} label="Processeur" value={off ? '—' : `${cpuPct(state.cpu, server.cpu).toFixed(1)}%`} sub={server.cpu ? `/ ${server.cpu / 1000} vCPU` : '/ illimité'}>
+        <Stat icon={<Cpu className="h-3.5 w-3.5" />} label={t('console.cpu')} value={off ? '—' : `${cpuPct(state.cpu, server.cpu).toFixed(1)}%`} sub={server.cpu ? `/ ${server.cpu / 1000} vCPU` : `/ ${t('common.unlimitedLower')}`}>
           <Sparkline data={cpuHist} max={100} />
         </Stat>
-        <Stat icon={<MemoryStick className="h-3.5 w-3.5" />} label="Mémoire" value={off ? '—' : bytes(state.memory)} sub={`/ ${bytes(memMax, 0)}`}>
+        <Stat icon={<MemoryStick className="h-3.5 w-3.5" />} label={t('common.memory')} value={off ? '—' : bytes(state.memory)} sub={`/ ${bytes(memMax, 0)}`}>
           <Sparkline data={memHist} max={memMax} />
         </Stat>
-        <Stat icon={<HardDrive className="h-3.5 w-3.5" />} label="Disque" value={bytes(disk)} sub={`/ ${bytes(server.disk * 1048576, 0)}`} />
-        <Stat icon={<Timer className="h-3.5 w-3.5" />} label="Disponibilité" value={state.status === 'running' && state.startedAt ? duration(Date.now() / 1000 - state.startedAt) : '—'}
-          sub={state.restarts ? `${state.restarts} redémarrage(s) auto` : undefined} />
+        <Stat icon={<HardDrive className="h-3.5 w-3.5" />} label={t('common.disk')} value={bytes(disk)} sub={`/ ${bytes(server.disk * 1048576, 0)}`} />
+        <Stat icon={<Timer className="h-3.5 w-3.5" />} label={t('console.uptime')} value={state.status === 'running' && state.startedAt ? duration(Date.now() / 1000 - state.startedAt) : '—'}
+          sub={state.restarts ? tn('console.autoRestarts', state.restarts) : undefined} />
       </div>
     </div>
   );

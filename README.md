@@ -14,7 +14,7 @@
 There is no Wings daemon and no Docker socket: **every game server is a Kubernetes `StatefulSet`** with its own
 volume and `NodePort` service, and the panel drives the cluster through the Kubernetes API.
 
-> The web interface is in French 🇫🇷. Companion project: the [KubePilot Discord bot](https://github.com/NycolazSec/KubePilot).
+> The interface is available in **English** and **French** — [add your language](CONTRIBUTING.md#translations)! Companion project: the [KubePilot Discord bot](https://github.com/NycolazSec/KubePilot).
 
 ## Features
 
@@ -123,7 +123,7 @@ docs/       logo and banner
 
 ## Roadmap
 
-Coming next: published images and a Helm chart, English interface, 2FA and API keys (v0.1), then Pterodactyl egg
+Coming next: 2FA and API keys (v0.1), then Pterodactyl egg
 import, SFTP and a public API (v0.2), then multi-node, server transfers and auto-sleep (v0.3).
 See the full [roadmap](ROADMAP.md).
 
