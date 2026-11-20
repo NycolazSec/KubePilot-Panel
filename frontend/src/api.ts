@@ -40,7 +40,7 @@ export const del = <T = any>(p: string) => api<T>(p, { method: 'DELETE' });
 
 // ---------- Types
 
-export interface User { id: number; username: string; email: string; isAdmin: boolean; createdAt: number; servers?: number }
+export interface User { id: number; username: string; email: string; isAdmin: boolean; twoFactor: boolean; createdAt: number; servers?: number }
 export interface Me { user: User; panelName: string; version: string }
 
 export type Status = 'offline' | 'installing' | 'starting' | 'running' | 'stopping' | 'crashed';

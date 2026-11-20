@@ -6,7 +6,7 @@ import { dateTime } from '../../lib/format';
 import { useAuth } from '../../main';
 import { t } from '../../i18n';
 
-type Form = { id?: number; username: string; email: string; password: string; isAdmin: boolean };
+type Form = { id?: number; username: string; email: string; password: string; isAdmin: boolean; twoFactor?: boolean; reset2fa?: boolean };
 
 export default function AdminUsers() {
   const { me } = useAuth();
@@ -44,11 +44,11 @@ export default function AdminUsers() {
                 {data.map((u) => (
                   <tr key={u.id} className="border-b border-ink-800">
                     <td className="px-4 py-3"><div className="font-medium">{u.username}{u.id === me?.user.id && <span className="ml-2 text-xs text-ink-500">{t('users.you')}</span>}</div><div className="text-xs text-ink-400">{u.email}</div></td>
-                    <td className="px-4 py-3">{u.isAdmin ? <Badge color="violet"><Shield className="h-3 w-3" /> {t('users.admin')}</Badge> : <Badge>{t('users.user')}</Badge>}</td>
+                    <td className="px-4 py-3"><div className="flex gap-1">{u.isAdmin ? <Badge color="violet"><Shield className="h-3 w-3" /> {t('users.admin')}</Badge> : <Badge>{t('users.user')}</Badge>}{u.twoFactor && <Badge color="green">{t('users.twofa')}</Badge>}</div></td>
                     <td className="px-4 py-3 text-ink-300">{u.servers}</td>
                     <td className="px-4 py-3 text-xs text-ink-400">{dateTime(u.createdAt)}</td>
                     <td className="px-4 py-2"><div className="flex justify-end gap-1">
-                      <IconButton title={t('common.edit')} onClick={() => setForm({ id: u.id, username: u.username, email: u.email, password: '', isAdmin: u.isAdmin })}><Pencil className="h-4 w-4" /></IconButton>
+                      <IconButton title={t('common.edit')} onClick={() => setForm({ id: u.id, username: u.username, email: u.email, password: '', isAdmin: u.isAdmin, twoFactor: u.twoFactor })}><Pencil className="h-4 w-4" /></IconButton>
                       {u.id !== me?.user.id && <IconButton title={t('common.delete')} className="hover:!text-red-300" onClick={() => remove(u)}><Trash2 className="h-4 w-4" /></IconButton>}
                     </div></td>
                   </tr>
@@ -68,6 +68,7 @@ export default function AdminUsers() {
               <input type="password" className="input" autoComplete="new-password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
             </Field>
             <Toggle checked={form.isAdmin} onChange={(v) => setForm({ ...form, isAdmin: v })} label={t('users.isAdmin')} />
+            {form.twoFactor && <Toggle checked={!!form.reset2fa} onChange={(v) => setForm({ ...form, reset2fa: v })} label={t('users.reset2fa')} />}
           </div>
         )}
       </Modal>
