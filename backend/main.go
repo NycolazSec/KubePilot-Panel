@@ -19,7 +19,7 @@ import (
 //go:embed all:web
 var webFS embed.FS
 
-var version = "1.0.0"
+var version = "dev" // set at build time: -ldflags "-X main.version=…"
 
 type Config struct {
 	Listen        string
@@ -27,6 +27,7 @@ type Config struct {
 	Kubeconfig    string
 	Namespace     string
 	StorageRoot   string
+	StorageClass  string
 	SecureCookies bool
 }
 
@@ -44,6 +45,7 @@ func main() {
 	flag.StringVar(&cfg.Kubeconfig, "kubeconfig", env("KUBECONFIG", ""), "kubeconfig path (empty = in-cluster)")
 	flag.StringVar(&cfg.Namespace, "namespace", env("KUBEPILOT_NAMESPACE", "kubepilot-servers"), "namespace for game servers")
 	flag.StringVar(&cfg.StorageRoot, "storage-root", env("KUBEPILOT_STORAGE_ROOT", "/var/lib/rancher/k3s/storage"), "host path of local-path volumes")
+	flag.StringVar(&cfg.StorageClass, "storage-class", env("KUBEPILOT_STORAGE_CLASS", "local-path"), "StorageClass of game server volumes (hostPath-based provisioner)")
 	secure := flag.Bool("secure-cookies", env("KUBEPILOT_SECURE_COOKIES", "true") == "true", "set Secure flag on cookies")
 	flag.Parse()
 	cfg.SecureCookies = *secure

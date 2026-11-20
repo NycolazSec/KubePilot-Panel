@@ -1,0 +1,53 @@
+# KubePilot Helm chart
+
+Installs [KubePilot](https://github.com/NycolazSec/KubePilot-Panel), the Kubernetes-native game server panel.
+
+```sh
+helm install kubepilot oci://ghcr.io/nycolazsec/charts/kubepilot \
+  --namespace kubepilot-system --create-namespace \
+  --set ingress.host=panel.example.com \
+  --set ingress.clusterIssuer=letsencrypt-prod
+
+# create the first admin account
+kubectl -n kubepilot-system exec deploy/kubepilot -- \
+  kubepilot user:create --username admin --email you@example.com --password 'change-me-please' --admin
+```
+
+Upgrade with `helm upgrade kubepilot oci://ghcr.io/nycolazsec/charts/kubepilot -n kubepilot-system --reuse-values`.
+
+`helm uninstall` removes the panel but **keeps** the game servers namespace and the panel's data volume, so no game
+data is ever lost by accident. Delete them by hand if you really want to.
+
+## Requirements
+
+- Kubernetes ≥ 1.29 with a **hostPath-based storage provisioner** for game volumes
+  (k3s ships `local-path`; elsewhere install [local-path-provisioner](https://github.com/rancher/local-path-provisioner)
+  and set `storage.hostPath=/opt/local-path-provisioner`)
+- [metrics-server](https://github.com/kubernetes-sigs/metrics-server) for CPU / RAM graphs
+- An ingress controller and, for HTTPS, [cert-manager](https://cert-manager.io) with a `ClusterIssuer`
+
+## Values
+
+| Key | Default | Description |
+|---|---|---|
+| `image.repository` | `ghcr.io/nycolazsec/kubepilot-panel` | Panel image |
+| `image.tag` | chart `appVersion` | Image tag |
+| `serversNamespace.name` | `kubepilot-servers` | Namespace of the game servers (kept on uninstall) |
+| `serversNamespace.create` | `true` | Create that namespace, with Pod Security `restricted` |
+| `storage.className` | `local-path` | StorageClass of game volumes (must be hostPath-based) |
+| `storage.hostPath` | `/var/lib/rancher/k3s/storage` | Directory where that provisioner creates volumes on the node |
+| `storage.node` | `""` | Node holding the volumes, where the panel runs. Empty on a single-node cluster |
+| `persistence.size` | `20Gi` | Panel data volume (database + backups) |
+| `persistence.storageClass` | `""` | StorageClass of the panel data volume (empty = default) |
+| `persistence.existingClaim` | `""` | Use an existing PVC for panel data |
+| `ingress.enabled` | `true` | Expose the panel through an Ingress |
+| `ingress.host` | `""` | **Required** when the ingress is enabled: public domain of the panel |
+| `ingress.className` | `""` | IngressClass (empty = cluster default) |
+| `ingress.clusterIssuer` | `""` | cert-manager ClusterIssuer for the TLS certificate |
+| `ingress.annotations` | `{}` | Extra Ingress annotations |
+| `ingress.tls.enabled` | `true` | Serve the panel over HTTPS |
+| `ingress.tls.secretName` | `kubepilot-tls` | Secret holding the certificate |
+| `service.type` / `service.port` | `ClusterIP` / `80` | Panel Service |
+| `secureCookies` | `true` | Send cookies over HTTPS only. Set `false` only to test over plain HTTP |
+| `resources` | 50m / 64Mi → 2 CPU / 1Gi | Panel resources |
+| `extraEnv`, `podAnnotations`, `tolerations` | empty | Extra pod settings |

@@ -1,0 +1,19 @@
+KubePilot {{ .Chart.AppVersion }} is starting in namespace {{ .Release.Namespace }}.
+Game servers will run in namespace {{ .Values.serversNamespace.name }}.
+
+{{- if .Values.ingress.enabled }}
+
+Panel: https://{{ .Values.ingress.host }}
+Point a DNS record for {{ .Values.ingress.host }} at your cluster's ingress.
+{{- else }}
+
+Open the panel locally:
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "kubepilot.fullname" . }} 8080:{{ .Values.service.port }}
+{{- end }}
+
+Create the first admin account:
+  kubectl -n {{ .Release.Namespace }} exec deploy/{{ include "kubepilot.fullname" . }} -- \
+    kubepilot user:create --username admin --email you@example.com --password 'change-me-please' --admin
+
+Players connect to <node address>:<port>. Game ports are NodePorts (30100-30299 by default, configurable in the
+admin settings): open that range (TCP + UDP) if a firewall sits in front of your nodes.

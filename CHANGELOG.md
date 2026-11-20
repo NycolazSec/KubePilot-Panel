@@ -20,3 +20,7 @@ First public version of KubePilot, the Kubernetes-native game server panel.
 - Security: Pod Security `restricted`, NetworkPolicy isolation, least-privilege RBAC, `os.Root` file access, CSRF
   protection, strict CSP, login rate limiting.
 - Open-source license (AGPL-3.0), contribution guide, security policy and public roadmap.
+- Helm chart published to `oci://ghcr.io/nycolazsec/charts/kubepilot`: one-command install on any Kubernetes cluster.
+- Multi-arch image (`linux/amd64`, `linux/arm64`) `ghcr.io/nycolazsec/kubepilot-panel`, signed with cosign, with SBOM
+  and build provenance.
+- Configurable StorageClass for game volumes (`KUBEPILOT_STORAGE_CLASS`).

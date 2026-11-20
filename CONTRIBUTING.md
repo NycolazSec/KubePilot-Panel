@@ -28,7 +28,8 @@ Project layout:
 ```
 backend/    Go: HTTP API, auth, Kubernetes driver (client-go), console hub, files, backups, schedules
 frontend/   React + TypeScript + Tailwind, xterm.js console, CodeMirror editor
-deploy/     Dockerfile, Kubernetes manifests
+charts/     Helm chart
+deploy/     config example for ./deploy.sh (build from source on k3s)
 docs/       logo, banner and documentation
 ```
 

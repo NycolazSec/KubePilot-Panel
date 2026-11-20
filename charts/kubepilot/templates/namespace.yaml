@@ -1,0 +1,14 @@
+{{- if .Values.serversNamespace.create }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.serversNamespace.name }}
+  labels:
+    {{- include "kubepilot.labels" . | nindent 4 }}
+    # Game servers run without root, without capabilities, with seccomp
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+  annotations:
+    # Never delete game servers and their data on uninstall
+    helm.sh/resource-policy: keep
+{{- end }}

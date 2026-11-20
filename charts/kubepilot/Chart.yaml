@@ -1,0 +1,17 @@
+apiVersion: v2
+name: kubepilot
+description: Kubernetes-native game server panel — an open-source alternative to Pterodactyl
+type: application
+# version and appVersion are set from the git tag by the release workflow
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://github.com/NycolazSec/KubePilot-Panel
+sources:
+  - https://github.com/NycolazSec/KubePilot-Panel
+icon: https://raw.githubusercontent.com/NycolazSec/KubePilot-Panel/main/docs/logo-mark.svg
+keywords: [game-server, game-panel, minecraft, pterodactyl-alternative, kubernetes]
+maintainers:
+  - name: NycolazSec
+    url: https://github.com/NycolazSec
+annotations:
+  artifacthub.io/license: AGPL-3.0-only

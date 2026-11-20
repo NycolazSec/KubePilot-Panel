@@ -1,0 +1,32 @@
+{{- if .Values.ingress.enabled }}
+{{- $host := required "ingress.host is required: the public domain of the panel (or set ingress.enabled=false)" .Values.ingress.host }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "kubepilot.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "kubepilot.labels" . | nindent 4 }}
+  {{- if or .Values.ingress.clusterIssuer .Values.ingress.annotations }}
+  annotations:
+    {{- with .Values.ingress.clusterIssuer }}
+    cert-manager.io/cluster-issuer: {{ . | quote }}
+    {{- end }}
+    {{- with .Values.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . | quote }}
+  {{- end }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls: [{ hosts: [{{ $host | quote }}], secretName: {{ .Values.ingress.tls.secretName | quote }} }]
+  {{- end }}
+  rules:
+    - host: {{ $host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend: { service: { name: {{ include "kubepilot.fullname" . }}, port: { name: http } } }
+{{- end }}
