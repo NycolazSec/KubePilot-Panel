@@ -6,6 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- Minecraft router (`minecraftRouter.enabled`, itzg/mc-router): Java servers get `<hostname>.<domain>` on the standard
+  port 25565 — no port to type for players. Hostname picked from the server name, editable in *Network*; domain in the
+  admin settings (wildcard DNS record, DNS only). The NodePort address keeps working.
+
 ## [0.1.0] - 2026-11-20
 
 First public version of KubePilot, the Kubernetes-native game server panel.

@@ -1,0 +1,54 @@
+package main
+
+import "testing"
+
+func TestHostnames(t *testing.T) {
+	app, db := newTestApp(t, false)
+	app.cfg.MinecraftRouter = true
+	java := &Template{Slug: "minecraft-java"}
+	st := Settings{MinecraftDomain: "mc.example.com"}
+	if _, err := db.Exec(`PRAGMA foreign_keys=OFF`); err != nil { // bare server rows, without owner nor template
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO servers(id,name,owner_id,template_id,image,memory_mb,cpu_millis,disk_mb,created_at,hostname) VALUES('aaaa1111','Survie',0,0,'x',1,1,1,0,'survie')`); err != nil {
+		t.Fatal(err)
+	}
+	for name, want := range map[string]string{
+		"Survie":                "bbbb2222", // taken by another server → its ID
+		"Créatif entre potes !": "cr-atif-entre-potes",
+		"Skyblock":              "skyblock",
+		"---":                   "bbbb2222",
+		"a very very long name for a minecraft server": "a-very-very-long-name-for-a-mine",
+	} {
+		if got := app.freeHostname(name, "bbbb2222"); got != want {
+			t.Errorf("freeHostname(%q) = %q, want %q", name, got, want)
+		}
+	}
+	if got := app.freeHostname("Survie", "aaaa1111"); got != "survie" {
+		t.Errorf("a server keeps its own hostname, got %q", got)
+	}
+	s := &Server{ID: "aaaa1111", Hostname: "survie"}
+	if got := app.routedHost(s, java, st); got != "survie.mc.example.com" {
+		t.Errorf("routedHost = %q", got)
+	}
+	if app.routedHost(s, &Template{Slug: "nodejs"}, st) != "" || app.routedHost(s, java, Settings{}) != "" {
+		t.Error("only Minecraft Java servers with a domain are routed")
+	}
+	app.cfg.MinecraftRouter = false
+	if app.routedHost(s, java, st) != "" {
+		t.Error("no router, no routed address")
+	}
+	for _, d := range []string{"mc.example.com", "play.nycolazsec.com"} {
+		if !domainRe.MatchString(d) {
+			t.Errorf("%s must be a valid domain", d)
+		}
+	}
+	for _, d := range []string{"localhost", "-bad.com", "a..b.com", "evil.com/x", "Mc.Example.Com"} {
+		if domainRe.MatchString(d) {
+			t.Errorf("%s must be refused", d)
+		}
+	}
+	if _, err := db.Exec(`INSERT INTO servers(id,name,owner_id,template_id,image,memory_mb,cpu_millis,disk_mb,created_at,hostname) VALUES('cccc3333','x',0,0,'x',1,1,1,0,'survie')`); err == nil {
+		t.Error("two servers can't share a hostname (unique index)")
+	}
+}

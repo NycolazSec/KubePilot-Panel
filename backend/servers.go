@@ -72,7 +72,8 @@ func (a *App) spec(s *Server) (Spec, error) {
 	if err != nil {
 		return Spec{}, err
 	}
-	return Spec{Server: s, Template: t, Allocs: allocs, Settings: a.db.Settings()}, nil
+	st := a.db.Settings()
+	return Spec{Server: s, Template: t, Allocs: allocs, Settings: st, Routed: a.routedHost(s, t, st)}, nil
 }
 
 func (a *App) publicHost(r *http.Request) string {
@@ -102,7 +103,9 @@ type ServerView struct {
 	Address      string        `json:"address"`
 	Allocations  []*Allocation `json:"allocations"`
 	Permissions  []string      `json:"permissions"`
-	Features     []string      `json:"features"` // game-specific pages (see templateFeatures)
+	Features     []string      `json:"features"`     // game-specific pages (see templateFeatures)
+	NodeAddress  string        `json:"nodeAddress"`  // <node>:<NodePort>, always reachable
+	RouterDomain string        `json:"routerDomain"` // set when this server can get a <hostname>.<domain> address
 }
 
 func (a *App) view(s *Server, perms []string, host string, tpls map[int64]*Template, users map[int64]string) ServerView {
@@ -111,6 +114,7 @@ func (a *App) view(s *Server, perms []string, host string, tpls map[int64]*Templ
 		v.Template, v.TemplateSlug, v.ConsoleInput = t.Name, t.Slug, t.ConsoleInput
 	}
 	v.Features = templateFeatures(tpls[s.TemplateID])
+	st := a.db.Settings()
 	a.diskMu.RLock()
 	v.DiskUsed = a.disk[s.ID]
 	a.diskMu.RUnlock()
@@ -120,10 +124,17 @@ func (a *App) view(s *Server, perms []string, host string, tpls map[int64]*Templ
 			v.Address = fmt.Sprintf("%s:%d", host, al.Port)
 		}
 	}
+	v.NodeAddress = v.Address
+	if a.routerAvailable(tpls[s.TemplateID], st) {
+		v.RouterDomain = st.MinecraftDomain
+		if routed := a.routedHost(s, tpls[s.TemplateID], st); routed != "" {
+			v.Address = routed // standard port 25565: no port to type
+		}
+	}
 	if !slices.Contains(perms, "settings") {
 		v.Server = &Server{ID: s.ID, Name: s.Name, Description: s.Description, OwnerID: s.OwnerID, TemplateID: s.TemplateID,
 			Image: s.Image, MemoryMB: s.MemoryMB, CPUMillis: s.CPUMillis, DiskMB: s.DiskMB, BackupLimit: s.BackupLimit,
-			AllocationLimit: s.AllocationLimit, Suspended: s.Suspended, CreatedAt: s.CreatedAt, Env: map[string]string{}}
+			AllocationLimit: s.AllocationLimit, Suspended: s.Suspended, CreatedAt: s.CreatedAt, Env: map[string]string{}, Hostname: s.Hostname}
 	}
 	return v
 }
@@ -765,6 +776,9 @@ func (a *App) handleAdminServerCreate(w http.ResponseWriter, r *http.Request, u 
 	}
 
 	a.allocMu.Lock()
+	if tpl, err := a.db.Template(s.TemplateID); err == nil && a.routerAvailable(tpl, a.db.Settings()) {
+		s.Hostname = a.freeHostname(s.Name, s.ID)
+	}
 	if err := a.db.InsertServer(s); err != nil {
 		a.allocMu.Unlock()
 		writeErr(w, r, err)
@@ -1053,6 +1067,12 @@ func (a *App) handleAdminSettingsSave(w http.ResponseWriter, r *http.Request, u 
 		return
 	}
 	s.PublicHost = strings.TrimSpace(s.PublicHost)
+	s.MinecraftDomain = strings.Trim(strings.ToLower(strings.TrimSpace(s.MinecraftDomain)), ".")
+	if s.MinecraftDomain != "" && !domainRe.MatchString(s.MinecraftDomain) {
+		writeErr(w, r, errCode(400, "Invalid domain"))
+		return
+	}
+	domainChanged := s.MinecraftDomain != a.db.Settings().MinecraftDomain
 	switch s.TwoFactorPolicy {
 	case twoFactorOptional:
 	case twoFactorAdmins, twoFactorEveryone:
@@ -1067,6 +1087,9 @@ func (a *App) handleAdminSettingsSave(w http.ResponseWriter, r *http.Request, u 
 	if err := a.db.SaveSettings(s); err != nil {
 		writeErr(w, r, err)
 		return
+	}
+	if domainChanged {
+		go a.syncRoutes(a.ctx)
 	}
 	a.db.LogActivity("", u, clientIP(r), "admin.settings.update", "")
 	writeJSON(w, 200, s)

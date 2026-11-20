@@ -32,6 +32,8 @@ export default function Network() {
 
   const extra = data ? data.allocations.filter((a) => !a.isPrimary).length : 0;
   return (
+    <div className="space-y-5">
+    {server.routerDomain && <HostnameCard />}
     <Card padded={false} title={t('network.ports')}
       actions={data && (data.limit > 0 || server.permissions.includes('settings')) && (
         <div className="flex items-center gap-2">
@@ -78,6 +80,47 @@ export default function Network() {
           </p>
         </>
       )}
+    </Card>
+    </div>
+  );
+}
+
+// Minecraft router: <hostname>.<domain> on port 25565
+function HostnameCard() {
+  const { server, reload } = useServer();
+  const { toast } = useUI();
+  const [label, setLabel] = useState(server.hostname);
+  const [busy, setBusy] = useState(false);
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      const r = await put<{ address: string }>(`/servers/${server.id}/hostname`, { hostname: label.trim().toLowerCase() });
+      toast(r.address ? t('router.saved', { address: r.address }) : t('common.saved'));
+      reload();
+    } catch (err: any) { toast(err.message, 'err'); } finally { setBusy(false); }
+  };
+  const routed = server.hostname ? `${server.hostname}.${server.routerDomain}` : '';
+  return (
+    <Card title={t('router.title')} description={t('router.description')}>
+      <div className="mb-4 flex flex-wrap items-center gap-3 text-sm">
+        {routed ? <>
+          <span className="text-ink-400">{t('router.current')}</span>
+          <button onClick={async () => { await copy(routed); toast(t('common.addressCopied')); }} className="inline-flex items-center gap-2 rounded-md border border-brand-500/40 bg-brand-500/10 px-3 py-1.5 font-mono text-brand-200 hover:border-brand-400">
+            <Copy className="h-3.5 w-3.5" />{routed}
+          </button>
+          <span className="text-xs text-ink-500">{t('router.fallback', { address: server.nodeAddress })}</span>
+        </> : <span className="text-ink-400">{t('router.none', { address: server.nodeAddress })}</span>}
+      </div>
+      <form onSubmit={save} className="flex flex-wrap items-center gap-2">
+        <div className="flex min-w-0 flex-1 items-center overflow-hidden rounded-md border border-ink-600 bg-ink-900 focus-within:border-brand-500">
+          <input className="min-w-0 flex-1 bg-transparent px-3 py-2 font-mono text-sm text-ink-100 outline-none" value={label} maxLength={32}
+            onChange={(e) => setLabel(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))} placeholder="survie" />
+          <span className="shrink-0 border-l border-ink-700 bg-ink-850 px-3 py-2 font-mono text-sm text-ink-400">.{server.routerDomain}</span>
+        </div>
+        <Button type="submit" variant="primary" loading={busy} disabled={label === server.hostname}>{t('router.save')}</Button>
+      </form>
+      <p className="mt-2 text-xs text-ink-400">{t('router.hint')}</p>
     </Card>
   );
 }

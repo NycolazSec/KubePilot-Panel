@@ -56,6 +56,20 @@ ingress:
     172.64.0.0/13, 131.0.72.0/22, 2400:cb00::/32, 2606:4700::/32, 2803:f800::/32, 2405:b500::/32, 2405:8100::/32,
     2a06:98c0::/29, 2c0f:f248::/32]
 
+# Minecraft router (itzg/mc-router): players join Java servers at <hostname>.<domain> on the standard port 25565
+# instead of <node>:<NodePort>. Set the domain in the admin settings and point a wildcard DNS record
+# (*.<domain>, DNS only — not proxied) at your nodes.
+minecraftRouter:
+  enabled: false
+  image: itzg/mc-router:1.56.5
+  service:
+    # LoadBalancer: k3s' ServiceLB (or MetalLB…) binds the port on the nodes
+    type: LoadBalancer
+    port: 25565
+  resources:
+    requests: { cpu: 10m, memory: 32Mi }
+    limits: { cpu: 500m, memory: 128Mi }
+
 service:
   type: ClusterIP
   port: 80

@@ -30,6 +30,9 @@ export default function AdminSettings() {
         </Field>
         <Field label={t('adminSettings.portMin')} hint={t('adminSettings.portRangeHint')}><input type="number" className="input" value={s.portMin} onChange={(e) => setS({ ...s, portMin: +e.target.value })} /></Field>
         <Field label={t('adminSettings.portMax')}><input type="number" className="input" value={s.portMax} onChange={(e) => setS({ ...s, portMax: +e.target.value })} /></Field>
+        <Field label={t('adminSettings.mcDomain')} hint={t('adminSettings.mcDomainHint')} className="sm:col-span-2">
+          <input className="input font-mono" value={s.minecraftDomain ?? ''} onChange={(e) => setS({ ...s, minecraftDomain: e.target.value.trim().toLowerCase() })} placeholder={t('adminSettings.mcDomainPlaceholder')} />
+        </Field>
         <Field label={t('adminSettings.twofaPolicy')} hint={t('adminSettings.twofaHint')} className="sm:col-span-2">
           <select className="input" value={s.twoFactorPolicy ?? ''} onChange={(e) => setS({ ...s, twoFactorPolicy: e.target.value as Settings['twoFactorPolicy'] })}>
             <option value="">{t('adminSettings.twofaOptional')}</option>

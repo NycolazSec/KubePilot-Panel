@@ -49,6 +49,7 @@ const labels: Record<string, string> = {
   'auth.login': t('act.auth.login'),
   'auth.fail': t('act.auth.fail'),
   'account.password': t('act.account.password'),
+  'server.hostname': t('act.server.hostname'),
   'server.minecraft.kick': t('act.server.minecraft.kick'),
   'server.minecraft.ban': t('act.server.minecraft.ban'),
   'server.minecraft.pardon': t('act.server.minecraft.pardon'),

@@ -57,6 +57,7 @@ func (a *App) startBackground(ctx context.Context) {
 			a.hub(s.ID)
 		}
 	}
+	go a.syncRoutes(ctx) // router annotations follow the current settings
 	go a.diskLoop(ctx)
 	go a.scheduleLoop(ctx)
 	go a.sessionCleanup(ctx)
@@ -410,6 +411,7 @@ func (a *App) routes() http.Handler {
 	m.HandleFunc("GET /api/servers/{id}/network", a.srv("network", a.handleNetwork))
 	m.HandleFunc("POST /api/servers/{id}/network", a.srv("network", a.handleAllocAdd))
 	m.HandleFunc("PUT /api/servers/{id}/network/{port}", a.srv("network", a.handleAllocUpdate))
+	m.HandleFunc("PUT /api/servers/{id}/hostname", a.srv("network", a.handleHostname))
 	m.HandleFunc("DELETE /api/servers/{id}/network/{port}", a.srv("network", a.handleAllocDelete))
 
 	m.HandleFunc("GET /api/servers/{id}/users", a.srv("users", a.handleSubUsers))
