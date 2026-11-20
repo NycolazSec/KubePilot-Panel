@@ -126,10 +126,16 @@ func (a *App) view(s *Server, perms []string, host string, tpls map[int64]*Templ
 		}
 	}
 	v.NodeAddress = v.Address
+	if s.InternalOnly {
+		v.NodeAddress = ""
+	}
 	for _, al := range v.Allocations {
 		if al.IsPrimary {
 			v.Internal = a.kube.InternalAddress(s.ID, al.Port)
 		}
+	}
+	if s.InternalOnly {
+		v.Address = v.Internal
 	}
 	if a.routerAvailable(tpls[s.TemplateID], st) {
 		v.RouterDomain = st.MinecraftDomain
@@ -140,7 +146,7 @@ func (a *App) view(s *Server, perms []string, host string, tpls map[int64]*Templ
 	if !slices.Contains(perms, "settings") {
 		v.Server = &Server{ID: s.ID, Name: s.Name, Description: s.Description, OwnerID: s.OwnerID, TemplateID: s.TemplateID,
 			Image: s.Image, MemoryMB: s.MemoryMB, CPUMillis: s.CPUMillis, DiskMB: s.DiskMB, BackupLimit: s.BackupLimit,
-			AllocationLimit: s.AllocationLimit, Suspended: s.Suspended, CreatedAt: s.CreatedAt, Env: map[string]string{}, Hostname: s.Hostname}
+			AllocationLimit: s.AllocationLimit, Suspended: s.Suspended, CreatedAt: s.CreatedAt, Env: map[string]string{}, Hostname: s.Hostname, InternalOnly: s.InternalOnly}
 	}
 	return v
 }

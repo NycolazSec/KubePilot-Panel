@@ -431,13 +431,11 @@ func (k *Kube) EnsureService(ctx context.Context, sp Spec) error {
 			if sp.Routed != "" && a.IsPrimary && proto == corev1.ProtocolTCP {
 				name = "mc-router" // the port mc-router connects to
 			}
-			ports = append(ports, corev1.ServicePort{
-				Name:       name,
-				Protocol:   proto,
-				Port:       int32(a.Port),
-				TargetPort: intstr.FromInt(a.TargetPort),
-				NodePort:   int32(a.Port),
-			})
+			sport := corev1.ServicePort{Name: name, Protocol: proto, Port: int32(a.Port), TargetPort: intstr.FromInt(a.TargetPort)}
+			if !sp.Server.InternalOnly {
+				sport.NodePort = int32(a.Port)
+			}
+			ports = append(ports, sport)
 		}
 	}
 	cur, err := api.Get(ctx, name, metav1.GetOptions{})
@@ -452,6 +450,9 @@ func (k *Kube) EnsureService(ctx context.Context, sp Spec) error {
 		Selector:              map[string]string{lblServer: sp.Server.ID, lblRole: "server"},
 		Ports:                 ports,
 		ExternalTrafficPolicy: corev1.ServiceExternalTrafficPolicyLocal,
+	}
+	if sp.Server.InternalOnly { // reachable through its ClusterIP only (the owner's other servers)
+		spec.Type, spec.ExternalTrafficPolicy = corev1.ServiceTypeClusterIP, ""
 	}
 	annotations := map[string]string{}
 	if sp.Routed != "" {

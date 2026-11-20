@@ -139,6 +139,9 @@ func openDB(path string) (*DB, error) {
 	if err := db.addColumn("servers", "hostname", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		return nil, err
 	}
+	if err := db.addColumn("servers", "internal_only", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return nil, err
+	}
 	if _, err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS servers_hostname ON servers(hostname) WHERE hostname<>''`); err != nil {
 		return nil, err
 	}
@@ -541,16 +544,17 @@ type Server struct {
 	AllocationLimit int               `json:"allocationLimit"`
 	Suspended       bool              `json:"suspended"`
 	CreatedAt       int64             `json:"createdAt"`
-	Hostname        string            `json:"hostname"` // Minecraft router: <hostname>.<minecraftDomain>
+	Hostname        string            `json:"hostname"`     // Minecraft router: <hostname>.<minecraftDomain>
+	InternalOnly    bool              `json:"internalOnly"` // no public port: only the owner's other servers reach it
 }
 
-const serverCols = `id, name, description, owner_id, template_id, image, startup, env, memory_mb, cpu_millis, disk_mb, backup_limit, allocation_limit, suspended, created_at, hostname`
+const serverCols = `id, name, description, owner_id, template_id, image, startup, env, memory_mb, cpu_millis, disk_mb, backup_limit, allocation_limit, suspended, created_at, hostname, internal_only`
 
 func scanServer(row interface{ Scan(...any) error }) (*Server, error) {
 	s := &Server{}
 	var env string
 	if err := row.Scan(&s.ID, &s.Name, &s.Description, &s.OwnerID, &s.TemplateID, &s.Image, &s.Startup, &env,
-		&s.MemoryMB, &s.CPUMillis, &s.DiskMB, &s.BackupLimit, &s.AllocationLimit, &s.Suspended, &s.CreatedAt, &s.Hostname); err != nil {
+		&s.MemoryMB, &s.CPUMillis, &s.DiskMB, &s.BackupLimit, &s.AllocationLimit, &s.Suspended, &s.CreatedAt, &s.Hostname, &s.InternalOnly); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}
@@ -592,9 +596,9 @@ func (db *DB) ServersForUser(uid int64) ([]*Server, error) {
 
 func (db *DB) InsertServer(s *Server) error {
 	env, _ := json.Marshal(s.Env)
-	_, err := db.Exec(`INSERT INTO servers(`+serverCols+`) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+	_, err := db.Exec(`INSERT INTO servers(`+serverCols+`) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		s.ID, s.Name, s.Description, s.OwnerID, s.TemplateID, s.Image, s.Startup, string(env),
-		s.MemoryMB, s.CPUMillis, s.DiskMB, s.BackupLimit, s.AllocationLimit, s.Suspended, s.CreatedAt, s.Hostname)
+		s.MemoryMB, s.CPUMillis, s.DiskMB, s.BackupLimit, s.AllocationLimit, s.Suspended, s.CreatedAt, s.Hostname, s.InternalOnly)
 	return err
 }
 

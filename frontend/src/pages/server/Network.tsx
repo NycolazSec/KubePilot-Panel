@@ -1,7 +1,7 @@
 import { Copy, Network as NetIcon, Plus, Star, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { Allocation, del, get, post, put } from '../../api';
-import { Badge, Button, Card, Empty, ErrorBox, IconButton, Loading, useLoad, useUI } from '../../components/ui';
+import { Badge, Button, Card, Empty, ErrorBox, IconButton, Loading, Toggle, useLoad, useUI } from '../../components/ui';
 import { copy } from '../../lib/format';
 import { useServer } from './ServerLayout';
 import { t } from '../../i18n';
@@ -35,7 +35,11 @@ export default function Network() {
     <div className="space-y-5">
     {server.routerDomain && <HostnameCard />}
     {server.internalAddress && (
-      <Card title={t('network.internal')} description={t('network.internalHint')}>
+      <Card title={t('network.internal')} description={t('network.internalHint')}
+        actions={<Toggle checked={!server.internalOnly} label={t('network.public')} onChange={async (pub) => {
+          try { await put(`/servers/${server.id}/exposure`, { internalOnly: !pub }); toast(t('network.exposureSaved')); reloadServer(); reload(true); } catch (e: any) { toast(e.message, 'err'); }
+        }} />}>
+        {server.internalOnly && <p className="mb-3 text-[13px] text-amber-300">{t('network.internalOnlyOn')}</p>}
         <button onClick={async () => { await copy(server.internalAddress); toast(t('common.addressCopied')); }}
           className="inline-flex max-w-full items-center gap-2 break-all rounded-md border border-ink-700 bg-ink-950 px-3 py-1.5 text-left font-mono text-sm text-ink-200 hover:border-ink-500">
           <Copy className="h-3.5 w-3.5 shrink-0 text-ink-400" />{server.internalAddress}

@@ -8,6 +8,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
+- "Internal only" servers (*Network* → *Reachable from the Internet* off): no public port at all, only the owner's
+  other servers reach them — for a Lavalink, a database… Switching keeps the internal address and live connections.
+
 - Internal network between the servers of one owner (a bot and its Lavalink, a game and its database…): each
   server shows its internal address in *Network*; other users' servers stay unreachable.
 
