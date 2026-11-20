@@ -45,7 +45,7 @@ const (
 	installCtr = "install"
 )
 
-var ErrNoVolume = errors.New("le volume du serveur n'existe pas encore (installation en cours ?)")
+var ErrNoVolume = errors.New("The server's volume doesn't exist yet (installation in progress?)")
 
 func stsName(id string) string { return "srv-" + id }
 func pvcName(id string) string { return "srv-" + id + "-data" }
@@ -472,7 +472,7 @@ func (k *Kube) RunInstall(ctx context.Context, sp Spec) error {
 	psc, csc := sp.podSecurity()
 	script := t.InstallScript
 	if strings.TrimSpace(script) == "" {
-		script = "echo 'Volume prêt.'"
+		script = "echo 'Volume ready.'"
 	}
 	backoff, ttl, deadline := int32(0), int32(6*3600), int64(1800)
 	tmpLimit := resource.MustParse("1Gi")
@@ -586,11 +586,11 @@ func (k *Kube) DataDir(ctx context.Context, id string) (string, error) {
 	case pv.Spec.Local != nil:
 		p = pv.Spec.Local.Path
 	default:
-		return "", errors.New("type de volume non supporté pour le gestionnaire de fichiers")
+		return "", errors.New("Volume type not supported by the file manager")
 	}
 	p = filepath.Clean(p)
 	if !strings.HasPrefix(p, k.storageRoot+"/") {
-		return "", fmt.Errorf("chemin de volume inattendu : %s", p)
+		return "", errCode(500, "Unexpected volume path: %s", p)
 	}
 	k.mu.Lock()
 	k.pvPaths[id] = p
@@ -693,12 +693,12 @@ func (k *Kube) State(id string) State {
 			st.Status = "crashed"
 			st.Reason = strings.TrimSpace(cs.State.Waiting.Reason + " " + cs.State.Waiting.Message)
 			if cs.LastTerminationState.Terminated != nil {
-				st.Reason = fmt.Sprintf("%s (code de sortie %d)", st.Reason, cs.LastTerminationState.Terminated.ExitCode)
+				st.Reason = fmt.Sprintf("%s (exit code %d)", st.Reason, cs.LastTerminationState.Terminated.ExitCode)
 			}
 		}
 	case cs.State.Terminated != nil:
 		st.Status = "crashed"
-		st.Reason = fmt.Sprintf("Terminé : %s (code %d)", cs.State.Terminated.Reason, cs.State.Terminated.ExitCode)
+		st.Reason = fmt.Sprintf("Exited: %s (code %d)", cs.State.Terminated.Reason, cs.State.Terminated.ExitCode)
 	}
 	return st
 }
@@ -863,7 +863,7 @@ type attachSess struct {
 func (k *Kube) SendStdin(id, line string) error {
 	pod, err := k.pods.Pods(k.ns).Get(podName(id))
 	if err != nil {
-		return errors.New("le serveur n'est pas démarré")
+		return errors.New("The server is not running")
 	}
 	running := false
 	for _, cs := range pod.Status.ContainerStatuses {
@@ -872,7 +872,7 @@ func (k *Kube) SendStdin(id, line string) error {
 		}
 	}
 	if !running {
-		return errors.New("le serveur n'est pas démarré")
+		return errors.New("The server is not running")
 	}
 	write := func() error {
 		k.attachMu.Lock()
@@ -903,10 +903,10 @@ func (k *Kube) SendStdin(id, line string) error {
 		case err := <-res:
 			return err
 		case <-s.done:
-			return errors.New("connexion à la console fermée")
+			return errors.New("Console connection closed")
 		case <-time.After(10 * time.Second):
 			s.cancel()
-			return errors.New("délai dépassé en envoyant la commande")
+			return errors.New("Timed out while sending the command")
 		}
 	}
 	if err := write(); err != nil {

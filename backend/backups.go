@@ -68,7 +68,7 @@ func (a *App) deleteBackup(b *Backup) {
 // createBackup starts a backup. rotate=true deletes the oldest unlocked backup when the limit is reached.
 func (a *App) createBackup(s *Server, name string, rotate bool) (*Backup, error) {
 	if s.BackupLimit <= 0 {
-		return nil, errCode(403, "Les sauvegardes sont désactivées pour ce serveur")
+		return nil, errCode(403, "Backups are disabled for this server")
 	}
 	list, err := a.listBackups(s.ID)
 	if err != nil {
@@ -76,12 +76,12 @@ func (a *App) createBackup(s *Server, name string, rotate bool) (*Backup, error)
 	}
 	for _, b := range list {
 		if b.Status == "pending" {
-			return nil, errCode(409, "Une sauvegarde est déjà en cours")
+			return nil, errCode(409, "A backup is already in progress")
 		}
 	}
 	if len(list) >= s.BackupLimit {
 		if !rotate {
-			return nil, errCode(409, fmt.Sprintf("Limite de %d sauvegardes atteinte : supprimes-en une", s.BackupLimit))
+			return nil, errCode(409, "Backup limit of %d reached: delete one first", s.BackupLimit)
 		}
 		var oldest *Backup
 		for _, b := range list {
@@ -90,7 +90,7 @@ func (a *App) createBackup(s *Server, name string, rotate bool) (*Backup, error)
 			}
 		}
 		if oldest == nil {
-			return nil, errCode(409, "Limite atteinte et toutes les sauvegardes sont verrouillées")
+			return nil, errCode(409, "Limit reached and all backups are locked")
 		}
 		a.deleteBackup(oldest)
 	}
@@ -99,7 +99,7 @@ func (a *App) createBackup(s *Server, name string, rotate bool) (*Backup, error)
 	}
 	name = strings.TrimSpace(name)
 	if name == "" {
-		name = "Sauvegarde du " + time.Now().In(a.loc()).Format("02/01/2006 15:04")
+		name = "Backup " + time.Now().In(a.loc()).Format("2006-01-02 15:04")
 	}
 	b := &Backup{ID: randomID(12), ServerID: s.ID, Name: truncate(name, 80), Status: "pending", CreatedAt: now()}
 	if _, err := a.db.Exec(`INSERT INTO backups(id,server_id,name,status,created_at) VALUES(?,?,?,?,?)`, b.ID, s.ID, b.Name, b.Status, b.CreatedAt); err != nil {
@@ -111,11 +111,11 @@ func (a *App) createBackup(s *Server, name string, rotate bool) (*Backup, error)
 
 func (a *App) runBackup(s *Server, b *Backup) {
 	h := a.hub(s.ID)
-	h.daemon("Sauvegarde « " + b.Name + " » en cours…")
+	h.daemon("Backing up “%s”…", b.Name)
 	fail := func(err error) {
 		_ = os.Remove(a.backupPath(s.ID, b.ID))
 		_, _ = a.db.Exec(`UPDATE backups SET status='failed', error=?, completed_at=? WHERE id=?`, err.Error(), now(), b.ID)
-		h.daemon("Échec de la sauvegarde : " + err.Error())
+		h.daemon("Backup failed: %s", err.Error())
 	}
 	if t, err := a.db.Template(s.TemplateID); err == nil && t.ConsoleInput && strings.HasPrefix(t.Slug, "minecraft") && a.kube.State(s.ID).Status == "running" {
 		if a.kube.SendStdin(s.ID, "save-all flush") == nil {
@@ -158,24 +158,13 @@ func (a *App) runBackup(s *Server, b *Backup) {
 	}
 	st, _ := os.Stat(p)
 	_, _ = a.db.Exec(`UPDATE backups SET status='completed', size=?, completed_at=? WHERE id=?`, st.Size(), now(), b.ID)
-	h.daemon(fmt.Sprintf("Sauvegarde terminée ✔ (%s)", humanBytes(st.Size())))
-}
-
-func humanBytes(n int64) string {
-	f := float64(n)
-	for _, u := range []string{"o", "Ko", "Mo", "Go"} {
-		if f < 1024 {
-			return fmt.Sprintf("%.1f %s", f, u)
-		}
-		f /= 1024
-	}
-	return fmt.Sprintf("%.1f To", f)
+	h.daemon("Backup completed ✔ (%s)", bytesArg(st.Size()))
 }
 
 func (a *App) handleBackups(w http.ResponseWriter, r *http.Request, c *Ctx) {
 	list, err := a.listBackups(c.Server.ID)
 	if err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	writeJSON(w, 200, map[string]any{"backups": list, "limit": c.Server.BackupLimit})
@@ -186,7 +175,7 @@ func (a *App) handleBackupCreate(w http.ResponseWriter, r *http.Request, c *Ctx)
 	_ = readJSON(r, &in)
 	b, err := a.createBackup(c.Server, in.Name, false)
 	if err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	c.log(a, "server.backup.create", b.Name)
@@ -196,12 +185,12 @@ func (a *App) handleBackupCreate(w http.ResponseWriter, r *http.Request, c *Ctx)
 func (a *App) handleBackupDownload(w http.ResponseWriter, r *http.Request, c *Ctx) {
 	b, err := a.getBackup(c.Server.ID, r.PathValue("bid"))
 	if err != nil || b.Status != "completed" {
-		writeErr(w, ErrNotFound)
+		writeErr(w, r, ErrNotFound)
 		return
 	}
 	f, err := os.Open(a.backupPath(b.ServerID, b.ID))
 	if err != nil {
-		writeErr(w, ErrNotFound)
+		writeErr(w, r, ErrNotFound)
 		return
 	}
 	defer f.Close()
@@ -219,21 +208,21 @@ func (a *App) handleBackupRestore(w http.ResponseWriter, r *http.Request, c *Ctx
 	_ = readJSON(r, &in)
 	b, err := a.getBackup(c.Server.ID, r.PathValue("bid"))
 	if err != nil || b.Status != "completed" {
-		writeErr(w, ErrNotFound)
+		writeErr(w, r, ErrNotFound)
 		return
 	}
 	if st := a.kube.State(c.Server.ID).Status; st != "offline" {
-		writeErr(w, errCode(409, "Arrête le serveur avant de restaurer une sauvegarde"))
+		writeErr(w, r, errCode(409, "Stop the server before restoring a backup"))
 		return
 	}
 	lock := a.serverLock(c.Server.ID)
 	if !lock.TryLock() {
-		writeErr(w, errCode(409, "Une action est déjà en cours sur ce serveur"))
+		writeErr(w, r, errCode(409, "Another action is already running on this server"))
 		return
 	}
 	defer lock.Unlock()
 	h := a.hub(c.Server.ID)
-	h.daemon("Restauration de « " + b.Name + " »…")
+	h.daemon("Restoring “%s”…", b.Name)
 	a.withRoot(w, r, c, func(root *os.Root, uid int) error {
 		if in.Truncate {
 			entries, err := fs.ReadDir(root.FS(), ".")
@@ -253,13 +242,13 @@ func (a *App) handleBackupRestore(w http.ResponseWriter, r *http.Request, c *Ctx
 		defer f.Close()
 		gz, err := gzip.NewReader(f)
 		if err != nil {
-			return errCode(400, "Sauvegarde corrompue")
+			return errCode(400, "Corrupted backup")
 		}
 		if err := extractTar(gz, root, ".", uid, 0); err != nil {
-			h.daemon("Échec de la restauration : " + err.Error())
+			h.daemon("Restore failed: %s", err.Error())
 			return err
 		}
-		h.daemon("Restauration terminée ✔")
+		h.daemon("Restore completed ✔")
 		c.log(a, "server.backup.restore", b.Name)
 		go a.refreshDisk(a.ctx, c.Server.ID)
 		writeJSON(w, 200, map[string]bool{"ok": true})
@@ -270,7 +259,7 @@ func (a *App) handleBackupRestore(w http.ResponseWriter, r *http.Request, c *Ctx
 func (a *App) handleBackupLock(w http.ResponseWriter, r *http.Request, c *Ctx) {
 	b, err := a.getBackup(c.Server.ID, r.PathValue("bid"))
 	if err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	_, _ = a.db.Exec(`UPDATE backups SET locked=? WHERE id=?`, !b.Locked, b.ID)
@@ -281,15 +270,15 @@ func (a *App) handleBackupLock(w http.ResponseWriter, r *http.Request, c *Ctx) {
 func (a *App) handleBackupDelete(w http.ResponseWriter, r *http.Request, c *Ctx) {
 	b, err := a.getBackup(c.Server.ID, r.PathValue("bid"))
 	if err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	if b.Locked {
-		writeErr(w, errCode(409, "Sauvegarde verrouillée : déverrouille-la d'abord"))
+		writeErr(w, r, errCode(409, "This backup is locked: unlock it first"))
 		return
 	}
 	if b.Status == "pending" {
-		writeErr(w, errCode(409, "Sauvegarde en cours"))
+		writeErr(w, r, errCode(409, "Backup in progress"))
 		return
 	}
 	a.deleteBackup(b)
@@ -339,7 +328,7 @@ func (a *App) loc() *time.Location {
 func (a *App) nextRun(expr string) (int64, error) {
 	sched, err := cron.ParseStandard(expr)
 	if err != nil {
-		return 0, errCode(400, "Expression cron invalide (format : minute heure jour mois jour-semaine)")
+		return 0, errCode(400, "Invalid cron expression (format: minute hour day month weekday)")
 	}
 	return sched.Next(time.Now().In(a.loc())).Unix(), nil
 }
@@ -347,12 +336,12 @@ func (a *App) nextRun(expr string) (int64, error) {
 func (a *App) handleSchedules(w http.ResponseWriter, r *http.Request, c *Ctx) {
 	rows, err := a.db.Query(`SELECT `+schedCols+` FROM schedules WHERE server_id=? ORDER BY id`, c.Server.ID)
 	if err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	list, err := scanSchedules(rows)
 	if err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	writeJSON(w, 200, map[string]any{"schedules": list, "timezone": a.db.Settings().Timezone})
@@ -361,7 +350,7 @@ func (a *App) handleSchedules(w http.ResponseWriter, r *http.Request, c *Ctx) {
 func (a *App) handleScheduleSave(w http.ResponseWriter, r *http.Request, c *Ctx) {
 	var in Schedule
 	if err := readJSON(r, &in); err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	in.Name = strings.TrimSpace(in.Name)
@@ -371,17 +360,17 @@ func (a *App) handleScheduleSave(w http.ResponseWriter, r *http.Request, c *Ctx)
 	switch in.Action {
 	case "command":
 		if strings.TrimSpace(in.Payload) == "" || strings.ContainsAny(in.Payload, "\r\n") {
-			writeErr(w, errCode(400, "Commande requise (une seule ligne)"))
+			writeErr(w, r, errCode(400, "A command is required (single line)"))
 			return
 		}
 	case "start", "stop", "restart", "backup":
 	default:
-		writeErr(w, errCode(400, "Action invalide"))
+		writeErr(w, r, errCode(400, "Invalid action"))
 		return
 	}
 	next, err := a.nextRun(in.Cron)
 	if err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	if sid := r.PathValue("sid"); sid != "" {
@@ -389,19 +378,19 @@ func (a *App) handleScheduleSave(w http.ResponseWriter, r *http.Request, c *Ctx)
 		res, err := a.db.Exec(`UPDATE schedules SET name=?, cron=?, action=?, payload=?, enabled=?, only_online=?, next_run=? WHERE id=? AND server_id=?`,
 			truncate(in.Name, 60), in.Cron, in.Action, truncate(in.Payload, 1000), in.Enabled, in.OnlyOnline, next, id, c.Server.ID)
 		if n, _ := res.RowsAffected(); err != nil || n == 0 {
-			writeErr(w, ErrNotFound)
+			writeErr(w, r, ErrNotFound)
 			return
 		}
 	} else {
 		var count int
 		_ = a.db.QueryRow(`SELECT COUNT(*) FROM schedules WHERE server_id=?`, c.Server.ID).Scan(&count)
 		if count >= 25 {
-			writeErr(w, errCode(409, "25 tâches maximum par serveur"))
+			writeErr(w, r, errCode(409, "25 schedules maximum per server"))
 			return
 		}
 		if _, err := a.db.Exec(`INSERT INTO schedules(server_id,name,cron,action,payload,enabled,only_online,next_run,created_at) VALUES(?,?,?,?,?,?,?,?,?)`,
 			c.Server.ID, truncate(in.Name, 60), in.Cron, in.Action, truncate(in.Payload, 1000), in.Enabled, in.OnlyOnline, next, now()); err != nil {
-			writeErr(w, err)
+			writeErr(w, r, err)
 			return
 		}
 	}
@@ -420,12 +409,12 @@ func (a *App) handleScheduleRun(w http.ResponseWriter, r *http.Request, c *Ctx) 
 	id, _ := strconv.ParseInt(r.PathValue("sid"), 10, 64)
 	rows, err := a.db.Query(`SELECT `+schedCols+` FROM schedules WHERE id=? AND server_id=?`, id, c.Server.ID)
 	if err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	list, _ := scanSchedules(rows)
 	if len(list) == 0 {
-		writeErr(w, ErrNotFound)
+		writeErr(w, r, ErrNotFound)
 		return
 	}
 	res := a.runSchedule(list[0], true)
@@ -436,15 +425,15 @@ func (a *App) handleScheduleRun(w http.ResponseWriter, r *http.Request, c *Ctx) 
 func (a *App) runSchedule(sc *Schedule, manual bool) string {
 	s, err := a.db.Server(sc.ServerID)
 	if err != nil {
-		return "serveur introuvable"
+		return "error: server not found"
 	}
 	result := "OK"
 	st := a.kube.State(s.ID).Status
 	switch {
 	case s.Suspended:
-		result = "ignoré : serveur suspendu"
+		result = "skipped: suspended"
 	case sc.OnlyOnline && st != "running" && !manual:
-		result = "ignoré : serveur hors ligne"
+		result = "skipped: offline"
 	default:
 		var err error
 		switch sc.Action {
@@ -456,10 +445,17 @@ func (a *App) runSchedule(sc *Schedule, manual bool) string {
 			err = a.power(s, sc.Action)
 		}
 		if err != nil {
-			result = "erreur : " + err.Error()
+			result = "error: " + err.Error()
 		}
 	}
-	a.hub(s.ID).daemon(fmt.Sprintf("Tâche planifiée « %s » : %s", sc.Name, result))
+	switch {
+	case result == "OK":
+		a.hub(s.ID).daemon("Scheduled task “%s”: done", sc.Name)
+	case strings.HasPrefix(result, "skipped"):
+		a.hub(s.ID).daemon("Scheduled task “%s” skipped: the server is suspended or offline", sc.Name)
+	default:
+		a.hub(s.ID).daemonErr("Scheduled task “%s” failed: %s", sc.Name, strings.TrimPrefix(result, "error: "))
+	}
 	next, _ := a.nextRun(sc.Cron)
 	_, _ = a.db.Exec(`UPDATE schedules SET last_run=?, next_run=?, last_result=? WHERE id=?`, now(), next, result, sc.ID)
 	a.db.LogActivity(s.ID, nil, "", "server.schedule.execute", sc.Name+" → "+result)

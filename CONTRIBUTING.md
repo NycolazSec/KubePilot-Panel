@@ -43,13 +43,25 @@ docs/       logo, banner and documentation
 5. Add a line to the `Unreleased` section of [CHANGELOG.md](CHANGELOG.md) for user-visible changes.
 6. Open the pull request and fill in the template. CI must be green before merge.
 
+## Translations
+
+KubePilot speaks English and French. Adding a language takes two files:
+
+1. **Interface**: copy `frontend/src/i18n/en.ts` to `frontend/src/i18n/<code>.ts`, translate the values (keep the
+   `{placeholders}`), then register it in `frontend/src/i18n/index.tsx` (`catalogs` and `languages`).
+   TypeScript refuses to build if a key is missing.
+2. **Server messages** (errors, console messages): copy `backend/locales/fr.json` to `backend/locales/<code>.json` and
+   translate the values — the keys are the English messages. Keep the `%s` / `%d` verbs in the same order:
+   `go test` checks it, and also checks that every message has a translation.
+
 ## Guidelines
 
 - **Security first.** Game servers are untrusted: keep them in the `restricted` Pod Security profile, never give the
   panel broader Kubernetes rights than it needs, and route every file path through `os.Root`.
 - **Kubernetes-native.** Prefer Kubernetes primitives (StatefulSets, Jobs, Services…) over custom daemons.
 - **No new heavy dependencies** without discussing it in an issue first.
-- **User-facing text** goes through the translation files so the interface stays available in every language.
+- **User-facing text** never goes straight into components or handlers: use `t('key')` in the frontend and English
+  messages with `errCode` / `tr` in the backend, so the interface stays available in every language.
 
 ## License
 

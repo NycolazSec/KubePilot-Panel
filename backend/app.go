@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"log"
@@ -85,14 +86,21 @@ func (a *App) sessionCleanup(ctx context.Context) {
 
 // ---------- HTTP helpers
 
+// apiError is an error shown to the user: msg is an English format string, translated by writeErr.
 type apiError struct {
 	code int
 	msg  string
+	args []any
 }
 
-func (e *apiError) Error() string { return e.msg }
+func (e *apiError) Error() string {
+	if len(e.args) > 0 {
+		return fmt.Sprintf(e.msg, e.args...)
+	}
+	return e.msg
+}
 
-func errCode(code int, msg string) error { return &apiError{code, msg} }
+func errCode(code int, msg string, args ...any) error { return &apiError{code, msg, args} }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -100,24 +108,26 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-func writeErr(w http.ResponseWriter, err error) {
+// writeErr answers with an error message in the user's language.
+func writeErr(w http.ResponseWriter, r *http.Request, err error) {
+	lang := langOf(r)
 	var ae *apiError
 	switch {
 	case errors.As(err, &ae):
-		writeJSON(w, ae.code, map[string]string{"error": ae.msg})
+		writeJSON(w, ae.code, map[string]string{"error": trErr(lang, ae)})
 	case errors.Is(err, ErrNotFound):
-		writeJSON(w, 404, map[string]string{"error": "Introuvable"})
+		writeJSON(w, 404, map[string]string{"error": tr(lang, "Not found")})
 	case errors.Is(err, ErrNoVolume):
-		writeJSON(w, 409, map[string]string{"error": err.Error()})
+		writeJSON(w, 409, map[string]string{"error": trErr(lang, err)})
 	default:
-		writeJSON(w, 400, map[string]string{"error": err.Error()})
+		writeJSON(w, 400, map[string]string{"error": trErr(lang, err)})
 	}
 }
 
 func readJSON(r *http.Request, v any) error {
 	body := io.LimitReader(r.Body, 2<<20)
 	if err := json.NewDecoder(body).Decode(v); err != nil {
-		return errCode(400, "JSON invalide")
+		return errCode(400, "Invalid JSON")
 	}
 	return nil
 }
@@ -226,7 +236,7 @@ func (a *App) authed(h authedHandler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		u := a.currentUser(r)
 		if u == nil {
-			writeJSON(w, 401, map[string]string{"error": "Non connecté"})
+			writeErr(w, r, errCode(401, "Not signed in"))
 			return
 		}
 		h(w, r, u)
@@ -236,7 +246,7 @@ func (a *App) authed(h authedHandler) http.HandlerFunc {
 func (a *App) admin(h authedHandler) http.HandlerFunc {
 	return a.authed(func(w http.ResponseWriter, r *http.Request, u *User) {
 		if !u.IsAdmin {
-			writeJSON(w, 403, map[string]string{"error": "Réservé aux administrateurs"})
+			writeErr(w, r, errCode(403, "Administrators only"))
 			return
 		}
 		h(w, r, u)
@@ -252,29 +262,29 @@ var dummyHash = sync.OnceValue(func() string {
 func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 	var in struct{ Login, Password string }
 	if err := readJSON(r, &in); err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	ip := clientIP(r)
 	if !a.limiter.allow(ip) {
-		writeJSON(w, 429, map[string]string{"error": "Trop de tentatives, réessaie dans quelques minutes"})
+		writeErr(w, r, errCode(429, "Too many attempts, try again in a few minutes"))
 		return
 	}
 	u, err := a.db.UserByLogin(strings.TrimSpace(in.Login))
 	if err != nil {
 		(&User{hash: dummyHash()}).CheckPassword(in.Password)
-		writeJSON(w, 401, map[string]string{"error": "Identifiants incorrects"})
+		writeErr(w, r, errCode(401, "Invalid credentials"))
 		return
 	}
 	if !u.CheckPassword(in.Password) {
 		a.db.LogActivity("", u, ip, "auth.fail", "")
-		writeJSON(w, 401, map[string]string{"error": "Identifiants incorrects"})
+		writeErr(w, r, errCode(401, "Invalid credentials"))
 		return
 	}
 	a.limiter.reset(ip)
 	tok, err := a.db.CreateSession(u.ID, ip, r.UserAgent())
 	if err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	http.SetCookie(w, &http.Cookie{
@@ -305,15 +315,15 @@ func (a *App) handleMe(w http.ResponseWriter, r *http.Request, u *User) {
 func (a *App) handlePassword(w http.ResponseWriter, r *http.Request, u *User) {
 	var in struct{ Current, New string }
 	if err := readJSON(r, &in); err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	if !u.CheckPassword(in.Current) {
-		writeErr(w, errCode(400, "Mot de passe actuel incorrect"))
+		writeErr(w, r, errCode(400, "Current password is incorrect"))
 		return
 	}
 	if err := a.db.SetPassword(u.ID, in.New); err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	if c, err := r.Cookie(cookieName); err == nil {
@@ -397,7 +407,7 @@ func (a *App) routes() http.Handler {
 
 	m.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("ok")) })
 	m.Handle("/api/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, 404, map[string]string{"error": "Route inconnue"})
+		writeErr(w, r, errCode(404, "Unknown route"))
 	}))
 	m.Handle("/", a.spa())
 	return a.secure(m)
@@ -417,14 +427,14 @@ func (a *App) secure(next http.Handler) http.Handler {
 		// CSRF: state-changing API calls must carry a custom header (forces a CORS preflight cross-site).
 		if strings.HasPrefix(r.URL.Path, "/api/") && r.Method != http.MethodGet && r.Method != http.MethodHead {
 			if r.Header.Get("X-KubePilot") != "1" {
-				writeJSON(w, 403, map[string]string{"error": "Requête refusée (CSRF)"})
+				writeErr(w, r, errCode(403, "Request refused (CSRF)"))
 				return
 			}
 		}
 		defer func() {
 			if rec := recover(); rec != nil {
 				log.Printf("panic %s %s: %v", r.Method, r.URL.Path, rec)
-				writeJSON(w, 500, map[string]string{"error": "Erreur interne"})
+				writeErr(w, r, errCode(500, "Internal error"))
 			}
 		}()
 		next.ServeHTTP(w, r)

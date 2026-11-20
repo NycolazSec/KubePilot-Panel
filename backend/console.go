@@ -76,9 +76,11 @@ func (h *Hub) push(line string) {
 	h.broadcast(WSMsg{Type: "line", Data: line})
 }
 
-func (h *Hub) daemon(msg string) {
-	h.push("\x1b[38;5;104m[KubePilot]\x1b[0m \x1b[38;5;250m" + msg + "\x1b[0m")
-}
+// daemon writes a panel message in the console (English format string, translated for each viewer).
+func (h *Hub) daemon(msg string, args ...string) { h.push(encodeConsoleMsg(false, msg, args...)) }
+
+// daemonErr writes a panel error in the console.
+func (h *Hub) daemonErr(msg string, args ...string) { h.push(encodeConsoleMsg(true, msg, args...)) }
 
 func (h *Hub) subscribe() (chan WSMsg, []string) {
 	h.mu.Lock()
@@ -95,11 +97,11 @@ func (h *Hub) unsubscribe(ch chan WSMsg) {
 }
 
 var statusText = map[string]string{
-	"starting":   "Démarrage du serveur…",
-	"running":    "Serveur en ligne ✔",
-	"stopping":   "Arrêt du serveur…",
-	"offline":    "Serveur arrêté.",
-	"installing": "Installation en cours…",
+	"starting":   "Starting the server…",
+	"running":    "Server online ✔",
+	"stopping":   "Stopping the server…",
+	"offline":    "Server stopped.",
+	"installing": "Installing…",
 }
 
 func (a *App) watchState(ctx context.Context, h *Hub) {
@@ -115,11 +117,11 @@ func (a *App) watchState(ctx context.Context, h *Hub) {
 		st := a.kube.State(h.id)
 		if st.Status != last.Status || (st.Status == "crashed" && st.Restarts != last.Restarts) {
 			if st.Status == "crashed" {
-				h.push("\x1b[38;5;203m[KubePilot] Le serveur a planté : " + st.Reason + "\x1b[0m")
+				h.daemonErr("The server crashed: %s", st.Reason)
 			} else if last.Status == "installing" && st.InstallError {
-				h.push("\x1b[38;5;203m[KubePilot] L'installation a échoué. Consulte les lignes ci-dessus.\x1b[0m")
+				h.daemonErr("Installation failed. See the lines above.")
 			} else if last.Status == "installing" {
-				h.daemon("Installation terminée ✔")
+				h.daemon("Installation completed ✔")
 			} else if txt, ok := statusText[st.Status]; ok {
 				h.daemon(txt)
 			}
@@ -248,7 +250,19 @@ func (a *App) handleWS(w http.ResponseWriter, r *http.Request, c *Ctx) {
 	ch, history := h.subscribe()
 	defer h.unsubscribe(ch)
 
+	lang := langOf(r)
 	write := func(m WSMsg) error {
+		// panel messages are rendered in this viewer's language
+		switch m.Type {
+		case "line":
+			m.Data = renderConsoleLine(lang, m.Data)
+		case "history":
+			lines := make([]string, len(m.Lines))
+			for i, l := range m.Lines {
+				lines[i] = renderConsoleLine(lang, l)
+			}
+			m.Lines = lines
+		}
 		_ = conn.SetWriteDeadline(time.Now().Add(15 * time.Second))
 		return conn.WriteJSON(m)
 	}
@@ -270,20 +284,20 @@ func (a *App) handleWS(w http.ResponseWriter, r *http.Request, c *Ctx) {
 			switch in.Type {
 			case "command":
 				if !c.Can("console") {
-					err = errCode(403, "Permission console manquante")
+					err = errCode(403, "Missing permission: console")
 				} else if err = a.sendCommand(c.Server, in.Data); err == nil {
 					c.log(a, "server.console.command", in.Data)
 				}
 			case "power":
 				if !c.Can("power") {
-					err = errCode(403, "Permission power manquante")
+					err = errCode(403, "Missing permission: power")
 				} else if err = a.power(c.Server, in.Data); err == nil {
 					c.log(a, "server.power."+in.Data, "")
 				}
 			}
 			if err != nil {
 				select {
-				case out <- WSMsg{Type: "error", Data: err.Error()}:
+				case out <- WSMsg{Type: "error", Data: trErr(lang, err)}:
 				default:
 				}
 			}
@@ -314,7 +328,7 @@ func (a *App) handleWS(w http.ResponseWriter, r *http.Request, c *Ctx) {
 				}
 			case <-recheck.C:
 				if _, err := a.db.SessionUser(tok); err != nil {
-					_ = write(WSMsg{Type: "error", Data: "Session expirée"})
+					_ = write(WSMsg{Type: "error", Data: tr(lang, "Session expired")})
 					return
 				}
 			}

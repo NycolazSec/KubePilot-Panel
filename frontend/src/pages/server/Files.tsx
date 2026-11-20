@@ -16,6 +16,7 @@ import { api, get, FileEntry, post } from '../../api';
 import { Button, Empty, ErrorBox, IconButton, Loading, Modal, useLoad, useUI } from '../../components/ui';
 import { ago, bytes, joinPath } from '../../lib/format';
 import { useServer } from './ServerLayout';
+import { lang, locale, t } from '../../i18n';
 
 const archiveRe = /\.(zip|tar|tar\.gz|tgz)$/i;
 const textRe = /\.(txt|log|json|ya?ml|properties|toml|ini|cfg|conf|env|js|mjs|cjs|ts|py|sh|md|xml|html|css|csv|lang|mcmeta|sk|lua|gitignore|dockerfile)$|^[^.]+$/i;
@@ -47,7 +48,7 @@ function Editor({ path, onClose }: { path: string; onClose: (saved: boolean) => 
   useEffect(() => {
     if (isNew) { setContent(''); return; }
     api<string>(`/servers/${server.id}/files/content?path=${encodeURIComponent(realPath)}`, { text: true })
-      .then((t) => { setContent(t); setOrig(t); })
+      .then((txt) => { setContent(txt); setOrig(txt); })
       .catch((e) => setError(e.message));
   }, [server.id, realPath, isNew]);
 
@@ -57,7 +58,7 @@ function Editor({ path, onClose }: { path: string; onClose: (saved: boolean) => 
     try {
       await api(`/servers/${server.id}/files/content?path=${encodeURIComponent(realPath)}`, { method: 'PUT', raw: content, headers: { 'Content-Type': 'text/plain' } });
       setOrig(content);
-      toast(`${name} enregistré`);
+      toast(t('files.saved', { name }));
     } catch (e: any) {
       toast(e.message, 'err');
     } finally {
@@ -74,16 +75,16 @@ function Editor({ path, onClose }: { path: string; onClose: (saved: boolean) => 
   });
 
   const close = async () => {
-    if (content !== null && content !== orig && !(await confirm({ title: 'Modifications non enregistrées', body: 'Fermer sans enregistrer ?', confirm: 'Fermer', danger: true }))) return;
+    if (content !== null && content !== orig && !(await confirm({ title: t('files.unsavedTitle'), body: t('files.unsavedBody'), confirm: t('common.close'), danger: true }))) return;
     onClose(orig !== '' || isNew);
   };
 
   return (
     <Modal open onClose={close} wide="xl" title={<span className="font-mono text-sm">{realPath}{content !== orig && <span className="ml-2 text-amber-300">●</span>}</span>}
       footer={<>
-        <span className="mr-auto self-center text-xs text-ink-500">Ctrl+S pour enregistrer</span>
-        <Button variant="ghost" onClick={close}>Fermer</Button>
-        <Button variant="primary" icon={<Save className="h-4 w-4" />} loading={saving} onClick={save} disabled={content === null}>Enregistrer</Button>
+        <span className="mr-auto self-center text-xs text-ink-500">{t('files.ctrlS')}</span>
+        <Button variant="ghost" onClick={close}>{t('common.close')}</Button>
+        <Button variant="primary" icon={<Save className="h-4 w-4" />} loading={saving} onClick={save} disabled={content === null}>{t('common.save')}</Button>
       </>}>
       {error ? <ErrorBox error={error} /> : content === null ? <Loading /> : (
         <div className="-m-5 h-[65vh] overflow-hidden border-y border-ink-700">
@@ -123,31 +124,31 @@ export default function Files() {
   };
 
   const newFolder = async () => {
-    const name = await prompt('Nouveau dossier', '', 'Nom du dossier');
-    if (name) run(() => post(`${base}/mkdir`, { path: joinPath(dir, name) }), 'Dossier créé');
+    const name = await prompt(t('files.newFolder'), '', t('files.folderName'));
+    if (name) run(() => post(`${base}/mkdir`, { path: joinPath(dir, name) }), t('files.folderCreated'));
   };
   const newFile = async () => {
-    const name = await prompt('Nouveau fichier', '', 'Nom du fichier');
+    const name = await prompt(t('files.newFile'), '', t('files.fileName'));
     if (name) setEditing('new:' + joinPath(dir, name));
   };
   const rename = async (e: FileEntry) => {
-    const name = await prompt('Renommer', e.name, 'Nouveau nom (ou chemin, ex : ../autre/nom)');
+    const name = await prompt(t('files.rename'), e.name, t('files.renameLabel'));
     if (name && name !== e.name) {
       const to = name.startsWith('/') ? name : joinPath(dir, name);
-      run(() => post(`${base}/rename`, { from: joinPath(dir, e.name), to }), 'Renommé');
+      run(() => post(`${base}/rename`, { from: joinPath(dir, e.name), to }), t('files.renamed'));
     }
   };
   const remove = async (names: string[]) => {
-    if (!(await confirm({ title: `Supprimer ${names.length > 1 ? `${names.length} éléments` : `« ${names[0]} »`} ?`, body: 'Cette action est définitive.', confirm: 'Supprimer', danger: true }))) return;
-    run(() => post(`${base}/delete`, { paths: names.map((n) => joinPath(dir, n)) }), 'Supprimé');
+    if (!(await confirm({ title: names.length > 1 ? t('files.deleteMany', { count: names.length }) : t('files.deleteOne', { name: names[0] }), body: t('common.irreversible'), confirm: t('common.delete'), danger: true }))) return;
+    run(() => post(`${base}/delete`, { paths: names.map((n) => joinPath(dir, n)) }), t('files.deleted'));
     setSelected(new Set());
   };
   const compress = (names: string[]) => run(async () => {
     const r = await post<{ name: string }>(`${base}/compress`, { dir, paths: names.map((n) => joinPath(dir, n)) });
-    toast(`Archive créée : ${r.name}`);
+    toast(t('files.archiveCreated', { name: r.name }));
     setSelected(new Set());
   });
-  const decompress = (e: FileEntry) => run(() => post(`${base}/decompress`, { path: joinPath(dir, e.name) }), 'Archive extraite');
+  const decompress = (e: FileEntry) => run(() => post(`${base}/decompress`, { path: joinPath(dir, e.name) }), t('files.extracted'));
   const download = (name: string) => {
     const a = document.createElement('a');
     a.href = `/api${base}/download?path=${encodeURIComponent(joinPath(dir, name))}`;
@@ -162,15 +163,16 @@ export default function Files() {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', `/api${base}/upload?path=${encodeURIComponent(dir)}`);
     xhr.setRequestHeader('X-KubePilot', '1');
-    const label = list.length > 1 ? `${list.length} fichiers` : list[0].name;
+    xhr.setRequestHeader('X-KubePilot-Lang', lang);
+    const label = list.length > 1 ? t('files.filesCount', { count: list.length }) : list[0].name;
     setUpload({ name: label, pct: 0 });
     xhr.upload.onprogress = (e) => e.lengthComputable && setUpload({ name: label, pct: Math.round((e.loaded / e.total) * 100) });
     xhr.onload = () => {
       setUpload(null);
-      if (xhr.status >= 200 && xhr.status < 300) { toast(`${label} envoyé${list.length > 1 ? 's' : ''}`); reload(true); }
-      else { try { toast(JSON.parse(xhr.responseText).error, 'err'); } catch { toast(`Erreur ${xhr.status}`, 'err'); } }
+      if (xhr.status >= 200 && xhr.status < 300) { toast(t(list.length > 1 ? 'files.uploadedMany' : 'files.uploaded', { name: label })); reload(true); }
+      else { try { toast(JSON.parse(xhr.responseText).error, 'err'); } catch { toast(t('error.http', { status: xhr.status }), 'err'); } }
     };
-    xhr.onerror = () => { setUpload(null); toast('Upload interrompu', 'err'); };
+    xhr.onerror = () => { setUpload(null); toast(t('files.uploadInterrupted'), 'err'); };
     xhr.send(fd);
   };
 
@@ -204,36 +206,36 @@ export default function Files() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {sel.length > 0 && <>
-            <span className="text-xs text-ink-400">{sel.length} sélectionné(s)</span>
-            <Button size="sm" icon={<Archive className="h-3.5 w-3.5" />} onClick={() => compress(sel)}>Compresser</Button>
-            <Button size="sm" variant="danger" icon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => remove(sel)}>Supprimer</Button>
+            <span className="text-xs text-ink-400">{t('files.selected', { count: sel.length })}</span>
+            <Button size="sm" icon={<Archive className="h-3.5 w-3.5" />} onClick={() => compress(sel)}>{t('files.compress')}</Button>
+            <Button size="sm" variant="danger" icon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => remove(sel)}>{t('common.delete')}</Button>
           </>}
-          <IconButton title="Actualiser" onClick={() => reload()}><RefreshCw className="h-4 w-4" /></IconButton>
-          <Button size="sm" icon={<FolderPlus className="h-3.5 w-3.5" />} onClick={newFolder}>Dossier</Button>
-          <Button size="sm" icon={<FilePlus className="h-3.5 w-3.5" />} onClick={newFile}>Fichier</Button>
-          <Button size="sm" variant="primary" icon={<Upload className="h-3.5 w-3.5" />} onClick={() => fileInput.current?.click()}>Envoyer</Button>
+          <IconButton title={t('common.refresh')} onClick={() => reload()}><RefreshCw className="h-4 w-4" /></IconButton>
+          <Button size="sm" icon={<FolderPlus className="h-3.5 w-3.5" />} onClick={newFolder}>{t('files.folder')}</Button>
+          <Button size="sm" icon={<FilePlus className="h-3.5 w-3.5" />} onClick={newFile}>{t('files.file')}</Button>
+          <Button size="sm" variant="primary" icon={<Upload className="h-3.5 w-3.5" />} onClick={() => fileInput.current?.click()}>{t('files.upload')}</Button>
           <input ref={fileInput} type="file" multiple hidden onChange={(e) => { if (e.target.files) uploadFiles(e.target.files); e.target.value = ''; }} />
         </div>
       </div>
 
       {upload && (
         <div className="border-b border-ink-700 bg-ink-900 px-4 py-2 text-xs text-ink-300">
-          Envoi de {upload.name}… {upload.pct}%
+          {t('files.uploading', { name: upload.name, pct: upload.pct })}
           <div className="mt-1.5 h-1 overflow-hidden rounded bg-ink-700"><div className="h-full bg-brand-500 transition-all" style={{ width: `${upload.pct}%` }} /></div>
         </div>
       )}
 
       {error ? <div className="p-4"><ErrorBox error={error} /></div> : loading && !data ? <Loading /> : !data?.length ? (
-        <Empty icon={<Folder className="h-6 w-6" />} title="Dossier vide">Glisse-dépose des fichiers ici pour les envoyer.</Empty>
+        <Empty icon={<Folder className="h-6 w-6" />} title={t('files.emptyTitle')}>{t('files.emptyHint')}</Empty>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-ink-700">
                 <th className="th w-10"><input type="checkbox" className="accent-brand-500" checked={!!all} onChange={() => setSelected(all ? new Set() : new Set(data.map((e) => e.name)))} /></th>
-                <th className="th">Nom</th>
-                <th className="th hidden text-right sm:table-cell">Taille</th>
-                <th className="th hidden text-right md:table-cell">Modifié</th>
+                <th className="th">{t('common.name')}</th>
+                <th className="th hidden text-right sm:table-cell">{t('files.size')}</th>
+                <th className="th hidden text-right md:table-cell">{t('files.modified')}</th>
                 <th className="w-40 px-4 py-2" />
               </tr>
             </thead>
@@ -254,14 +256,14 @@ export default function Files() {
                     </button>
                   </td>
                   <td className="hidden whitespace-nowrap px-4 py-2 text-right font-mono text-xs text-ink-400 sm:table-cell">{e.dir ? '' : bytes(e.size)}</td>
-                  <td className="hidden whitespace-nowrap px-4 py-2 text-right text-xs text-ink-400 md:table-cell" title={new Date(e.modified * 1000).toLocaleString('fr-FR')}>{ago(e.modified)}</td>
+                  <td className="hidden whitespace-nowrap px-4 py-2 text-right text-xs text-ink-400 md:table-cell" title={new Date(e.modified * 1000).toLocaleString(locale)}>{ago(e.modified)}</td>
                   <td className="px-4 py-1">
                     <div className="flex justify-end gap-0.5 opacity-60 group-hover:opacity-100">
-                      {archiveRe.test(e.name) && <IconButton title="Extraire" onClick={() => decompress(e)}><PackageOpen className="h-4 w-4" /></IconButton>}
-                      {!e.dir && textRe.test(e.name) && <IconButton title="Éditer" onClick={() => setEditing(joinPath(dir, e.name))}><FileText className="h-4 w-4" /></IconButton>}
-                      <IconButton title="Renommer / déplacer" onClick={() => rename(e)}><Pencil className="h-4 w-4" /></IconButton>
-                      <IconButton title={e.dir ? 'Télécharger (zip)' : 'Télécharger'} onClick={() => download(e.name)}><Download className="h-4 w-4" /></IconButton>
-                      <IconButton title="Supprimer" className="hover:!text-red-300" onClick={() => remove([e.name])}><Trash2 className="h-4 w-4" /></IconButton>
+                      {archiveRe.test(e.name) && <IconButton title={t('files.extract')} onClick={() => decompress(e)}><PackageOpen className="h-4 w-4" /></IconButton>}
+                      {!e.dir && textRe.test(e.name) && <IconButton title={t('files.edit')} onClick={() => setEditing(joinPath(dir, e.name))}><FileText className="h-4 w-4" /></IconButton>}
+                      <IconButton title={t('files.renameMove')} onClick={() => rename(e)}><Pencil className="h-4 w-4" /></IconButton>
+                      <IconButton title={e.dir ? t('files.downloadZip') : t('common.download')} onClick={() => download(e.name)}><Download className="h-4 w-4" /></IconButton>
+                      <IconButton title={t('common.delete')} className="hover:!text-red-300" onClick={() => remove([e.name])}><Trash2 className="h-4 w-4" /></IconButton>
                     </div>
                   </td>
                 </tr>
@@ -270,7 +272,7 @@ export default function Files() {
           </table>
         </div>
       )}
-      {drag && <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-ink-950/70 text-lg font-medium text-brand-200"><Upload className="mr-3 h-6 w-6" /> Dépose pour envoyer dans {dir}</div>}
+      {drag && <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-ink-950/70 text-lg font-medium text-brand-200"><Upload className="mr-3 h-6 w-6" /> {t('files.dropHere', { dir })}</div>}
       {editing && <Editor path={editing} onClose={(saved) => { setEditing(null); if (saved) reload(true); }} />}
     </div>
   );

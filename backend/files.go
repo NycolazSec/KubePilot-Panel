@@ -62,7 +62,7 @@ type FileEntry struct {
 func (a *App) withRoot(w http.ResponseWriter, r *http.Request, c *Ctx, fn func(root *os.Root, uid int) error) {
 	root, uid, err := a.openRoot(r.Context(), c.Server)
 	if err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	defer root.Close()
@@ -71,14 +71,14 @@ func (a *App) withRoot(w http.ResponseWriter, r *http.Request, c *Ctx, fn func(r
 		if errors.As(err, &pe) {
 			switch {
 			case errors.Is(err, fs.ErrNotExist):
-				err = errCode(404, "Fichier ou dossier introuvable")
+				err = errCode(404, "File or folder not found")
 			case errors.Is(err, fs.ErrExist):
-				err = errCode(409, "Existe déjà")
+				err = errCode(409, "Already exists")
 			default:
-				err = errCode(400, "Opération refusée : "+pe.Err.Error())
+				err = errCode(400, "Operation refused: %s", pe.Err.Error())
 			}
 		}
-		writeErr(w, err)
+		writeErr(w, r, err)
 	}
 }
 
@@ -91,7 +91,7 @@ func (a *App) handleFileList(w http.ResponseWriter, r *http.Request, c *Ctx) {
 		defer f.Close()
 		ents, err := f.ReadDir(-1)
 		if err != nil {
-			return errCode(400, "Ce n'est pas un dossier")
+			return errCode(400, "Not a folder")
 		}
 		out := make([]FileEntry, 0, len(ents))
 		for _, e := range ents {
@@ -128,10 +128,10 @@ func (a *App) handleFileRead(w http.ResponseWriter, r *http.Request, c *Ctx) {
 			return err
 		}
 		if st.IsDir() {
-			return errCode(400, "C'est un dossier")
+			return errCode(400, "This is a folder")
 		}
 		if st.Size() > maxEditSize {
-			return errCode(413, "Fichier trop gros pour l'éditeur (8 Mo max) : télécharge-le")
+			return errCode(413, "File too large for the editor (8 MB max): download it instead")
 		}
 		b, err := io.ReadAll(io.LimitReader(f, maxEditSize))
 		if err != nil {
@@ -142,7 +142,7 @@ func (a *App) handleFileRead(w http.ResponseWriter, r *http.Request, c *Ctx) {
 			head = head[:8000]
 		}
 		if bytes.IndexByte(head, 0) >= 0 {
-			return errCode(415, "Fichier binaire : impossible de l'éditer")
+			return errCode(415, "Binary file: it can't be edited")
 		}
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		_, _ = w.Write(b)
@@ -155,7 +155,7 @@ func chownNew(root *os.Root, p string, uid int) { _ = root.Lchown(p, uid, uid) }
 func (a *App) handleFileWrite(w http.ResponseWriter, r *http.Request, c *Ctx) {
 	p := rel(r.URL.Query().Get("path"))
 	if p == "." {
-		writeErr(w, errCode(400, "Chemin invalide"))
+		writeErr(w, r, errCode(400, "Invalid path"))
 		return
 	}
 	a.withRoot(w, r, c, func(root *os.Root, uid int) error {
@@ -181,7 +181,7 @@ func (a *App) handleFileWrite(w http.ResponseWriter, r *http.Request, c *Ctx) {
 func (a *App) handleMkdir(w http.ResponseWriter, r *http.Request, c *Ctx) {
 	var in struct{ Path string }
 	if err := readJSON(r, &in); err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	p := rel(in.Path)
@@ -199,17 +199,17 @@ func (a *App) handleMkdir(w http.ResponseWriter, r *http.Request, c *Ctx) {
 func (a *App) handleRename(w http.ResponseWriter, r *http.Request, c *Ctx) {
 	var in struct{ From, To string }
 	if err := readJSON(r, &in); err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	from, to := rel(in.From), rel(in.To)
 	if from == "." || to == "." {
-		writeErr(w, errCode(400, "Chemin invalide"))
+		writeErr(w, r, errCode(400, "Invalid path"))
 		return
 	}
 	a.withRoot(w, r, c, func(root *os.Root, _ int) error {
 		if _, err := root.Lstat(to); err == nil {
-			return errCode(409, "La destination existe déjà")
+			return errCode(409, "The destination already exists")
 		}
 		if err := root.Rename(from, to); err != nil {
 			return err
@@ -223,14 +223,14 @@ func (a *App) handleRename(w http.ResponseWriter, r *http.Request, c *Ctx) {
 func (a *App) handleDelete(w http.ResponseWriter, r *http.Request, c *Ctx) {
 	var in struct{ Paths []string }
 	if err := readJSON(r, &in); err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	a.withRoot(w, r, c, func(root *os.Root, _ int) error {
 		for _, p := range in.Paths {
 			rp := rel(p)
 			if rp == "." {
-				return errCode(400, "Impossible de supprimer la racine")
+				return errCode(400, "The root folder can't be deleted")
 			}
 			if err := root.RemoveAll(rp); err != nil {
 				return err
@@ -248,7 +248,7 @@ func (a *App) handleUpload(w http.ResponseWriter, r *http.Request, c *Ctx) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxUploadSize)
 	mr, err := r.MultipartReader()
 	if err != nil {
-		writeErr(w, errCode(400, "Upload invalide"))
+		writeErr(w, r, errCode(400, "Invalid upload"))
 		return
 	}
 	a.withRoot(w, r, c, func(root *os.Root, uid int) error {
@@ -259,7 +259,7 @@ func (a *App) handleUpload(w http.ResponseWriter, r *http.Request, c *Ctx) {
 				break
 			}
 			if err != nil {
-				return errCode(400, "Upload interrompu ou trop gros (2 Go max)")
+				return errCode(400, "Upload interrupted or too large (2 GB max)")
 			}
 			name := part.FileName() // already reduced to a base name by mime/multipart
 			if name == "" || name == "." || name == ".." {
@@ -277,7 +277,7 @@ func (a *App) handleUpload(w http.ResponseWriter, r *http.Request, c *Ctx) {
 			part.Close()
 			if err != nil {
 				_ = root.Remove(target)
-				return errCode(400, "Upload interrompu ou trop gros (2 Go max)")
+				return errCode(400, "Upload interrupted or too large (2 GB max)")
 			}
 			chownNew(root, target, uid)
 			names = append(names, name)
@@ -437,7 +437,7 @@ func extractTar(r io.Reader, root *os.Root, dest string, uid int, maxBytes int64
 			return nil
 		}
 		if err != nil {
-			return errCode(400, "Archive corrompue")
+			return errCode(400, "Corrupted archive")
 		}
 		target := rel(path.Join(dest, hdr.Name))
 		if target == "." {
@@ -450,7 +450,7 @@ func extractTar(r io.Reader, root *os.Root, dest string, uid int, maxBytes int64
 		case tar.TypeReg:
 			total += hdr.Size
 			if maxBytes > 0 && total > maxBytes {
-				return errCode(413, "L'archive dépasse l'espace disque autorisé")
+				return errCode(413, "The archive exceeds the allowed disk space")
 			}
 			if dir := path.Dir(target); dir != "." {
 				_ = root.MkdirAll(dir, 0o755)
@@ -462,7 +462,7 @@ func extractTar(r io.Reader, root *os.Root, dest string, uid int, maxBytes int64
 			_, err = io.CopyN(f, tr, hdr.Size)
 			f.Close()
 			if err != nil {
-				return errCode(400, "Archive corrompue")
+				return errCode(400, "Corrupted archive")
 			}
 			chownNew(root, target, uid)
 			_ = root.Chtimes(target, hdr.ModTime, hdr.ModTime)
@@ -488,14 +488,14 @@ func extractZip(zr *zip.Reader, root *os.Root, dest string, uid int, maxBytes in
 		}
 		total += int64(zf.UncompressedSize64)
 		if maxBytes > 0 && total > maxBytes {
-			return errCode(413, "L'archive dépasse l'espace disque autorisé")
+			return errCode(413, "The archive exceeds the allowed disk space")
 		}
 		if dir := path.Dir(target); dir != "." {
 			_ = root.MkdirAll(dir, 0o755)
 		}
 		src, err := zf.Open()
 		if err != nil {
-			return errCode(400, "Archive corrompue")
+			return errCode(400, "Corrupted archive")
 		}
 		f, err := root.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
 		if err != nil {
@@ -506,7 +506,7 @@ func extractZip(zr *zip.Reader, root *os.Root, dest string, uid int, maxBytes in
 		f.Close()
 		src.Close()
 		if err != nil || n > int64(zf.UncompressedSize64) {
-			return errCode(400, "Archive corrompue")
+			return errCode(400, "Corrupted archive")
 		}
 		chownNew(root, target, uid)
 	}
@@ -519,11 +519,11 @@ func (a *App) handleCompress(w http.ResponseWriter, r *http.Request, c *Ctx) {
 		Paths []string `json:"paths"`
 	}
 	if err := readJSON(r, &in); err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	if len(in.Paths) == 0 {
-		writeErr(w, errCode(400, "Rien à compresser"))
+		writeErr(w, r, errCode(400, "Nothing to compress"))
 		return
 	}
 	dir := rel(in.Dir)
@@ -557,13 +557,13 @@ func (a *App) handleCompress(w http.ResponseWriter, r *http.Request, c *Ctx) {
 func (a *App) handleDecompress(w http.ResponseWriter, r *http.Request, c *Ctx) {
 	var in struct{ Path string }
 	if err := readJSON(r, &in); err != nil {
-		writeErr(w, err)
+		writeErr(w, r, err)
 		return
 	}
 	p := rel(in.Path)
 	maxBytes := int64(c.Server.DiskMB)*1024*1024 - a.diskUsed(c.Server.ID)
 	if maxBytes < 1 {
-		writeErr(w, errCode(413, "Plus d'espace disque disponible"))
+		writeErr(w, r, errCode(413, "No disk space left"))
 		return
 	}
 	a.withRoot(w, r, c, func(root *os.Root, uid int) error {
@@ -582,7 +582,7 @@ func (a *App) handleDecompress(w http.ResponseWriter, r *http.Request, c *Ctx) {
 			}
 			zr, err := zip.NewReader(f, st.Size())
 			if err != nil {
-				return errCode(400, "ZIP invalide")
+				return errCode(400, "Invalid ZIP file")
 			}
 			err = extractZip(zr, root, dest, uid, maxBytes)
 			if err != nil {
@@ -591,7 +591,7 @@ func (a *App) handleDecompress(w http.ResponseWriter, r *http.Request, c *Ctx) {
 		case strings.HasSuffix(lower, ".tar.gz"), strings.HasSuffix(lower, ".tgz"):
 			gz, err := gzip.NewReader(f)
 			if err != nil {
-				return errCode(400, "Archive gzip invalide")
+				return errCode(400, "Invalid gzip archive")
 			}
 			if err := extractTar(gz, root, dest, uid, maxBytes); err != nil {
 				return err
@@ -601,7 +601,7 @@ func (a *App) handleDecompress(w http.ResponseWriter, r *http.Request, c *Ctx) {
 				return err
 			}
 		default:
-			return errCode(400, "Format non supporté (.zip, .tar, .tar.gz, .tgz)")
+			return errCode(400, "Unsupported format (.zip, .tar, .tar.gz, .tgz)")
 		}
 		go a.refreshDisk(a.ctx, c.Server.ID)
 		c.log(a, "server.file.decompress", "/"+p)

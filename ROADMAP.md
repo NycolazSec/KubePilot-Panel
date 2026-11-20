@@ -10,9 +10,9 @@ Ideas and votes are welcome in the [issues](https://github.com/NycolazSec/KubePi
 - [x] Game servers as StatefulSets: console, files, backups, schedules, sub-users, templates
 - [x] Hardened by default: Pod Security `restricted`, NetworkPolicy, least-privilege RBAC
 - [x] Open-source license (AGPL-3.0), contribution guide, security policy
-- [ ] Multi-arch container image (`amd64`, `arm64`) published to GHCR on every release
-- [ ] One-command install with a Helm chart, on any Kubernetes distribution
-- [ ] English and French interface, ready for community translations
+- [x] Multi-arch container image (`amd64`, `arm64`) published to GHCR on every release
+- [x] One-command install with a Helm chart, on any Kubernetes distribution
+- [x] English and French interface, ready for community translations
 - [ ] Two-factor authentication (TOTP) with recovery codes
 - [ ] Personal API keys
 - [ ] Backend test suite in CI

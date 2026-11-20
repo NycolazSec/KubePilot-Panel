@@ -1,13 +1,14 @@
 import { Outlet, useLocation } from 'react-router-dom';
 import { PageHeader } from '../../components/ui';
+import { t } from '../../i18n';
 
 const sections: Record<string, [string, string]> = {
-  '': ['Vue d\'ensemble', 'État du cluster Kubernetes et des ressources allouées.'],
-  servers: ['Serveurs', 'Création, ressources et cycle de vie de tous les serveurs.'],
-  users: ['Utilisateurs', 'Comptes et rôles du panel.'],
-  templates: ['Templates', 'Modèles de serveurs : images, démarrage, variables et ports.'],
-  settings: ['Réglages', 'Configuration générale du panel.'],
-  activity: ['Journal', 'Historique des actions sur tout le panel.'],
+  '': [t('nav.overview'), t('admin.overviewHint')],
+  servers: [t('nav.servers'), t('admin.serversHint')],
+  users: [t('nav.users'), t('admin.usersHint')],
+  templates: [t('nav.templates'), t('admin.templatesHint')],
+  settings: [t('nav.settings'), t('admin.settingsHint')],
+  activity: [t('nav.activity'), t('admin.activityHint')],
 };
 
 export default function AdminLayout() {
@@ -15,7 +16,7 @@ export default function AdminLayout() {
   const [title, subtitle] = sections[key] || sections[''];
   return (
     <>
-      <p className="mb-1 text-2xs font-medium uppercase tracking-wider text-ink-500">Administration</p>
+      <p className="mb-1 text-2xs font-medium uppercase tracking-wider text-ink-500">{t('nav.admin')}</p>
       <PageHeader title={title} subtitle={subtitle} />
       <Outlet />
     </>

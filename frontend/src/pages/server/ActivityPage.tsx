@@ -3,31 +3,66 @@ import { Activity, get } from '../../api';
 import { Card, Empty, ErrorBox, Loading, useLoad } from '../../components/ui';
 import { ago, dateTime } from '../../lib/format';
 import { useServer } from './ServerLayout';
+import { t } from '../../i18n';
 
 const labels: Record<string, string> = {
-  'server.create': 'Serveur créé', 'server.power.start': 'Démarrage', 'server.power.stop': 'Arrêt', 'server.power.restart': 'Redémarrage', 'server.power.kill': 'Arrêt forcé',
-  'server.console.command': 'Commande console', 'server.file.write': 'Fichier modifié', 'server.file.mkdir': 'Dossier créé', 'server.file.rename': 'Renommé',
-  'server.file.delete': 'Supprimé', 'server.file.upload': 'Fichiers envoyés', 'server.file.download': 'Téléchargement', 'server.file.compress': 'Archive créée',
-  'server.file.decompress': 'Archive extraite', 'server.backup.create': 'Sauvegarde créée', 'server.backup.restore': 'Sauvegarde restaurée', 'server.backup.delete': 'Sauvegarde supprimée',
-  'server.backup.download': 'Sauvegarde téléchargée', 'server.backup.lock': 'Verrou de sauvegarde', 'server.schedule.save': 'Tâche enregistrée', 'server.schedule.delete': 'Tâche supprimée',
-  'server.schedule.run': 'Tâche lancée', 'server.schedule.execute': 'Tâche exécutée', 'server.startup.update': 'Variables modifiées', 'server.allocation.create': 'Port ajouté',
-  'server.allocation.delete': 'Port retiré', 'server.allocation.primary': 'Port principal changé', 'server.subuser.create': 'Accès donné', 'server.subuser.update': 'Accès modifié',
-  'server.subuser.delete': 'Accès retiré', 'server.settings.rename': 'Renommé', 'server.reinstall': 'Réinstallation', 'admin.server.update': 'Modifié par un admin',
-  'admin.server.delete': 'Serveur supprimé', 'admin.user.create': 'Utilisateur créé', 'admin.user.update': 'Utilisateur modifié', 'admin.user.delete': 'Utilisateur supprimé',
-  'admin.template.save': 'Template enregistré', 'admin.template.delete': 'Template supprimé', 'admin.settings.update': 'Réglages modifiés',
-  'auth.login': 'Connexion', 'auth.fail': 'Échec de connexion', 'account.password': 'Mot de passe changé',
+  'server.create': t('act.server.create'),
+  'server.power.start': t('act.server.power.start'),
+  'server.power.stop': t('act.server.power.stop'),
+  'server.power.restart': t('act.server.power.restart'),
+  'server.power.kill': t('act.server.power.kill'),
+  'server.console.command': t('act.server.console.command'),
+  'server.file.write': t('act.server.file.write'),
+  'server.file.mkdir': t('act.server.file.mkdir'),
+  'server.file.rename': t('act.server.file.rename'),
+  'server.file.delete': t('act.server.file.delete'),
+  'server.file.upload': t('act.server.file.upload'),
+  'server.file.download': t('act.server.file.download'),
+  'server.file.compress': t('act.server.file.compress'),
+  'server.file.decompress': t('act.server.file.decompress'),
+  'server.backup.create': t('act.server.backup.create'),
+  'server.backup.restore': t('act.server.backup.restore'),
+  'server.backup.delete': t('act.server.backup.delete'),
+  'server.backup.download': t('act.server.backup.download'),
+  'server.backup.lock': t('act.server.backup.lock'),
+  'server.schedule.save': t('act.server.schedule.save'),
+  'server.schedule.delete': t('act.server.schedule.delete'),
+  'server.schedule.run': t('act.server.schedule.run'),
+  'server.schedule.execute': t('act.server.schedule.execute'),
+  'server.startup.update': t('act.server.startup.update'),
+  'server.allocation.create': t('act.server.allocation.create'),
+  'server.allocation.delete': t('act.server.allocation.delete'),
+  'server.allocation.primary': t('act.server.allocation.primary'),
+  'server.subuser.create': t('act.server.subuser.create'),
+  'server.subuser.update': t('act.server.subuser.update'),
+  'server.subuser.delete': t('act.server.subuser.delete'),
+  'server.settings.rename': t('act.server.settings.rename'),
+  'server.reinstall': t('act.server.reinstall'),
+  'admin.server.update': t('act.admin.server.update'),
+  'admin.server.delete': t('act.admin.server.delete'),
+  'admin.user.create': t('act.admin.user.create'),
+  'admin.user.update': t('act.admin.user.update'),
+  'admin.user.delete': t('act.admin.user.delete'),
+  'admin.template.save': t('act.admin.template.save'),
+  'admin.template.delete': t('act.admin.template.delete'),
+  'admin.settings.update': t('act.admin.settings.update'),
+  'auth.login': t('act.auth.login'),
+  'auth.fail': t('act.auth.fail'),
+  'account.password': t('act.account.password'),
 };
 export const actLabel = (a: string) => labels[a] || a;
+// actions done by the panel itself (schedules…) have no user
+const who = (a: Activity) => (a.userId ? a.username : t('activity.system'));
 
 export function ActivityList({ items, showServer }: { items: Activity[]; showServer?: boolean }) {
-  if (!items.length) return <Empty icon={<ActIcon className="h-6 w-6" />} title="Aucune activité" />;
+  if (!items.length) return <Empty icon={<ActIcon className="h-6 w-6" />} title={t('activity.empty')} />;
   return (
     <ul className="divide-y divide-ink-800">
       {items.map((a) => (
         <li key={a.id} className="flex items-start gap-3 px-5 py-3 text-sm">
-          <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-ink-800 text-[10px] font-semibold text-ink-300">{a.username.slice(0, 2).toUpperCase()}</div>
+          <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-ink-800 text-[10px] font-semibold text-ink-300">{who(a).slice(0, 2).toUpperCase()}</div>
           <div className="min-w-0 flex-1">
-            <p><span className="font-medium text-ink-100">{a.username}</span> <span className="text-ink-300">· {actLabel(a.action)}</span>{showServer && a.serverId && <span className="ml-1 font-mono text-xs text-ink-500">#{a.serverId}</span>}</p>
+            <p><span className="font-medium text-ink-100">{who(a)}</span> <span className="text-ink-300">· {actLabel(a.action)}</span>{showServer && a.serverId && <span className="ml-1 font-mono text-xs text-ink-500">#{a.serverId}</span>}</p>
             {a.meta && <p className="mt-0.5 truncate font-mono text-xs text-ink-400">{a.meta}</p>}
           </div>
           <div className="shrink-0 text-right text-xs text-ink-500" title={dateTime(a.createdAt)}>{ago(a.createdAt)}{a.ip && <div className="font-mono">{a.ip}</div>}</div>
@@ -41,7 +76,7 @@ export default function ActivityPage() {
   const { server } = useServer();
   const { data, error, loading } = useLoad(() => get<Activity[]>(`/servers/${server.id}/activity`), [server.id]);
   return (
-    <Card padded={false} title="Journal d'activité">
+    <Card padded={false} title={t('activity.title')}>
       {error ? <div className="p-4"><ErrorBox error={error} /></div> : loading || !data ? <Loading /> : <ActivityList items={data} />}
     </Card>
   );

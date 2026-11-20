@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"regexp"
 	"strings"
 	"time"
@@ -16,7 +15,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-var ErrNotFound = errors.New("introuvable")
+var ErrNotFound = errors.New("not found")
 
 type DB struct{ *sql.DB }
 
@@ -171,10 +170,10 @@ var usernameRe = regexp.MustCompile(`^[a-zA-Z0-9_.-]{3,32}$`)
 
 func validatePassword(p string) error {
 	if len(p) < 8 {
-		return errors.New("le mot de passe doit faire au moins 8 caractères")
+		return errors.New("The password must be at least 8 characters long")
 	}
 	if len(p) > 72 {
-		return errors.New("mot de passe trop long (72 max)")
+		return errors.New("Password too long (72 characters max)")
 	}
 	return nil
 }
@@ -183,10 +182,10 @@ func (db *DB) CreateUser(username, email, password string, admin bool) (*User, e
 	username = strings.TrimSpace(username)
 	email = strings.TrimSpace(strings.ToLower(email))
 	if !usernameRe.MatchString(username) {
-		return nil, errors.New("nom d'utilisateur invalide (3-32 caractères : lettres, chiffres, _ . -)")
+		return nil, errors.New("Invalid username (3-32 characters: letters, digits, _ . -)")
 	}
 	if !strings.Contains(email, "@") || len(email) > 190 {
-		return nil, errors.New("email invalide")
+		return nil, errors.New("Invalid email")
 	}
 	if err := validatePassword(password); err != nil {
 		return nil, err
@@ -199,7 +198,7 @@ func (db *DB) CreateUser(username, email, password string, admin bool) (*User, e
 		username, email, string(h), admin, now())
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE") {
-			return nil, errors.New("ce nom d'utilisateur ou cet email existe déjà")
+			return nil, errors.New("This username or email already exists")
 		}
 		return nil, err
 	}
@@ -283,7 +282,9 @@ func (db *DB) SessionUser(tok string) (*User, error) {
 		FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?`, sha(tok), now()))
 }
 
-func (db *DB) DeleteSession(tok string) { _, _ = db.Exec(`DELETE FROM sessions WHERE token_hash=?`, sha(tok)) }
+func (db *DB) DeleteSession(tok string) {
+	_, _ = db.Exec(`DELETE FROM sessions WHERE token_hash=?`, sha(tok))
+}
 
 func (db *DB) DeleteOtherSessions(userID int64, keepTok string) {
 	_, _ = db.Exec(`DELETE FROM sessions WHERE user_id=? AND token_hash<>?`, userID, sha(keepTok))
@@ -367,35 +368,35 @@ var envKeyRe = regexp.MustCompile(`^[A-Z_][A-Z0-9_]{0,63}$`)
 func (t *Template) Validate() error {
 	t.Slug = strings.TrimSpace(t.Slug)
 	if !slugRe.MatchString(t.Slug) {
-		return errors.New("slug invalide (minuscules, chiffres, tirets)")
+		return errors.New("Invalid slug (lowercase letters, digits, dashes)")
 	}
 	if strings.TrimSpace(t.Name) == "" {
-		return errors.New("nom requis")
+		return errors.New("Name required")
 	}
 	if len(t.Images) == 0 || strings.TrimSpace(t.Images[0].Image) == "" {
-		return errors.New("au moins une image Docker est requise")
+		return errors.New("At least one Docker image is required")
 	}
 	if !strings.HasPrefix(t.DataPath, "/") || strings.Contains(t.DataPath, "..") {
-		return errors.New("chemin de données invalide")
+		return errors.New("Invalid data path")
 	}
 	seen := map[string]bool{}
 	for _, v := range t.Vars {
 		if !envKeyRe.MatchString(v.Key) {
-			return fmt.Errorf("clé de variable invalide : %q", v.Key)
+			return errCode(400, "Invalid variable key: %q", v.Key)
 		}
 		if seen[v.Key] {
-			return fmt.Errorf("variable en double : %s", v.Key)
+			return errCode(400, "Duplicate variable: %s", v.Key)
 		}
 		seen[v.Key] = true
 		if v.Pattern != "" {
 			if _, err := regexp.Compile(v.Pattern); err != nil {
-				return fmt.Errorf("regex invalide pour %s", v.Key)
+				return errCode(400, "Invalid regex for %s", v.Key)
 			}
 		}
 	}
 	for i, p := range t.Ports {
 		if p.Port < 1 || p.Port > 65535 {
-			return errors.New("port invalide")
+			return errors.New("Invalid port")
 		}
 		switch p.Protocol {
 		case "tcp", "udp", "tcp+udp":
@@ -467,7 +468,7 @@ func (db *DB) SaveTemplate(t *Template) error {
 		res, err := db.Exec(`INSERT INTO templates(slug,data,created_at,updated_at) VALUES(?,?,?,?)`, t.Slug, string(data), now(), now())
 		if err != nil {
 			if strings.Contains(err.Error(), "UNIQUE") {
-				return errors.New("ce slug existe déjà")
+				return errors.New("This slug already exists")
 			}
 			return err
 		}
@@ -681,7 +682,7 @@ type Activity struct {
 
 func (db *DB) LogActivity(serverID string, u *User, ip, action, meta string) {
 	var uid int64
-	name := "système"
+	name := "system"
 	if u != nil {
 		uid, name = u.ID, u.Username
 	}
