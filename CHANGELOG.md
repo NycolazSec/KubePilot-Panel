@@ -32,6 +32,8 @@ First public version of KubePilot, the Kubernetes-native game server panel.
 
 ### Security
 
+- CI: govulncheck, npm audit and CodeQL (security-extended) on every pull request; GitHub Actions pinned to commit SHAs,
+  read-only workflow token by default.
 - Disk quotas are enforced: uploads, the editor, compression and extraction stop at the server's disk limit, and a
   running server writing far beyond it (10 %, at least 256 MB) is stopped — one server can no longer fill the node.
 - FIFOs and device files planted by a game server are refused instead of hanging panel requests.
