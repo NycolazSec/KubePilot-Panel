@@ -6,7 +6,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -27,6 +29,7 @@ type Backup struct {
 	Locked      bool   `json:"locked"`
 	CreatedAt   int64  `json:"createdAt"`
 	CompletedAt int64  `json:"completedAt"`
+	Storage     string `json:"storage"` // local, s3
 }
 
 func (a *App) backupPath(serverID, id string) string {
@@ -34,7 +37,7 @@ func (a *App) backupPath(serverID, id string) string {
 }
 
 func (a *App) listBackups(serverID string) ([]*Backup, error) {
-	rows, err := a.db.Query(`SELECT id, server_id, name, size, status, error, locked, created_at, completed_at FROM backups WHERE server_id=? ORDER BY created_at DESC`, serverID)
+	rows, err := a.db.Query(`SELECT id, server_id, name, size, status, error, locked, created_at, completed_at, storage FROM backups WHERE server_id=? ORDER BY created_at DESC`, serverID)
 	if err != nil {
 		return nil, err
 	}
@@ -42,7 +45,7 @@ func (a *App) listBackups(serverID string) ([]*Backup, error) {
 	out := []*Backup{}
 	for rows.Next() {
 		b := &Backup{}
-		if err := rows.Scan(&b.ID, &b.ServerID, &b.Name, &b.Size, &b.Status, &b.Error, &b.Locked, &b.CreatedAt, &b.CompletedAt); err != nil {
+		if err := rows.Scan(&b.ID, &b.ServerID, &b.Name, &b.Size, &b.Status, &b.Error, &b.Locked, &b.CreatedAt, &b.CompletedAt, &b.Storage); err != nil {
 			return nil, err
 		}
 		out = append(out, b)
@@ -52,17 +55,27 @@ func (a *App) listBackups(serverID string) ([]*Backup, error) {
 
 func (a *App) getBackup(serverID, id string) (*Backup, error) {
 	b := &Backup{}
-	err := a.db.QueryRow(`SELECT id, server_id, name, size, status, error, locked, created_at, completed_at FROM backups WHERE server_id=? AND id=?`, serverID, id).
-		Scan(&b.ID, &b.ServerID, &b.Name, &b.Size, &b.Status, &b.Error, &b.Locked, &b.CreatedAt, &b.CompletedAt)
+	err := a.db.QueryRow(`SELECT id, server_id, name, size, status, error, locked, created_at, completed_at, storage FROM backups WHERE server_id=? AND id=?`, serverID, id).
+		Scan(&b.ID, &b.ServerID, &b.Name, &b.Size, &b.Status, &b.Error, &b.Locked, &b.CreatedAt, &b.CompletedAt, &b.Storage)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	return b, err
 }
 
-func (a *App) deleteBackup(b *Backup) {
-	_ = os.Remove(a.backupPath(b.ServerID, b.ID))
+func (a *App) deleteBackup(b *Backup) error {
+	ctx, cancel := context.WithTimeout(a.ctx, time.Minute)
+	defer cancel()
+	if err := a.removeBackupData(ctx, b); err != nil {
+		log.Printf("backup %s: %v", b.ID, err)
+		var ae *apiError
+		if errors.As(err, &ae) {
+			return err
+		}
+		return errCode(502, "The backup storage can't be reached right now")
+	}
 	_, _ = a.db.Exec(`DELETE FROM backups WHERE id=?`, b.ID)
+	return nil
 }
 
 // createBackup starts a backup. rotate=true deletes the oldest unlocked backup when the limit is reached.
@@ -92,7 +105,9 @@ func (a *App) createBackup(s *Server, name string, rotate bool) (*Backup, error)
 		if oldest == nil {
 			return nil, errCode(409, "Limit reached and all backups are locked")
 		}
-		a.deleteBackup(oldest)
+		if err := a.deleteBackup(oldest); err != nil {
+			return nil, err
+		}
 	}
 	if _, err := a.kube.DataDir(a.ctx, s.ID); err != nil {
 		return nil, err
@@ -101,8 +116,8 @@ func (a *App) createBackup(s *Server, name string, rotate bool) (*Backup, error)
 	if name == "" {
 		name = "Backup " + time.Now().In(a.loc()).Format("2006-01-02 15:04")
 	}
-	b := &Backup{ID: randomID(12), ServerID: s.ID, Name: truncate(name, 80), Status: "pending", CreatedAt: now()}
-	if _, err := a.db.Exec(`INSERT INTO backups(id,server_id,name,status,created_at) VALUES(?,?,?,?,?)`, b.ID, s.ID, b.Name, b.Status, b.CreatedAt); err != nil {
+	b := &Backup{ID: randomID(12), ServerID: s.ID, Name: truncate(name, 80), Status: "pending", CreatedAt: now(), Storage: a.backupStorage()}
+	if _, err := a.db.Exec(`INSERT INTO backups(id,server_id,name,status,created_at,storage) VALUES(?,?,?,?,?,?)`, b.ID, s.ID, b.Name, b.Status, b.CreatedAt, b.Storage); err != nil {
 		return nil, err
 	}
 	go a.runBackup(s, b)
@@ -113,7 +128,6 @@ func (a *App) runBackup(s *Server, b *Backup) {
 	h := a.hub(s.ID)
 	h.daemon("Backing up “%s”…", b.Name)
 	fail := func(err error) {
-		_ = os.Remove(a.backupPath(s.ID, b.ID))
 		_, _ = a.db.Exec(`UPDATE backups SET status='failed', error=?, completed_at=? WHERE id=?`, err.Error(), now(), b.ID)
 		h.daemon("Backup failed: %s", err.Error())
 	}
@@ -128,19 +142,8 @@ func (a *App) runBackup(s *Server, b *Backup) {
 		return
 	}
 	defer root.Close()
-	p := a.backupPath(s.ID, b.ID)
-	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
-		fail(err)
-		return
-	}
-	f, err := os.OpenFile(p, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
-	if err != nil {
-		fail(err)
-		return
-	}
 	entries, err := fs.ReadDir(root.FS(), ".")
 	if err != nil {
-		f.Close()
 		fail(err)
 		return
 	}
@@ -148,17 +151,26 @@ func (a *App) runBackup(s *Server, b *Backup) {
 	for _, e := range entries {
 		paths = append(paths, e.Name())
 	}
-	err = writeTarGz(f, root, paths)
-	if cerr := f.Close(); err == nil {
-		err = cerr
-	}
+	ctx, cancel := context.WithTimeout(a.ctx, 6*time.Hour)
+	defer cancel()
+	out, err := a.backupWriter(ctx, b)
 	if err != nil {
 		fail(err)
 		return
 	}
-	st, _ := os.Stat(p)
-	_, _ = a.db.Exec(`UPDATE backups SET status='completed', size=?, completed_at=? WHERE id=?`, st.Size(), now(), b.ID)
-	h.daemon("Backup completed ✔ (%s)", bytesArg(st.Size()))
+	if err := writeTarGz(out, root, paths); err != nil {
+		out.Abort(err)
+		fail(err)
+		return
+	}
+	size, err := out.Commit()
+	if err != nil {
+		log.Printf("backup %s: %v", b.ID, err)
+		fail(errors.New(tr("en", "The backup storage can't be reached right now")))
+		return
+	}
+	_, _ = a.db.Exec(`UPDATE backups SET status='completed', size=?, completed_at=? WHERE id=?`, size, now(), b.ID)
+	h.daemon("Backup completed ✔ (%s)", bytesArg(size))
 }
 
 func (a *App) handleBackups(w http.ResponseWriter, r *http.Request, c *Ctx) {
@@ -188,17 +200,20 @@ func (a *App) handleBackupDownload(w http.ResponseWriter, r *http.Request, c *Ct
 		writeErr(w, r, ErrNotFound)
 		return
 	}
-	f, err := os.Open(a.backupPath(b.ServerID, b.ID))
+	rc, seeker, mod, err := a.openBackup(r.Context(), b)
 	if err != nil {
-		writeErr(w, r, ErrNotFound)
+		writeErr(w, r, err)
 		return
 	}
-	defer f.Close()
-	st, _ := f.Stat()
+	defer rc.Close()
 	c.log(a, "server.backup.download", b.Name)
 	w.Header().Set("Content-Disposition", contentDisposition(fmt.Sprintf("%s-%s.tar.gz", c.Server.Name, time.Unix(b.CreatedAt, 0).Format("20060102-150405"))))
 	w.Header().Set("Content-Type", "application/gzip")
-	http.ServeContent(w, r, "", st.ModTime(), f)
+	if seeker != nil {
+		http.ServeContent(w, r, "", mod, seeker)
+		return
+	}
+	_, _ = io.Copy(w, rc) // decrypted on the fly: no range requests
 }
 
 func (a *App) handleBackupRestore(w http.ResponseWriter, r *http.Request, c *Ctx) {
@@ -235,12 +250,12 @@ func (a *App) handleBackupRestore(w http.ResponseWriter, r *http.Request, c *Ctx
 				}
 			}
 		}
-		f, err := os.Open(a.backupPath(b.ServerID, b.ID))
+		rc, _, _, err := a.openBackup(r.Context(), b)
 		if err != nil {
 			return err
 		}
-		defer f.Close()
-		gz, err := gzip.NewReader(f)
+		defer rc.Close()
+		gz, err := gzip.NewReader(rc)
 		if err != nil {
 			return errCode(400, "Corrupted backup")
 		}
@@ -281,7 +296,10 @@ func (a *App) handleBackupDelete(w http.ResponseWriter, r *http.Request, c *Ctx)
 		writeErr(w, r, errCode(409, "Backup in progress"))
 		return
 	}
-	a.deleteBackup(b)
+	if err := a.deleteBackup(b); err != nil {
+		writeErr(w, r, err)
+		return
+	}
 	c.log(a, "server.backup.delete", b.Name)
 	writeJSON(w, 200, map[string]bool{"ok": true})
 }

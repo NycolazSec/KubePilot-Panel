@@ -8,6 +8,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
+- **Backups on S3-compatible storage** (`backups.s3.*`: AWS, Backblaze B2, OVH, Scaleway, Cloudflare R2, MinIO,
+  SeaweedFS…): archives are streamed to a multipart upload (16 MiB parts, no temporary file, up to 160 GB), each part
+  checked by the server (`Content-MD5`); downloads support range requests, restores stream from the bucket.
+  Optional **encryption before upload** with an [age](https://age-encryption.org) key (`encryptionKey`): the provider
+  only sees ciphertext, and `age -d -i key.txt` restores an archive without the panel. Each backup remembers where it
+  is, so local backups made before keep working; an interrupted upload leaves nothing; a server's backups are deleted
+  from the bucket with it. *Admin* → *Settings* shows the storage, its status and whether it's encrypted —
+  credentials only live in a Kubernetes Secret.
+
 - **MySQL / MariaDB databases per server** (*Databases* tab): one click creates a database and its own user
   (LuckPerms, CoreProtect, bots…), with the host, a JDBC URL and a `mysql://` URL to copy. The chart deploys a MariaDB
   next to the game servers (`databases.*`, Pod Security `restricted`, read-only root filesystem); only game servers and

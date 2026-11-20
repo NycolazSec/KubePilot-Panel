@@ -69,6 +69,7 @@ export default function Backups() {
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-medium">{b.name}</span>
+                    {b.storage === 's3' && <Badge color="blue">{t('backups.onS3')}</Badge>}
                     {b.locked && <Badge color="violet"><Lock className="h-3 w-3" /> {t('backups.locked')}</Badge>}
                     {b.status === 'pending' && <Badge color="blue">{t('backups.pending')}</Badge>}
                     {b.status === 'failed' && <Badge color="red">{t('backups.failed')}</Badge>}

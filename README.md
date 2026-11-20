@@ -25,7 +25,7 @@ volume and `NodePort` service, and the panel drives the cluster through the Kube
 | Start / restart / stop / kill, crash detection (OOMKilled, exit codes, image errors) | Edit resources, image, startup command, suspend servers |
 | File manager: CodeMirror editor, drag & drop upload, zip download, archive / extract | Users & roles, two-factor authentication (TOTP + recovery codes), editable templates with JSON import/export |
 | | **Pterodactyl / Pelican eggs**: import from a catalog of ~300 games and apps, a link or a file |
-| Backups: create, restore, download, lock, automatic rotation | Settings: panel name, public address, port range, timezone |
+| Backups: create, restore, download, lock, automatic rotation — on the panel's volume or **S3** (optionally encrypted) | Settings: panel name, public address, port range, timezone |
 | Cron schedules: commands, power actions, backups | Global activity log |
 | Validated startup variables, image selection, extra ports, sub-users with fine-grained permissions |
 | **Plugins & mods** from Modrinth: compatible results only, one-click install with dependencies, updates | |
@@ -72,6 +72,7 @@ flowchart LR
 - **Least privilege**: the panel's ServiceAccount has full rights *only* in `kubepilot-servers`, and read-only access to nodes, PVs, services and metrics. No access to Secrets.
 - **Storage isolation**: game volumes live in their own folder (dedicated `kubepilot-local` StorageClass) and the panel only mounts that folder — it never sees the volumes of the other applications of the cluster.
 - **Origin lock** (optional, Traefik): with `ingress.cloudflareOnly`, the panel only answers requests coming from Cloudflare, so its protections can't be bypassed by hitting the node's IP.
+- **Backups**: on S3, archives can be encrypted with an age key before they leave the panel; S3 credentials live in a Kubernetes Secret and never reach the browser.
 - **Databases**: the MariaDB pod runs non-root with a read-only root filesystem; a NetworkPolicy lets only game servers and the panel in, and nothing out. Each database user is limited to its own database; passwords are never stored.
 - **SFTP**: only the `sftp` subsystem (no shell, no forwarding); accounts with 2FA must use an SSH key; same per-IP and per-account sign-in limits as the web; same `os.Root` and quota rules as the file manager.
 - **File manager**: every path goes through `os.Root`, so even a symlink planted by a game server can't escape its volume; FIFOs and devices are refused, archives are checked for size and entry count (zip bombs, zip slip).
@@ -141,7 +142,7 @@ docs/       logo and banner
 
 ## Roadmap
 
-Coming next: S3 backups (v0.2), then multi-node, server transfers and
+v0.2 brought Pterodactyl parity (eggs, SFTP, databases, S3 backups). Coming next: multi-node, server transfers and
 auto-sleep (v0.3).
 See the full [roadmap](ROADMAP.md).
 

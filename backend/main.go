@@ -40,6 +40,7 @@ type Config struct {
 	// DatabaseAddr / DatabasePassword: the MariaDB for the servers' databases (root), "" = off
 	DatabaseAddr     string
 	DatabasePassword string
+	S3               S3Config // backups on S3 when Endpoint is set
 	SecureCookies    bool
 }
 
@@ -64,6 +65,9 @@ func main() {
 	flag.IntVar(&cfg.SFTPPort, "sftp-port", atoiOr(env("KUBEPILOT_SFTP_PORT", ""), 0), "SFTP port shown to users (default: the listen port)")
 	flag.StringVar(&cfg.DatabaseAddr, "database-addr", env("KUBEPILOT_DATABASE_ADDR", ""), "MariaDB host:port for the servers' databases (empty = off)")
 	cfg.DatabasePassword = os.Getenv("KUBEPILOT_DATABASE_PASSWORD") // never a flag: it would show in the process list
+	cfg.S3 = S3Config{Endpoint: os.Getenv("KUBEPILOT_S3_ENDPOINT"), Region: os.Getenv("KUBEPILOT_S3_REGION"), Bucket: os.Getenv("KUBEPILOT_S3_BUCKET"),
+		Prefix: env("KUBEPILOT_S3_PREFIX", "kubepilot"), Insecure: os.Getenv("KUBEPILOT_S3_INSECURE") == "true",
+		AccessKey: os.Getenv("KUBEPILOT_S3_ACCESS_KEY"), SecretKey: os.Getenv("KUBEPILOT_S3_SECRET_KEY"), EncryptionKey: os.Getenv("KUBEPILOT_S3_ENCRYPTION_KEY")}
 	secure := flag.Bool("secure-cookies", env("KUBEPILOT_SECURE_COOKIES", "true") == "true", "set Secure flag on cookies")
 	flag.Parse()
 	cfg.SecureCookies = *secure
@@ -98,6 +102,20 @@ func main() {
 
 	if err := kube.start(ctx); err != nil {
 		log.Fatalf("kubernetes start: %v", err)
+	}
+	if cfg.S3.Endpoint != "" {
+		s, err := newS3Store(cfg.S3)
+		if err != nil {
+			log.Fatal(err)
+		}
+		app.s3 = s
+		cctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+		if err := s.check(cctx); err != nil {
+			log.Printf("WARNING: S3 bucket %q on %s not reachable yet: %v", s.bucket, s.endpoint, err)
+		} else {
+			log.Printf("Backups go to S3: %s/%s (encrypted: %v)", s.endpoint, s.bucket, s.identity != nil)
+		}
+		cancel()
 	}
 	app.startBackground(ctx)
 

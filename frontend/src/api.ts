@@ -58,7 +58,7 @@ export interface Server {
 }
 
 export interface FileEntry { name: string; dir: boolean; size: number; mode: string; modified: number; symlink: boolean }
-export interface Backup { id: string; name: string; size: number; status: 'pending' | 'completed' | 'failed'; error: string; locked: boolean; createdAt: number; completedAt: number }
+export interface Backup { id: string; name: string; size: number; status: 'pending' | 'completed' | 'failed'; error: string; locked: boolean; createdAt: number; completedAt: number; storage?: 'local' | 's3' }
 export interface Schedule { id: number; name: string; cron: string; action: string; payload: string; enabled: boolean; onlyOnline: boolean; lastRun: number; nextRun: number; lastResult: string }
 export interface Activity { id: number; serverId: string; userId: number; username: string; action: string; meta: string; ip: string; apiKey?: string; createdAt: number }
 export interface SubUser { userId: number; username: string; email: string; permissions: string[]; createdAt: number }

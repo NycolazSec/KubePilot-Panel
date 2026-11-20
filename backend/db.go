@@ -139,6 +139,9 @@ func openDB(path string) (*DB, error) {
 	if err := db.addColumn("servers", "hostname", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		return nil, err
 	}
+	if err := db.addColumn("backups", "storage", "TEXT NOT NULL DEFAULT 'local'"); err != nil {
+		return nil, err
+	}
 	if err := db.addColumn("servers", "database_limit", "INTEGER NOT NULL DEFAULT 0"); err != nil {
 		return nil, err
 	}

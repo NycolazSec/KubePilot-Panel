@@ -40,6 +40,7 @@ type App struct {
 	keyRate  *rateLimiter // requests per API key
 	sftp     *sftpServer  // nil when SFTP is off
 	dbHost   dbHost       // MariaDB for the servers' databases (empty address: off)
+	s3       *s3Store     // S3 storage for new backups (nil: the panel's volume)
 	tickets  loginTickets // sign-ins waiting for their second factor
 }
 
@@ -453,6 +454,7 @@ func (a *App) routes() http.Handler {
 	m.HandleFunc("DELETE /api/admin/templates/{tid}", a.admin(a.handleAdminTemplateDelete))
 	m.HandleFunc("POST /api/admin/templates/egg", a.admin(a.handleEggConvert))
 	m.HandleFunc("GET /api/admin/eggs/catalog", a.admin(a.handleEggCatalog))
+	m.HandleFunc("GET /api/admin/backup-storage", a.admin(a.handleBackupStorage))
 	m.HandleFunc("POST /api/admin/servers", a.admin(a.handleAdminServerCreate))
 	m.HandleFunc("PUT /api/admin/servers/{id}", a.admin(a.handleAdminServerUpdate))
 	m.HandleFunc("DELETE /api/admin/servers/{id}", a.admin(a.handleAdminServerDelete))

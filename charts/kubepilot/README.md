@@ -34,6 +34,9 @@ data is ever lost by accident. Delete them by hand if you really want to.
 | `image.tag` | chart `appVersion` | Image tag |
 | `serversNamespace.name` | `kubepilot-servers` | Namespace of the game servers (kept on uninstall) |
 | `serversNamespace.create` | `true` | Create that namespace (Pod Security `restricted` audited) |
+| `backups.s3.enabled` | `false` | Backups on S3-compatible storage (`endpoint`, `region`, `bucket`, `prefix`, `insecure`) |
+| `backups.s3.existingSecret` | `""` | Secret with `access-key`, `secret-key`, optional `encryption-key` (or set `accessKey` / `secretKey` / `encryptionKey`) |
+| `backups.s3.encryptionKey` | `""` | age secret key (`age-keygen`): archives encrypted before upload — keep a copy |
 | `databases.enabled` | `true` | MariaDB for the servers' databases, reachable only by game servers and the panel |
 | `databases.persistence.size` | `10Gi` | MariaDB volume (`databases.persistence.storageClass`: cluster default) |
 | `databases.resources` | 256Mi → 1Gi | MariaDB requests / limits |

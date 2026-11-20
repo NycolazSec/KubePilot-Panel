@@ -900,6 +900,16 @@ func (a *App) handleAdminServerDelete(w http.ResponseWriter, r *http.Request, u 
 		writeErr(w, r, errCode(500, "Kubernetes deletion failed: %s", err.Error()))
 		return
 	}
+	if backups, err := a.listBackups(s.ID); err == nil {
+		for _, b := range backups {
+			if b.Storage == storageS3 && a.s3 != nil {
+				if err := a.removeBackupData(r.Context(), b); err != nil {
+					writeErr(w, r, errCode(502, "The server's backups couldn't be deleted from S3: %s", err.Error()))
+					return
+				}
+			}
+		}
+	}
 	if err := a.dropServerDatabases(r.Context(), s.ID); err != nil {
 		writeErr(w, r, errCode(500, "The server's databases couldn't be deleted: %s", err.Error()))
 		return

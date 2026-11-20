@@ -23,7 +23,7 @@ Ideas and votes are welcome in the [issues](https://github.com/NycolazSec/KubePi
 - [x] Built-in **SFTP** server (password or SSH keys, 2FA accounts key-only)
 - [x] Documented public REST API for bots and billing systems ([docs/API.md](docs/API.md))
 - [x] MySQL / MariaDB databases per server (MariaDB deployed by the chart)
-- [ ] Backups to S3-compatible storage
+- [x] Backups to S3-compatible storage (optionally encrypted with age)
 - [ ] Password reset and notifications by email
 
 ## v0.3 and beyond — what Pterodactyl can't do
