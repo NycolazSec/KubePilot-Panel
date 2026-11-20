@@ -26,3 +26,8 @@ First public version of KubePilot, the Kubernetes-native game server panel.
 - Configurable StorageClass for game volumes (`KUBEPILOT_STORAGE_CLASS`).
 - English and French interface: the language follows the browser and can be changed from the account page or the
   sign-in page. Server errors and console messages are translated for each viewer. New installs get English templates.
+
+### Fixed
+
+- Long dialogs (new template, new server…) no longer get their top cut off on small screens: the dialog stays within
+  the screen, its content scrolls and the title and buttons stay visible.

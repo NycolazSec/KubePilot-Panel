@@ -64,9 +64,9 @@ function TemplateEditor({ t, setT }: { t: Template; setT: (t: Template) => void 
         <div className="space-y-2">
           {t.ports.map((p, i) => (
             <div key={i} className="flex gap-2">
-              <input className="input" placeholder={tr('tpl.portName')} value={p.name} onChange={(e) => set('ports', t.ports.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))} />
-              <input type="number" className="input !w-32" value={p.port} onChange={(e) => set('ports', t.ports.map((x, j) => (j === i ? { ...x, port: +e.target.value } : x)))} />
-              <select className="input !w-36" value={p.protocol} onChange={(e) => set('ports', t.ports.map((x, j) => (j === i ? { ...x, protocol: e.target.value } : x)))}>
+              <input className="input min-w-0" placeholder={tr('tpl.portName')} value={p.name} onChange={(e) => set('ports', t.ports.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))} />
+              <input type="number" className="input !w-24 shrink-0 sm:!w-32" value={p.port} onChange={(e) => set('ports', t.ports.map((x, j) => (j === i ? { ...x, port: +e.target.value } : x)))} />
+              <select className="input !w-28 shrink-0 sm:!w-36" value={p.protocol} onChange={(e) => set('ports', t.ports.map((x, j) => (j === i ? { ...x, protocol: e.target.value } : x)))}>
                 <option value="tcp">TCP</option><option value="udp">UDP</option><option value="tcp+udp">TCP+UDP</option>
               </select>
               <IconButton title={tr('network.remove')} onClick={() => set('ports', t.ports.filter((_, j) => j !== i))}><X className="h-4 w-4" /></IconButton>
