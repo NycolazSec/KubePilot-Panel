@@ -20,7 +20,7 @@ Ideas and votes are welcome in the [issues](https://github.com/NycolazSec/KubePi
 ## v0.2 — Pterodactyl parity
 
 - [x] Import Pterodactyl / Pelican **eggs** — hundreds of games out of the box (`config.files` edits are not applied yet)
-- [ ] Built-in **SFTP** server
+- [x] Built-in **SFTP** server (password or SSH keys, 2FA accounts key-only)
 - [x] Documented public REST API for bots and billing systems ([docs/API.md](docs/API.md))
 - [ ] MySQL / MariaDB databases per server
 - [ ] Backups to S3-compatible storage

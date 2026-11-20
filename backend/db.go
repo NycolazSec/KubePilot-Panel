@@ -128,7 +128,7 @@ func openDB(path string) (*DB, error) {
 	// A single connection: SQLite serialises writes anyway and this avoids SQLITE_BUSY.
 	// Rule: never run a query while iterating another result set.
 	sqldb.SetMaxOpenConns(1)
-	if _, err := sqldb.Exec(schema + totpSchema + apiKeySchema); err != nil {
+	if _, err := sqldb.Exec(schema + totpSchema + apiKeySchema + sshKeySchema); err != nil {
 		return nil, err
 	}
 	db := &DB{sqldb}
@@ -676,7 +676,7 @@ func (db *DB) InsertAllocation(a *Allocation) error {
 
 // ---------- Subusers
 
-var AllPerms = []string{"console", "power", "files", "backups", "schedules", "startup", "network", "activity"}
+var AllPerms = []string{"console", "power", "files", "sftp", "backups", "schedules", "startup", "network", "activity"}
 
 type SubUser struct {
 	UserID      int64    `json:"userId"`

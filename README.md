@@ -31,6 +31,7 @@ volume and `NodePort` service, and the panel drives the cluster through the Kube
 | **Plugins & mods** from Modrinth: compatible results only, one-click install with dependencies, updates | |
 | **Minecraft router**: each server at `survival.mc.example.com`, standard port, no port to type | |
 | **Minecraft panel**: live status (MOTD, version, icon), online players with their skin heads, whitelist / ops / bans in one click (RCON) | |
+| **SFTP** (FileZilla, WinSCP…) with your panel password or SSH keys, sub-user permission, quota-aware | |
 | **REST API** with personal API keys (permissions, read-only, IP allow-list, expiry): control servers from scripts and bots — see [docs/API.md](docs/API.md) | |
 
 Built-in templates: **Minecraft Java** (Paper, Purpur, Vanilla, Fabric, Forge, NeoForge… via `itzg/minecraft-server`),
@@ -70,6 +71,7 @@ flowchart LR
 - **Least privilege**: the panel's ServiceAccount has full rights *only* in `kubepilot-servers`, and read-only access to nodes, PVs, services and metrics. No access to Secrets.
 - **Storage isolation**: game volumes live in their own folder (dedicated `kubepilot-local` StorageClass) and the panel only mounts that folder — it never sees the volumes of the other applications of the cluster.
 - **Origin lock** (optional, Traefik): with `ingress.cloudflareOnly`, the panel only answers requests coming from Cloudflare, so its protections can't be bypassed by hitting the node's IP.
+- **SFTP**: only the `sftp` subsystem (no shell, no forwarding); accounts with 2FA must use an SSH key; same per-IP and per-account sign-in limits as the web; same `os.Root` and quota rules as the file manager.
 - **File manager**: every path goes through `os.Root`, so even a symlink planted by a game server can't escape its volume; FIFOs and devices are refused, archives are checked for size and entry count (zip bombs, zip slip).
 - **Disk quotas**: uploads, archives and the editor stop at each server's limit, and a running server that writes far beyond it is stopped, so no server can fill the node's disk.
 - **Auth**: bcrypt (cost 12), TOTP two-factor authentication with single-use recovery codes (can be made mandatory for admins or everyone), hashed session tokens in a `__Host-` `HttpOnly` `Secure` `SameSite=Lax` cookie, mandatory anti-CSRF header, WebSocket origin check, sign-in limits per IP and per account, strict CSP, HSTS, activity log.
@@ -135,7 +137,7 @@ docs/       logo and banner
 
 ## Roadmap
 
-Coming next: SFTP, MySQL databases and S3 backups (v0.2), then multi-node, server transfers and
+Coming next: MySQL databases and S3 backups (v0.2), then multi-node, server transfers and
 auto-sleep (v0.3).
 See the full [roadmap](ROADMAP.md).
 

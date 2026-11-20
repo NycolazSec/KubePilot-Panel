@@ -30,7 +30,8 @@ const (
 )
 
 // Scopes a key can carry: the server permissions, the owner-only ones and the admin area.
-var apiKeyScopes = append(slices.Clone(AllPerms), "users", "settings", "admin")
+// "sftp" is left out: SFTP never uses API keys.
+var apiKeyScopes = append(slices.DeleteFunc(slices.Clone(AllPerms), func(p string) bool { return p == "sftp" }), "users", "settings", "admin")
 
 const apiKeySchema = `
 CREATE TABLE IF NOT EXISTS api_keys (

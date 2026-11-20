@@ -40,10 +40,18 @@ spec:
             - { name: KUBEPILOT_SECURE_COOKIES, value: {{ .Values.secureCookies | toString | quote }} }
             - { name: KUBEPILOT_MINECRAFT_ROUTER, value: {{ .Values.minecraftRouter.enabled | toString | quote }} }
             - { name: KUBEPILOT_ROOT_INSTALL, value: {{ .Values.serversNamespace.rootInstall | toString | quote }} }
+            {{- if .Values.sftp.enabled }}
+            - { name: KUBEPILOT_SFTP_LISTEN, value: ":2022" }
+            - { name: KUBEPILOT_SFTP_PORT, value: {{ .Values.sftp.port | toString | quote }} }
+            {{- end }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
-          ports: [{ containerPort: 8080, name: http }]
+          ports:
+            - { containerPort: 8080, name: http }
+            {{- if .Values.sftp.enabled }}
+            - { containerPort: 2022, name: sftp }
+            {{- end }}
           readinessProbe: { httpGet: { path: /healthz, port: http }, periodSeconds: 5 }
           livenessProbe: { httpGet: { path: /healthz, port: http }, periodSeconds: 20, failureThreshold: 6 }
           resources: {{- toYaml .Values.resources | nindent 12 }}

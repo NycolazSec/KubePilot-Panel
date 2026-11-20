@@ -122,6 +122,12 @@ Paths are relative to the server's data folder (`/` = its root) and can never le
 | `POST` | `/servers/{id}/files/compress` | `{"dir": "/", "paths": ["/world"]}` → `{"name": "archive-….tar.gz"}` |
 | `POST` | `/servers/{id}/files/decompress` | `{"path": "/modpack.zip"}` (`.zip`, `.tar`, `.tar.gz`, `.tgz`) |
 
+### SFTP (`sftp`)
+
+`GET /servers/{id}/sftp` → `{"enabled", "host", "port", "username", "fingerprint", "passwordAllowed"}`: how to connect
+with an SFTP client (`<username>.<server id>`, panel password, or an SSH key added in *My account* — required for
+accounts with two-factor authentication). API keys can't be used over SFTP.
+
 ## Backups (`backups`)
 
 | Method | Path | Body |
