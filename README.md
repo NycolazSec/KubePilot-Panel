@@ -23,7 +23,7 @@ volume and `NodePort` service, and the panel drives the cluster through the Kube
 | Live dashboard: status, CPU, RAM, disk, one-click address copy | Cluster overview: nodes, CPU/RAM usage, ports, disk, backups |
 | Real-time console over WebSocket (ANSI colors, command history, search, log export) | Create servers from templates (owner, resources, variables, auto-start) |
 | Start / restart / stop / kill, crash detection (OOMKilled, exit codes, image errors) | Edit resources, image, startup command, suspend servers |
-| File manager: CodeMirror editor, drag & drop upload, zip download, archive / extract | Users & roles, editable templates with JSON import/export |
+| File manager: CodeMirror editor, drag & drop upload, zip download, archive / extract | Users & roles, two-factor authentication (TOTP + recovery codes), editable templates with JSON import/export |
 | Backups: create, restore, download, lock, automatic rotation | Settings: panel name, public address, port range, timezone |
 | Cron schedules: commands, power actions, backups | Global activity log |
 | Validated startup variables, image selection, extra ports, sub-users with fine-grained permissions | |
@@ -64,7 +64,7 @@ flowchart LR
 - **Network isolation**: a `NetworkPolicy` gives game servers Internet + DNS access but blocks private ranges, the cluster network and the node IPs (databases, API server…).
 - **Least privilege**: the panel's ServiceAccount has full rights *only* in `kubepilot-servers`, and read-only access to nodes, PVs, services and metrics. No access to Secrets.
 - **File manager**: every path goes through `os.Root`, so even a symlink planted by a game server can't escape its volume.
-- **Auth**: bcrypt (cost 12), hashed session tokens, `HttpOnly` + `Secure` + `SameSite=Lax` cookies, mandatory anti-CSRF header, WebSocket origin check, login rate limiting, strict CSP, HSTS, activity log.
+- **Auth**: bcrypt (cost 12), optional TOTP two-factor authentication with single-use recovery codes, hashed session tokens, `HttpOnly` + `Secure` + `SameSite=Lax` cookies, mandatory anti-CSRF header, WebSocket origin check, login rate limiting, strict CSP, HSTS, activity log.
 
 ## Requirements
 
@@ -90,6 +90,8 @@ kubectl -n kubepilot-system exec deploy/kubepilot -- \
 ```
 
 Then point a DNS record for your domain at the cluster and open `https://<your domain>`.
+A user who lost both their phone and their recovery codes can have two-factor authentication reset by an admin in
+*Users*, or with `kubectl -n kubepilot-system exec deploy/kubepilot -- kubepilot user:2fa-reset --username <name>`.
 Players connect to `<node address>:<port>`; game ports are NodePorts in `30100-30299` (configurable in the admin
 settings, within `30000-32767`). Open that range (TCP + UDP) if a firewall sits in front of the node.
 

@@ -36,6 +36,7 @@ type App struct {
 	allocMu sync.Mutex
 
 	limiter *rateLimiter
+	tickets loginTickets // sign-ins waiting for their second factor
 }
 
 func newApp(cfg Config, db *DB, kube *Kube) *App {
@@ -281,18 +282,13 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, errCode(401, "Invalid credentials"))
 		return
 	}
-	a.limiter.reset(ip)
-	tok, err := a.db.CreateSession(u.ID, ip, r.UserAgent())
-	if err != nil {
-		writeErr(w, r, err)
+	if u.TwoFactor {
+		// password OK: the session is only created once the second factor is checked (the rate limit keeps running)
+		writeJSON(w, 200, map[string]any{"twoFactor": true, "ticket": a.tickets.create(u.ID, ip)})
 		return
 	}
-	http.SetCookie(w, &http.Cookie{
-		Name: cookieName, Value: tok, Path: "/", HttpOnly: true, Secure: a.cfg.SecureCookies,
-		SameSite: http.SameSiteLaxMode, MaxAge: int(sessionTTL.Seconds()),
-	})
-	a.db.LogActivity("", u, ip, "auth.login", "")
-	writeJSON(w, 200, a.meView(u))
+	a.limiter.reset(ip)
+	a.startSession(w, r, u)
 }
 
 func (a *App) handleLogout(w http.ResponseWriter, r *http.Request) {
@@ -341,6 +337,12 @@ func (a *App) routes() http.Handler {
 	m.HandleFunc("POST /api/auth/logout", a.handleLogout)
 	m.HandleFunc("GET /api/auth/me", a.authed(a.handleMe))
 	m.HandleFunc("PUT /api/account/password", a.authed(a.handlePassword))
+	m.HandleFunc("POST /api/auth/login/2fa", a.handleLogin2FA)
+	m.HandleFunc("GET /api/account/2fa", a.authed(a.handle2FAStatus))
+	m.HandleFunc("POST /api/account/2fa/setup", a.authed(a.handle2FASetup))
+	m.HandleFunc("POST /api/account/2fa/enable", a.authed(a.handle2FAEnable))
+	m.HandleFunc("POST /api/account/2fa/disable", a.authed(a.handle2FADisable))
+	m.HandleFunc("POST /api/account/2fa/recovery", a.authed(a.handle2FARecovery))
 
 	m.HandleFunc("GET /api/servers", a.authed(a.handleServers))
 	m.HandleFunc("GET /api/servers/{id}", a.srv("", a.handleServer))

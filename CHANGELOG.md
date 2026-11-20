@@ -24,6 +24,9 @@ First public version of KubePilot, the Kubernetes-native game server panel.
 - Multi-arch image (`linux/amd64`, `linux/arm64`) `ghcr.io/nycolazsec/kubepilot-panel`, signed with cosign, with SBOM
   and build provenance.
 - Configurable StorageClass for game volumes (`KUBEPILOT_STORAGE_CLASS`).
+- Two-factor authentication (TOTP, works with any authenticator app) with 10 single-use recovery codes: enable it
+  from *My account*; codes can't be replayed, sign-in tickets are bound to the IP and limited to 5 attempts. Admins can
+  reset it for a user who lost their phone (also `kubepilot user:2fa-reset --username …`).
 - English and French interface: the language follows the browser and can be changed from the account page or the
   sign-in page. Server errors and console messages are translated for each viewer. New installs get English templates.
 

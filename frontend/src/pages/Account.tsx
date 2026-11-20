@@ -5,6 +5,7 @@ import { Button, Card, Field, PageHeader, useUI } from '../components/ui';
 import { dateTime } from '../lib/format';
 import { useAuth } from '../main';
 import LanguageSelect from '../components/LanguageSelect';
+import TwoFactorCard from '../components/TwoFactorCard';
 import { t } from '../i18n';
 
 export default function Account() {
@@ -50,6 +51,7 @@ export default function Account() {
             <Button type="submit" variant="primary" loading={busy} icon={<KeyRound className="h-4 w-4" />}>{t('account.update')}</Button>
           </form>
         </Card>
+        <TwoFactorCard />
         <Card title={t('account.language')} description={t('account.languageHint')}>
           <LanguageSelect />
         </Card>

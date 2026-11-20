@@ -130,8 +130,21 @@ func runCLI(db *DB, args []string) error {
 			return err
 		}
 		fmt.Println("Password updated for", u.Username)
+	case "user:2fa-reset":
+		fs := flag.NewFlagSet("user:2fa-reset", flag.ExitOnError)
+		username := fs.String("username", "", "")
+		_ = fs.Parse(args[1:])
+		u, err := db.UserByLogin(*username)
+		if err != nil {
+			return err
+		}
+		if err := db.DisableTOTP(u.ID); err != nil {
+			return err
+		}
+		db.LogActivity("", nil, "", "admin.user.2fa.reset", u.Username)
+		fmt.Println("Two-factor authentication disabled for", u.Username)
 	default:
-		return fmt.Errorf("unknown command %q (user:create, user:password)", args[0])
+		return fmt.Errorf("unknown command %q (user:create, user:password, user:2fa-reset)", args[0])
 	}
 	return nil
 }

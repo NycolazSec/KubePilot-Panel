@@ -49,6 +49,12 @@ const labels: Record<string, string> = {
   'auth.login': t('act.auth.login'),
   'auth.fail': t('act.auth.fail'),
   'account.password': t('act.account.password'),
+  'auth.2fa.fail': t('act.auth.2fa.fail'),
+  'auth.2fa.recovery': t('act.auth.2fa.recovery'),
+  'account.2fa.enable': t('act.account.2fa.enable'),
+  'account.2fa.disable': t('act.account.2fa.disable'),
+  'account.2fa.recovery': t('act.account.2fa.recovery'),
+  'admin.user.2fa.reset': t('act.admin.user.2fa.reset'),
 };
 export const actLabel = (a: string) => labels[a] || a;
 // actions done by the panel itself (schedules…) have no user

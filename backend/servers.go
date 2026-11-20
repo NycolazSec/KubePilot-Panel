@@ -906,6 +906,7 @@ func (a *App) handleAdminUserSave(w http.ResponseWriter, r *http.Request, u *Use
 	var in struct {
 		Username, Email, Password string
 		IsAdmin                   bool `json:"isAdmin"`
+		Reset2FA                  bool `json:"reset2fa"` // for a user who lost their device and recovery codes
 	}
 	if err := readJSON(r, &in); err != nil {
 		writeErr(w, r, err)
@@ -936,6 +937,13 @@ func (a *App) handleAdminUserSave(w http.ResponseWriter, r *http.Request, u *Use
 				return
 			}
 			_, _ = a.db.Exec(`DELETE FROM sessions WHERE user_id=?`, uid)
+		}
+		if in.Reset2FA && target.TwoFactor {
+			if err := a.db.DisableTOTP(uid); err != nil {
+				writeErr(w, r, err)
+				return
+			}
+			a.db.LogActivity("", u, clientIP(r), "admin.user.2fa.reset", in.Username)
 		}
 		a.db.LogActivity("", u, clientIP(r), "admin.user.update", in.Username)
 		writeJSON(w, 200, map[string]bool{"ok": true})

@@ -126,7 +126,7 @@ func openDB(path string) (*DB, error) {
 	// A single connection: SQLite serialises writes anyway and this avoids SQLITE_BUSY.
 	// Rule: never run a query while iterating another result set.
 	sqldb.SetMaxOpenConns(1)
-	if _, err := sqldb.Exec(schema); err != nil {
+	if _, err := sqldb.Exec(schema + totpSchema); err != nil {
 		return nil, err
 	}
 	return &DB{sqldb}, nil
@@ -162,6 +162,7 @@ type User struct {
 	Username  string `json:"username"`
 	Email     string `json:"email"`
 	IsAdmin   bool   `json:"isAdmin"`
+	TwoFactor bool   `json:"twoFactor"`
 	CreatedAt int64  `json:"createdAt"`
 	hash      string
 }
@@ -206,11 +207,12 @@ func (db *DB) CreateUser(username, email, password string, admin bool) (*User, e
 	return db.UserByID(id)
 }
 
-const userCols = `id, username, email, is_admin, created_at, password_hash`
+const userCols = `id, username, email, is_admin, created_at, password_hash,
+	EXISTS(SELECT 1 FROM user_totp t WHERE t.user_id=users.id AND t.enabled=1)`
 
 func scanUser(row interface{ Scan(...any) error }) (*User, error) {
 	u := &User{}
-	if err := row.Scan(&u.ID, &u.Username, &u.Email, &u.IsAdmin, &u.CreatedAt, &u.hash); err != nil {
+	if err := row.Scan(&u.ID, &u.Username, &u.Email, &u.IsAdmin, &u.CreatedAt, &u.hash, &u.TwoFactor); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}
@@ -278,7 +280,8 @@ func (db *DB) SessionUser(tok string) (*User, error) {
 	if tok == "" {
 		return nil, ErrNotFound
 	}
-	return scanUser(db.QueryRow(`SELECT u.id, u.username, u.email, u.is_admin, u.created_at, u.password_hash
+	return scanUser(db.QueryRow(`SELECT u.id, u.username, u.email, u.is_admin, u.created_at, u.password_hash,
+		EXISTS(SELECT 1 FROM user_totp t WHERE t.user_id=u.id AND t.enabled=1)
 		FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?`, sha(tok), now()))
 }
 

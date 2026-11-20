@@ -13,7 +13,7 @@ Ideas and votes are welcome in the [issues](https://github.com/NycolazSec/KubePi
 - [x] Multi-arch container image (`amd64`, `arm64`) published to GHCR on every release
 - [x] One-command install with a Helm chart, on any Kubernetes distribution
 - [x] English and French interface, ready for community translations
-- [ ] Two-factor authentication (TOTP) with recovery codes
+- [x] Two-factor authentication (TOTP) with recovery codes
 - [ ] Personal API keys
 - [ ] Backend test suite in CI
 
