@@ -223,6 +223,7 @@ func (a *App) startServer(ctx context.Context, s *Server) error {
 		return err
 	}
 	go a.refreshDisk(a.ctx, s.ID)
+	a.applyServerConfig(ctx, sp)
 	return a.kube.ApplyStatefulSet(ctx, sp, 1)
 }
 

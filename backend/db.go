@@ -411,7 +411,9 @@ type Template struct {
 	InstallPath  string `json:"installPath,omitempty"`
 	StopCommand  string `json:"stopCommand,omitempty"`
 	Source       string `json:"source,omitempty"`
-	UpdatedAt    int64  `json:"updatedAt"`
+	// ConfigFiles are edited before each start from the server's variables (eggs' "config.files")
+	ConfigFiles []ConfigFile `json:"configFiles,omitempty"`
+	UpdatedAt   int64        `json:"updatedAt"`
 }
 
 var slugRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{1,40}$`)
@@ -484,7 +486,7 @@ func (t *Template) Validate() error {
 	if t.InstallImage == "" {
 		t.InstallImage = "busybox:1.36"
 	}
-	return nil
+	return validateConfigFiles(t.ConfigFiles)
 }
 
 func (db *DB) Templates() ([]*Template, error) {

@@ -8,6 +8,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
+- **Egg configuration files** (`config.files`): before each start, the game's own files get the server's port, IP,
+  name, password… from its variables, like Wings — the 6 parsers (`properties`, `ini`, `json`, `yaml`, `xml`,
+  `file`), dot paths with `[0]` indexes and `*` wildcards, conditional replacements, all of Wings' placeholders
+  (`{{server.build.default.port}}`, `{{server.build.env.X}}`, `{{env.X}}`, `{{server.environment.X}}`…). Better than
+  Wings: comments and key order are kept (YAML, JSON), existing value types too, and a list is never invented.
+  Flat files (`properties`, `ini`) are created if missing; the others are edited once the game wrote them. 171 of the
+  172 catalog eggs that use it are converted (values pointing to Wings' Docker network are left out, with a warning).
+  Shown and editable (JSON) in the template editor; the console says which files were updated.
+
 - **Built-in SFTP server** (FileZilla, WinSCP, `sftp`): sign in as `<username>.<server id>` with the panel password or an
   SSH key added in *My account* (ed25519, ECDSA, security keys, RSA ≥ 3072 bits). Accounts with two-factor
   authentication must use a key: a password alone can't bypass 2FA. Same rules as the web file manager — `os.Root`

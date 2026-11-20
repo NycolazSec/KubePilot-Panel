@@ -175,10 +175,15 @@ func slugify(s string, max int) string {
 }
 
 // warn marks a message shown to the admin (translated like errors).
-func warn(msg string) string { return msg }
+type eggWarning struct {
+	Msg  string
+	Args []any
+}
+
+func warn(msg string, args ...any) eggWarning { return eggWarning{msg, args} }
 
 // convertEgg turns an egg into a template draft, with warnings about what KubePilot doesn't do like Wings.
-func convertEgg(raw []byte) (*Template, []string, error) {
+func convertEgg(raw []byte) (*Template, []eggWarning, error) {
 	var e egg
 	if err := json.Unmarshal(raw, &e); err != nil {
 		return nil, nil, errCode(400, "This is not a valid egg (JSON)")
@@ -250,9 +255,11 @@ func convertEgg(raw []byte) (*Template, []string, error) {
 			t.Vars = append(t.Vars, tv)
 		}
 	}
-	warnings := []string{}
-	if f := strings.TrimSpace(e.Config.Files); f != "" && f != "{}" && f != "[]" {
-		warnings = append(warnings, warn("This egg has Wings edit configuration files on start (server port, IP…): check them in the file manager after the first start."))
+	warnings := []eggWarning{}
+	files, skipped := eggConfigFiles(e.Config.Files)
+	t.ConfigFiles = files
+	if len(skipped) > 0 {
+		warnings = append(warnings, warn("Some configuration values point to Wings' Docker network, which doesn't exist on Kubernetes, and were left out: %s", strings.Join(skipped, ", ")))
 	}
 	for _, f := range e.Features {
 		if f == "eula" {
@@ -356,10 +363,11 @@ func (a *App) handleEggConvert(w http.ResponseWriter, r *http.Request, u *User) 
 		return
 	}
 	lang := langOf(r)
-	for i := range warnings {
-		warnings[i] = tr(lang, warnings[i])
+	shown := []string{}
+	for _, wn := range warnings {
+		shown = append(shown, tr(lang, wn.Msg, wn.Args...))
 	}
-	writeJSON(w, 200, map[string]any{"template": t, "warnings": warnings})
+	writeJSON(w, 200, map[string]any{"template": t, "warnings": shown})
 }
 
 // ---------- Catalog of the community eggs (github.com/pelican-eggs)
@@ -450,4 +458,77 @@ func (a *App) handleEggCatalog(w http.ResponseWriter, r *http.Request, u *User) 
 	}
 	eggCatalog.list, eggCatalog.expires = list, time.Now().Add(ttl)
 	writeJSON(w, 200, list)
+}
+
+// kv is one member of a JSON object, in the file's order.
+type kv struct {
+	Key string
+	Val json.RawMessage
+}
+
+func orderedObject(raw []byte) ([]kv, bool) {
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	if t, err := dec.Token(); err != nil || t != json.Delim('{') {
+		return nil, false
+	}
+	var out []kv
+	for dec.More() {
+		k, err := dec.Token()
+		if err != nil {
+			return nil, false
+		}
+		var v json.RawMessage
+		if dec.Decode(&v) != nil {
+			return nil, false
+		}
+		ks, _ := k.(string)
+		out = append(out, kv{ks, v})
+	}
+	return out, true
+}
+
+// eggConfigFiles reads "config.files" (a JSON object in a string): {"file": {"parser": "…", "find": {key: value}}}.
+// A value may be an object {"<current value>": "<replacement>"}. Values pointing to Wings' Docker network
+// ({{config.docker.…}}) have no meaning on Kubernetes and are left out.
+func eggConfigFiles(raw string) ([]ConfigFile, []string) {
+	out, skipped := []ConfigFile{}, []string{}
+	files, ok := orderedObject([]byte(strings.TrimSpace(raw)))
+	if !ok {
+		return out, skipped
+	}
+	for _, f := range files {
+		var spec struct {
+			Parser string          `json:"parser"`
+			Find   json.RawMessage `json:"find"`
+		}
+		if json.Unmarshal(f.Val, &spec) != nil {
+			continue
+		}
+		parser := strings.ToLower(spec.Parser)
+		if parser == "yml" {
+			parser = "yaml"
+		}
+		cf := ConfigFile{File: path.Clean(strings.TrimPrefix(strings.TrimSpace(f.Key), "/")), Parser: parser}
+		finds, _ := orderedObject(spec.Find)
+		for _, fd := range finds {
+			add := func(value json.RawMessage, ifValue string) {
+				if strings.Contains(string(value), "config.docker.") {
+					skipped = append(skipped, cf.File+": "+fd.Key)
+					return
+				}
+				cf.Find = append(cf.Find, ConfigReplace{Match: fd.Key, Value: value, IfValue: ifValue})
+			}
+			if conds, ok := orderedObject(fd.Val); ok {
+				for _, c := range conds {
+					add(c.Val, c.Key)
+				}
+				continue
+			}
+			add(fd.Val, "")
+		}
+		if len(cf.Find) > 0 && validateConfigFiles([]ConfigFile{cf}) == nil {
+			out = append(out, cf)
+		}
+	}
+	return out, skipped
 }

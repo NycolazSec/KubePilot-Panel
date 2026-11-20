@@ -5,6 +5,7 @@ import { Badge, Button, Card, Empty, ErrorBox, Field, IconButton, Loading, Modal
 import { cpuLabel, mb } from '../../lib/format';
 import TemplateIcon from '../../components/TemplateIcon';
 import EggImport from '../../components/EggImport';
+import ConfigFilesField from '../../components/ConfigFilesField';
 // `t` is used for templates in this file: the translation function is imported as `tr`
 import { t as tr } from '../../i18n';
 
@@ -128,6 +129,9 @@ function TemplateEditor({ t, setT }: { t: Template; setT: (t: Template) => void 
           <input className="input font-mono text-xs" value={t.installPath ?? ''} onChange={(e) => set('installPath', e.target.value)} placeholder="/mnt/server" />
         </Field>
         <div className="sm:col-span-3"><Toggle checked={!!t.installAsRoot} onChange={(v) => set('installAsRoot', v)} label={tr('tpl.installRoot')} /></div>
+        <Field label={tr('cfgfiles.title')} hint={tr('cfgfiles.hint')} className="sm:col-span-3">
+          <ConfigFilesField value={t.configFiles ?? []} onChange={(v) => set('configFiles', v)} />
+        </Field>
         {t.source && <p className="text-xs text-ink-500 sm:col-span-3">{tr('tpl.source', { source: t.source })}</p>}
       </section>
     </div>
