@@ -440,6 +440,8 @@ func (a *App) routes() http.Handler {
 	m.HandleFunc("POST /api/admin/templates", a.admin(a.handleAdminTemplateSave))
 	m.HandleFunc("PUT /api/admin/templates/{tid}", a.admin(a.handleAdminTemplateSave))
 	m.HandleFunc("DELETE /api/admin/templates/{tid}", a.admin(a.handleAdminTemplateDelete))
+	m.HandleFunc("POST /api/admin/templates/egg", a.admin(a.handleEggConvert))
+	m.HandleFunc("GET /api/admin/eggs/catalog", a.admin(a.handleEggCatalog))
 	m.HandleFunc("POST /api/admin/servers", a.admin(a.handleAdminServerCreate))
 	m.HandleFunc("PUT /api/admin/servers/{id}", a.admin(a.handleAdminServerUpdate))
 	m.HandleFunc("DELETE /api/admin/servers/{id}", a.admin(a.handleAdminServerDelete))

@@ -39,6 +39,8 @@ func userMessages(t *testing.T) map[string]string {
 				switch fn.Name {
 				case "errCode", "tr":
 					arg = 1
+				case "warn":
+					arg = 0
 				}
 			case *ast.SelectorExpr:
 				switch {

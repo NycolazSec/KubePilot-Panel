@@ -5,8 +5,15 @@ metadata:
   name: {{ .Values.serversNamespace.name }}
   labels:
     {{- include "kubepilot.labels" . | nindent 4 }}
-    # Game servers run without root, without capabilities, with seccomp
+    # Game servers always run without root, without capabilities, with seccomp; with rootInstall, egg
+    # install scripts may run as root (baseline), and anything not "restricted" is still audited and warned about.
+    {{- if .Values.serversNamespace.rootInstall }}
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+    {{- else }}
     pod-security.kubernetes.io/enforce: restricted
+    {{- end }}
     pod-security.kubernetes.io/enforce-version: latest
   annotations:
     # Never delete game servers and their data on uninstall

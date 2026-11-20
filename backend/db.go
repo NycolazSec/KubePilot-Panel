@@ -403,12 +403,15 @@ type Template struct {
 	Features []string `json:"features,omitempty"`
 	// Pterodactyl / Pelican eggs: their install scripts expect root, a given shell and /mnt/server;
 	// the game itself always runs as RunAsUser. StopCommand is typed in the console to stop the game cleanly.
-	InstallAsRoot bool   `json:"installAsRoot,omitempty"`
-	InstallShell  string `json:"installShell,omitempty"`
-	InstallPath   string `json:"installPath,omitempty"`
-	StopCommand   string `json:"stopCommand,omitempty"`
-	Source        string `json:"source,omitempty"`
-	UpdatedAt     int64  `json:"updatedAt"`
+	InstallAsRoot bool `json:"installAsRoot,omitempty"`
+	// StartupEnv hands the startup command to the image's own entrypoint in $STARTUP (Pterodactyl images
+	// run it with bash eval, after their own steps) instead of running it with sh -c.
+	StartupEnv   bool   `json:"startupEnv,omitempty"`
+	InstallShell string `json:"installShell,omitempty"`
+	InstallPath  string `json:"installPath,omitempty"`
+	StopCommand  string `json:"stopCommand,omitempty"`
+	Source       string `json:"source,omitempty"`
+	UpdatedAt    int64  `json:"updatedAt"`
 }
 
 var slugRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{1,40}$`)

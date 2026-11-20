@@ -39,6 +39,7 @@ spec:
             - { name: KUBEPILOT_DATA, value: /data }
             - { name: KUBEPILOT_SECURE_COOKIES, value: {{ .Values.secureCookies | toString | quote }} }
             - { name: KUBEPILOT_MINECRAFT_ROUTER, value: {{ .Values.minecraftRouter.enabled | toString | quote }} }
+            - { name: KUBEPILOT_ROOT_INSTALL, value: {{ .Values.serversNamespace.rootInstall | toString | quote }} }
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}

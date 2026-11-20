@@ -278,6 +278,9 @@ func (sp Spec) env() []corev1.EnvVar {
 		{Name: "TZ", Value: sp.Settings.Timezone},
 		{Name: "HOME", Value: t.DataPath},
 	}
+	if t.StartupEnv && strings.TrimSpace(s.Startup) != "" { // what Wings gives Pterodactyl images
+		list = append(list, corev1.EnvVar{Name: "STARTUP", Value: escapeDollar(s.Startup)}, corev1.EnvVar{Name: "P_SERVER_UUID", Value: s.ID})
+	}
 	idx := map[string]int{}
 	for i, e := range list {
 		idx[e.Name] = i
@@ -304,7 +307,11 @@ func milli(m int) resource.Quantity { return *resource.NewMilliQuantity(int64(m)
 
 func (sp Spec) resources() corev1.ResourceRequirements {
 	s := sp.Server
-	lim := corev1.ResourceList{corev1.ResourceMemory: mi(s.MemoryMB)}
+	limMB := s.MemoryMB
+	if strings.HasPrefix(sp.Template.Source, "pterodactyl-egg") {
+		limMB += eggOverhead(s.MemoryMB)
+	}
+	lim := corev1.ResourceList{corev1.ResourceMemory: mi(limMB)}
 	reqMem := s.MemoryMB / 2
 	if reqMem < 64 {
 		reqMem = 64
@@ -361,7 +368,7 @@ func (sp Spec) podTemplate() corev1.PodTemplateSpec {
 		SecurityContext: csc,
 		VolumeMounts:    []corev1.VolumeMount{{Name: "data", MountPath: t.DataPath}, {Name: "tmp", MountPath: "/tmp"}},
 	}
-	if strings.TrimSpace(s.Startup) != "" {
+	if strings.TrimSpace(s.Startup) != "" && !t.StartupEnv {
 		c.Command = []string{"/bin/sh", "-c", escapeDollar(s.Startup)}
 	}
 	if t.StopCommand != "" {
@@ -554,6 +561,12 @@ func (k *Kube) RunInstall(ctx context.Context, sp Spec) error {
 		shell = "/bin/" + t.InstallShell
 	}
 	command := "set -e\n" + script
+	if t.InstallAsRoot { // egg scripts expect Wings' behaviour: no "set -e"
+		command = script
+		if !k.rootInstall {
+			command = "echo '[KubePilot] Root installs are disabled on this cluster (serversNamespace.rootInstall=false): the install script runs without root and may fail.'\n" + script
+		}
+	}
 	if t.InstallAsRoot && k.rootInstall {
 		// Egg install scripts install packages as root (apt, apk, SteamCMD…): root, but without privilege
 		// escalation, seccomp on and only the capabilities package managers need. Whatever happens, the files
@@ -1050,3 +1063,16 @@ func stopScript(cmd string) string {
 }
 
 func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
+
+// eggOverhead: eggs size their process from SERVER_MEMORY (e.g. a JVM with -Xmx{{SERVER_MEMORY}}M or
+// MaxRAMPercentage=95), counting on Wings' extra headroom above the server's memory. Same headroom here, or
+// the kernel would kill the game as soon as its heap is full.
+func eggOverhead(mb int) int {
+	switch {
+	case mb <= 2048:
+		return max(mb*15/100, 256)
+	case mb <= 4096:
+		return mb * 10 / 100
+	}
+	return mb * 5 / 100
+}

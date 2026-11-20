@@ -8,6 +8,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
+- **Pterodactyl / Pelican eggs**: *Admin* → *Templates* → *Import an egg*, from the community catalog
+  (~300 games and apps of github.com/pelican-eggs, searchable), a GitHub link or a `.json` file. PTDL_v1, PTDL_v2
+  and PLCN_v3 are supported. The egg becomes a template draft to review: images (newest Java first), startup command
+  handed to the image's own entrypoint like Wings does, variables with their validation rules (`in:`, `regex:`,
+  numeric, boolean), stop command, Minecraft features detected. The install script runs as root — without
+  privilege escalation, with seccomp and only the capabilities package managers need — and its files are handed back
+  to the game's user; the game itself never runs as root. New chart value `serversNamespace.rootInstall` (default
+  `true`: the namespace is enforced at Pod Security `baseline`, with `restricted` still audited and warned about).
+- Stop command per template (`stop`, `shutdown`, `^C`…): typed in the console before any stop, restart or node
+  drain, so the game saves cleanly.
+- Minecraft servers that enable RCON in `server.properties` (eggs, other images) get the player actions too.
+
 - "Internal only" servers (*Network* → *Reachable from the Internet* off): no public port at all, only the owner's
   other servers reach them — for a Lavalink, a database… Switching keeps the internal address and live connections.
 
@@ -23,6 +35,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Minecraft router (`minecraftRouter.enabled`, itzg/mc-router): Java servers get `<hostname>.<domain>` on the standard
   port 25565 — no port to type for players. Hostname picked from the server name, editable in *Network*; domain in the
   admin settings (wildcard DNS record, DNS only). The NodePort address keeps working.
+
+### Changed
+
+- Templates imported from eggs get Wings' memory headroom above the server's memory (eggs size the JVM from it).
 
 ## [0.1.0] - 2026-11-20
 

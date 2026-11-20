@@ -70,7 +70,7 @@ export interface Template {
   id: number; slug: string; name: string; description: string; category: string; images: ImageOption[]; startup: string;
   dataPath: string; vars: TemplateVar[]; ports: TemplatePort[]; stopGrace: number; readyProbe: boolean; runAsUser: number;
   consoleInput: boolean; installImage: string; installScript: string; defaultMemory: number; defaultCpu: number; defaultDisk: number; updatedAt?: number;
-  features?: string[];
+  features?: string[]; startupEnv?: boolean; installAsRoot?: boolean; installShell?: string; installPath?: string; stopCommand?: string; source?: string;
 }
 
 export interface Settings { panelName: string; publicHost: string; portMin: number; portMax: number; timezone: string; twoFactorPolicy: '' | 'admins' | 'everyone'; minecraftDomain: string }

@@ -1,9 +1,10 @@
-import { Copy, Download, Layers, Pencil, Plus, Trash2, Upload, X } from 'lucide-react';
+import { Copy, Download, Egg, Layers, Pencil, Plus, Trash2, Upload, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { del, get, post, put, sortTemplates, Template, TemplateVar } from '../../api';
 import { Badge, Button, Card, Empty, ErrorBox, Field, IconButton, Loading, Modal, Toggle, useLoad, useUI } from '../../components/ui';
 import { cpuLabel, mb } from '../../lib/format';
 import TemplateIcon from '../../components/TemplateIcon';
+import EggImport from '../../components/EggImport';
 // `t` is used for templates in this file: the translation function is imported as `tr`
 import { t as tr } from '../../i18n';
 
@@ -42,6 +43,7 @@ function TemplateEditor({ t, setT }: { t: Template; setT: (t: Template) => void 
       <section className="grid gap-4 sm:grid-cols-2">
         <Field label={tr('tpl.startup')} hint={tr('tpl.startupHint')} className="sm:col-span-2">
           <textarea className="input min-h-[120px] font-mono text-xs" value={t.startup} onChange={(e) => set('startup', e.target.value)} spellCheck={false} />
+          <div className="mt-2"><Toggle checked={!!t.startupEnv} onChange={(v) => set('startupEnv', v)} label={tr('tpl.startupEnv')} /></div>
         </Field>
         <Field label={tr('tpl.dataPath')}><input className="input font-mono" value={t.dataPath} onChange={(e) => set('dataPath', e.target.value)} /></Field>
         <Field label={tr('tpl.uid')} hint={tr('tpl.uidHint')}><input type="number" className="input" value={t.runAsUser} onChange={(e) => set('runAsUser', +e.target.value)} /></Field>
@@ -50,6 +52,9 @@ function TemplateEditor({ t, setT }: { t: Template; setT: (t: Template) => void 
           <Toggle checked={t.consoleInput} onChange={(v) => set('consoleInput', v)} label={tr('tpl.consoleInput')} />
           <Toggle checked={t.readyProbe} onChange={(v) => set('readyProbe', v)} label={tr('tpl.readyProbe')} />
         </div>
+        <Field label={tr('tpl.stopCommand')} hint={tr('tpl.stopCommandHint')}>
+          <input className="input font-mono text-xs" value={t.stopCommand ?? ''} maxLength={100} onChange={(e) => set('stopCommand', e.target.value)} placeholder="stop" />
+        </Field>
         <Field label={tr('tpl.features')} hint={tr('tpl.featuresHint')} className="sm:col-span-2">
           <select className="input" value={t.features?.[0] ?? ''} onChange={(e) => set('features', e.target.value ? [e.target.value] : [])}>
             <option value="">{tr('tpl.featureNone')}</option>
@@ -114,6 +119,16 @@ function TemplateEditor({ t, setT }: { t: Template; setT: (t: Template) => void 
         <Field label={tr('tpl.installScript')} className="sm:col-span-2">
           <textarea className="input min-h-[90px] font-mono text-xs" value={t.installScript} onChange={(e) => set('installScript', e.target.value)} spellCheck={false} />
         </Field>
+        <Field label={tr('tpl.installShell')}>
+          <select className="input" value={t.installShell || 'sh'} onChange={(e) => set('installShell', e.target.value === 'sh' ? '' : e.target.value)}>
+            <option value="sh">sh</option><option value="bash">bash</option><option value="ash">ash</option>
+          </select>
+        </Field>
+        <Field label={tr('tpl.installPath')} hint={tr('tpl.installPathHint')} className="sm:col-span-2">
+          <input className="input font-mono text-xs" value={t.installPath ?? ''} onChange={(e) => set('installPath', e.target.value)} placeholder="/mnt/server" />
+        </Field>
+        <div className="sm:col-span-3"><Toggle checked={!!t.installAsRoot} onChange={(v) => set('installAsRoot', v)} label={tr('tpl.installRoot')} /></div>
+        {t.source && <p className="text-xs text-ink-500 sm:col-span-3">{tr('tpl.source', { source: t.source })}</p>}
       </section>
     </div>
   );
@@ -123,6 +138,8 @@ export default function AdminTemplates() {
   const { toast, confirm } = useUI();
   const { data, error, loading, reload } = useLoad(() => get<Template[]>('/admin/templates').then(sortTemplates));
   const [edit, setEdit] = useState<Template | null>(null);
+  const [eggOpen, setEggOpen] = useState(false);
+  const [eggWarnings, setEggWarnings] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
 
@@ -162,7 +179,8 @@ export default function AdminTemplates() {
         actions={<>
           <Button size="sm" icon={<Upload className="h-3.5 w-3.5" />} onClick={() => importRef.current?.click()}>{tr('tpl.import')}</Button>
           <input ref={importRef} type="file" accept="application/json" hidden onChange={(e) => { if (e.target.files?.[0]) importT(e.target.files[0]); e.target.value = ''; }} />
-          <Button size="sm" variant="primary" icon={<Plus className="h-3.5 w-3.5" />} onClick={() => setEdit({ ...blank })}>{tr('tpl.new')}</Button>
+          <Button size="sm" icon={<Egg className="h-3.5 w-3.5" />} onClick={() => setEggOpen(true)}>{tr('eggs.button')}</Button>
+          <Button size="sm" variant="primary" icon={<Plus className="h-3.5 w-3.5" />} onClick={() => { setEggWarnings([]); setEdit({ ...blank }); }}>{tr('tpl.new')}</Button>
         </>}>
         {error ? <div className="p-4"><ErrorBox error={error} /></div> : loading || !data ? <Loading /> : !data.length ? <Empty icon={<Layers className="h-6 w-6" />} title={tr('tpl.empty')} /> : (
           <ul className="divide-y divide-ink-800">
@@ -186,8 +204,20 @@ export default function AdminTemplates() {
       </Card>
       <Modal open={!!edit} onClose={() => setEdit(null)} wide="xl" title={edit?.id ? tr('adminServers.editTitle', { name: edit.name }) : tr('tpl.newTitle')}
         footer={<><span className="mr-auto self-center text-xs text-ink-500">{tr('tpl.applyHint')}</span><Button variant="ghost" onClick={() => setEdit(null)}>{tr('common.cancel')}</Button><Button variant="primary" loading={busy} onClick={save}>{tr('common.save')}</Button></>}>
+        {edit && eggWarnings.length > 0 && (
+          <div className="mb-5 space-y-1.5 rounded-md border border-amber-500/30 bg-amber-500/[.07] px-3 py-2.5 text-[13px] text-amber-200">
+            <p className="font-medium">{tr('eggs.imported')}</p>
+            {eggWarnings.map((w) => <p key={w}>• {w}</p>)}
+          </div>
+        )}
         {edit && <TemplateEditor t={edit} setT={setEdit} />}
       </Modal>
+      <EggImport open={eggOpen} onClose={() => setEggOpen(false)} onConverted={(r) => {
+        setEggOpen(false);
+        setEggWarnings(r.warnings);
+        setEdit({ ...blank, ...r.template, id: 0 });
+        toast(tr('eggs.imported'), 'info');
+      }} />
     </>
   );
 }
