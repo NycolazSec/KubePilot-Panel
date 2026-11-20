@@ -113,10 +113,6 @@ CREATE TABLE IF NOT EXISTS activity (
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS activity_server ON activity(server_id, id);
-CREATE TABLE IF NOT EXISTS cluster_scale (
-  key TEXT PRIMARY KEY,
-  replicas INTEGER NOT NULL
-);
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL

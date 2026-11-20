@@ -54,39 +54,18 @@ metadata:
 roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: kubepilot }
 subjects: [{ kind: ServiceAccount, name: kubepilot, namespace: kubepilot-system }]
 ---
-# Lecture seule sur tout le cluster (vue « Cluster » + ports NodePort déjà pris). Jamais les Secrets.
+# Lecture seule au niveau du cluster : nœuds, volumes, ports NodePort déjà pris, métriques
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: kubepilot
 rules:
   - apiGroups: [""]
-    resources: [nodes, namespaces, persistentvolumes, persistentvolumeclaims, services, pods, pods/log, events]
-    verbs: [get, list, watch]
-  - apiGroups: [apps]
-    resources: [deployments, statefulsets, daemonsets, replicasets]
-    verbs: [get, list, watch]
-  - apiGroups: [networking.k8s.io]
-    resources: [ingresses]
+    resources: [nodes, persistentvolumes, services]
     verbs: [get, list]
   - apiGroups: [metrics.k8s.io]
     resources: [pods, nodes]
     verbs: [get, list]
----
-# Actions « sûres » sur les applis : supprimer un pod, changer le nombre de répliques.
-# Pas de patch/update des workloads → impossible de réécrire une spec de pod.
-# Lié par RoleBinding seulement dans les namespaces de KUBEPILOT_OPS_NAMESPACES (voir deploy.sh).
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: kubepilot-ops
-rules:
-  - apiGroups: [""]
-    resources: [pods]
-    verbs: [delete]
-  - apiGroups: [apps]
-    resources: [deployments/scale, statefulsets/scale]
-    verbs: [get, update]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

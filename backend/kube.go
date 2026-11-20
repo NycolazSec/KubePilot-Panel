@@ -741,8 +741,7 @@ func (k *Kube) metricsLoop(ctx context.Context) {
 type metricsList struct {
 	Items []struct {
 		Metadata struct {
-			Name      string `json:"name"`
-			Namespace string `json:"namespace"`
+			Name string `json:"name"`
 		} `json:"metadata"`
 		Usage      map[string]string `json:"usage"`
 		Containers []struct {

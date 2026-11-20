@@ -394,11 +394,6 @@ func (a *App) routes() http.Handler {
 	m.HandleFunc("GET /api/admin/settings", a.admin(a.handleAdminSettings))
 	m.HandleFunc("PUT /api/admin/settings", a.admin(a.handleAdminSettingsSave))
 	m.HandleFunc("GET /api/admin/activity", a.admin(a.handleAdminActivity))
-	m.HandleFunc("GET /api/admin/cluster", a.admin(a.handleClusterOverview))
-	m.HandleFunc("POST /api/admin/cluster/scale", a.admin(a.handleClusterScale))
-	m.HandleFunc("POST /api/admin/cluster/restart", a.admin(a.handleClusterRestart))
-	m.HandleFunc("POST /api/admin/cluster/delete-pod", a.admin(a.handleClusterDeletePod))
-	m.HandleFunc("GET /api/admin/cluster/logs", a.admin(a.handleClusterLogs))
 
 	m.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("ok")) })
 	m.Handle("/api/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

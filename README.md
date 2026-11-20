@@ -25,8 +25,7 @@ volume and `NodePort` service, and the panel drives the cluster through the Kube
 | File manager: CodeMirror editor, drag & drop upload, zip download, archive / extract | Users & roles, editable templates with JSON import/export |
 | Backups: create, restore, download, lock, automatic rotation | Settings: panel name, public address, port range, timezone |
 | Cron schedules: commands, power actions, backups | Global activity log |
-| Validated startup variables, image selection, extra ports, sub-users with fine-grained permissions | **Cluster view**: every Deployment / StatefulSet / DaemonSet and pod of the cluster, live logs, ingresses, services, warning events |
-| | Safe cluster actions in allowed namespaces: scale, stop / start, pod-by-pod restart, delete or force-delete stuck pods |
+| Validated startup variables, image selection, extra ports, sub-users with fine-grained permissions | |
 
 Built-in templates: **Minecraft Java** (Paper, Purpur, Vanilla, Fabric, Forge, NeoForge… via `itzg/minecraft-server`),
 **Minecraft Bedrock**, **Node.js** and **Python** (Discord bots & apps, optional Git clone + `npm`/`pip` install),
@@ -62,10 +61,7 @@ flowchart LR
 
 - **Game pods**: namespace enforced at Pod Security `restricted` — UID 1000, all capabilities dropped, no privilege escalation, seccomp `RuntimeDefault`, no service-account token.
 - **Network isolation**: a `NetworkPolicy` gives game servers Internet + DNS access but blocks private ranges, the cluster network and the node IPs (databases, API server…).
-- **Least privilege**: the panel's ServiceAccount has full rights *only* in `kubepilot-servers` and read-only access to the rest of the cluster — never to Secrets.
-  Cluster actions use a separate `kubepilot-ops` role (delete pods, update the `scale` subresource) bound only in the namespaces listed in
-  `KUBEPILOT_OPS_NAMESPACES`. The panel never gets `patch`/`update` on workloads, so even a compromised panel can't rewrite a pod spec
-  to escalate; restarts are done by replacing pods one by one.
+- **Least privilege**: the panel's ServiceAccount has full rights *only* in `kubepilot-servers`, and read-only access to nodes, PVs, services and metrics. No access to Secrets.
 - **File manager**: every path goes through `os.Root`, so even a symlink planted by a game server can't escape its volume.
 - **Auth**: bcrypt (cost 12), hashed session tokens, `HttpOnly` + `Secure` + `SameSite=Lax` cookies, mandatory anti-CSRF header, WebSocket origin check, login rate limiting, strict CSP, HSTS, activity log.
 
@@ -79,7 +75,7 @@ flowchart LR
 
 ```sh
 git clone https://github.com/NycolazSec/KubePilot-Panel.git && cd KubePilot-Panel
-cp deploy/config.env.example deploy/config.env   # domain, node, ClusterIssuer, namespaces the Cluster page may act on
+cp deploy/config.env.example deploy/config.env   # set your domain, node and ClusterIssuer
 ./deploy.sh                                      # build → image → import into k3s → apply → rollout
 
 # create the first admin account

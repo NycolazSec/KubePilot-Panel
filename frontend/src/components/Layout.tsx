@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import { Activity, Boxes, Gauge, Layers, LogOut, Menu, Network, Server, Settings, User, Users, X } from 'lucide-react';
+import { Activity, Boxes, Gauge, Layers, LogOut, Menu, Server, Settings, User, Users, X } from 'lucide-react';
 import React, { useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { post } from '../api';
@@ -52,7 +52,6 @@ export default function Layout() {
       {me?.user.isAdmin && (
         <Section label="Administration">
           <Item to="/admin" end icon={Gauge}>Vue d'ensemble</Item>
-          <Item to="/admin/cluster" icon={Network}>Cluster</Item>
           <Item to="/admin/servers" icon={Boxes}>Serveurs</Item>
           <Item to="/admin/users" icon={Users}>Utilisateurs</Item>
           <Item to="/admin/templates" icon={Layers}>Templates</Item>
