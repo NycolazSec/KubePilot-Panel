@@ -1,0 +1,79 @@
+{{- if .Values.minecraftRouter.enabled }}
+{{- $name := printf "%s-mc-router" (include "kubepilot.fullname" .) }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "kubepilot.labels" . | nindent 4 }}
+---
+# mc-router only reads the Services of the game servers namespace, to find their hostnames
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Values.serversNamespace.name }}
+  labels: {{- include "kubepilot.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [services]
+    verbs: [list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Values.serversNamespace.name }}
+  labels: {{- include "kubepilot.labels" . | nindent 4 }}
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: {{ $name }} }
+subjects: [{ kind: ServiceAccount, name: {{ $name }}, namespace: {{ .Release.Namespace }} }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "kubepilot.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: mc-router, app.kubernetes.io/instance: {{ .Release.Name }} }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: mc-router, app.kubernetes.io/instance: {{ .Release.Name }} }
+    spec:
+      serviceAccountName: {{ $name }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: mc-router
+          image: {{ .Values.minecraftRouter.image }}
+          args: ["--in-kube-cluster"]
+          env:
+            - { name: KUBE_NAMESPACE, value: {{ .Values.serversNamespace.name | quote }} }
+            - { name: PORT, value: "25565" }
+          ports: [{ containerPort: 25565, name: minecraft }]
+          readinessProbe: { tcpSocket: { port: minecraft }, periodSeconds: 10 }
+          resources: {{- toYaml .Values.minecraftRouter.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "kubepilot.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.minecraftRouter.service.type }}
+  {{- if ne .Values.minecraftRouter.service.type "ClusterIP" }}
+  externalTrafficPolicy: Local # keep the players' real IPs
+  {{- end }}
+  selector: { app.kubernetes.io/name: mc-router, app.kubernetes.io/instance: {{ .Release.Name }} }
+  ports: [{ name: minecraft, port: {{ .Values.minecraftRouter.service.port }}, targetPort: minecraft, protocol: TCP }]
+{{- end }}

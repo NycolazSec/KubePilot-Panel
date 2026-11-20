@@ -22,13 +22,15 @@ var webFS embed.FS
 var version = "dev" // set at build time: -ldflags "-X main.version=…"
 
 type Config struct {
-	Listen        string
-	DataDir       string
-	Kubeconfig    string
-	Namespace     string
-	StorageRoot   string
-	StorageClass  string
-	SecureCookies bool
+	Listen       string
+	DataDir      string
+	Kubeconfig   string
+	Namespace    string
+	StorageRoot  string
+	StorageClass string
+	// MinecraftRouter: the chart deployed mc-router, which routes players by hostname on port 25565
+	MinecraftRouter bool
+	SecureCookies   bool
 }
 
 func env(key, def string) string {
@@ -46,6 +48,7 @@ func main() {
 	flag.StringVar(&cfg.Namespace, "namespace", env("KUBEPILOT_NAMESPACE", "kubepilot-servers"), "namespace for game servers")
 	flag.StringVar(&cfg.StorageRoot, "storage-root", env("KUBEPILOT_STORAGE_ROOT", "/var/lib/rancher/k3s/storage"), "host path of local-path volumes")
 	flag.StringVar(&cfg.StorageClass, "storage-class", env("KUBEPILOT_STORAGE_CLASS", "local-path"), "StorageClass of game server volumes (hostPath-based provisioner)")
+	flag.BoolVar(&cfg.MinecraftRouter, "minecraft-router", env("KUBEPILOT_MINECRAFT_ROUTER", "false") == "true", "mc-router is deployed: give Minecraft servers hostnames on port 25565")
 	secure := flag.Bool("secure-cookies", env("KUBEPILOT_SECURE_COOKIES", "true") == "true", "set Secure flag on cookies")
 	flag.Parse()
 	cfg.SecureCookies = *secure

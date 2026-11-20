@@ -136,6 +136,12 @@ func openDB(path string) (*DB, error) {
 	if err := db.addColumn("activity", "api_key", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		return nil, err
 	}
+	if err := db.addColumn("servers", "hostname", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return nil, err
+	}
+	if _, err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS servers_hostname ON servers(hostname) WHERE hostname<>''`); err != nil {
+		return nil, err
+	}
 	return db, nil
 }
 
@@ -327,6 +333,8 @@ type Settings struct {
 	Timezone   string `json:"timezone"`
 	// TwoFactorPolicy: "" (optional), "admins" or "everyone" must use two-factor authentication
 	TwoFactorPolicy string `json:"twoFactorPolicy"`
+	// MinecraftDomain: with the Minecraft router, Java servers are reachable at <hostname>.<domain>
+	MinecraftDomain string `json:"minecraftDomain"`
 }
 
 func (db *DB) Settings() Settings {
@@ -533,15 +541,16 @@ type Server struct {
 	AllocationLimit int               `json:"allocationLimit"`
 	Suspended       bool              `json:"suspended"`
 	CreatedAt       int64             `json:"createdAt"`
+	Hostname        string            `json:"hostname"` // Minecraft router: <hostname>.<minecraftDomain>
 }
 
-const serverCols = `id, name, description, owner_id, template_id, image, startup, env, memory_mb, cpu_millis, disk_mb, backup_limit, allocation_limit, suspended, created_at`
+const serverCols = `id, name, description, owner_id, template_id, image, startup, env, memory_mb, cpu_millis, disk_mb, backup_limit, allocation_limit, suspended, created_at, hostname`
 
 func scanServer(row interface{ Scan(...any) error }) (*Server, error) {
 	s := &Server{}
 	var env string
 	if err := row.Scan(&s.ID, &s.Name, &s.Description, &s.OwnerID, &s.TemplateID, &s.Image, &s.Startup, &env,
-		&s.MemoryMB, &s.CPUMillis, &s.DiskMB, &s.BackupLimit, &s.AllocationLimit, &s.Suspended, &s.CreatedAt); err != nil {
+		&s.MemoryMB, &s.CPUMillis, &s.DiskMB, &s.BackupLimit, &s.AllocationLimit, &s.Suspended, &s.CreatedAt, &s.Hostname); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}
@@ -583,9 +592,9 @@ func (db *DB) ServersForUser(uid int64) ([]*Server, error) {
 
 func (db *DB) InsertServer(s *Server) error {
 	env, _ := json.Marshal(s.Env)
-	_, err := db.Exec(`INSERT INTO servers(`+serverCols+`) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+	_, err := db.Exec(`INSERT INTO servers(`+serverCols+`) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		s.ID, s.Name, s.Description, s.OwnerID, s.TemplateID, s.Image, s.Startup, string(env),
-		s.MemoryMB, s.CPUMillis, s.DiskMB, s.BackupLimit, s.AllocationLimit, s.Suspended, s.CreatedAt)
+		s.MemoryMB, s.CPUMillis, s.DiskMB, s.BackupLimit, s.AllocationLimit, s.Suspended, s.CreatedAt, s.Hostname)
 	return err
 }
 

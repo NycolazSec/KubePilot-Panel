@@ -196,6 +196,7 @@ type Spec struct {
 	Template *Template
 	Allocs   []*Allocation
 	Settings Settings
+	Routed   string // hostname given to the Minecraft router ("" = not routed)
 }
 
 func escapeDollar(s string) string { return strings.ReplaceAll(s, "$", "$$") }
@@ -388,8 +389,12 @@ func (k *Kube) EnsureService(ctx context.Context, sp Spec) error {
 	var ports []corev1.ServicePort
 	for _, a := range sp.Allocs {
 		for _, proto := range protocols(a.Protocol) {
+			name := fmt.Sprintf("%s-%d", strings.ToLower(string(proto)), a.Port)
+			if sp.Routed != "" && a.IsPrimary && proto == corev1.ProtocolTCP {
+				name = "mc-router" // the port mc-router connects to
+			}
 			ports = append(ports, corev1.ServicePort{
-				Name:       fmt.Sprintf("%s-%d", strings.ToLower(string(proto)), a.Port),
+				Name:       name,
 				Protocol:   proto,
 				Port:       int32(a.Port),
 				TargetPort: intstr.FromInt(a.TargetPort),
@@ -410,11 +415,22 @@ func (k *Kube) EnsureService(ctx context.Context, sp Spec) error {
 		Ports:                 ports,
 		ExternalTrafficPolicy: corev1.ServiceExternalTrafficPolicyLocal,
 	}
+	annotations := map[string]string{}
+	if sp.Routed != "" {
+		annotations[mcRouterAnnotation] = sp.Routed
+	}
 	if apierrors.IsNotFound(err) {
-		_, err = api.Create(ctx, &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: name, Labels: srvLabels(sp.Server.ID, "service")}, Spec: spec}, metav1.CreateOptions{})
+		_, err = api.Create(ctx, &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: name, Labels: srvLabels(sp.Server.ID, "service"), Annotations: annotations}, Spec: spec}, metav1.CreateOptions{})
 		return err
 	} else if err != nil {
 		return err
+	}
+	if cur.Annotations == nil {
+		cur.Annotations = map[string]string{}
+	}
+	delete(cur.Annotations, mcRouterAnnotation)
+	for k, v := range annotations {
+		cur.Annotations[k] = v
 	}
 	cur.Spec.Ports, cur.Spec.Selector, cur.Spec.Type, cur.Spec.ExternalTrafficPolicy = spec.Ports, spec.Selector, spec.Type, spec.ExternalTrafficPolicy
 	_, err = api.Update(ctx, cur, metav1.UpdateOptions{})

@@ -54,6 +54,7 @@ export interface Server {
   suspended: boolean; createdAt: number;
   template: string; templateSlug: string; consoleInput: boolean; owner: string; state: State; diskUsed: number;
   address: string; allocations: Allocation[]; permissions: string[]; features: string[];
+  hostname: string; nodeAddress: string; routerDomain: string;
 }
 
 export interface FileEntry { name: string; dir: boolean; size: number; mode: string; modified: number; symlink: boolean }
@@ -72,7 +73,7 @@ export interface Template {
   features?: string[];
 }
 
-export interface Settings { panelName: string; publicHost: string; portMin: number; portMax: number; timezone: string; twoFactorPolicy: '' | 'admins' | 'everyone' }
+export interface Settings { panelName: string; publicHost: string; portMin: number; portMax: number; timezone: string; twoFactorPolicy: '' | 'admins' | 'everyone'; minecraftDomain: string }
 export interface NodeInfo { name: string; ready: boolean; version: string; os: string; cpuCap: number; memCap: number; cpu: number; mem: number; pods: number; address: string }
 
 const templateOrder = ['minecraft-java', 'minecraft-bedrock', 'nodejs', 'python'];
