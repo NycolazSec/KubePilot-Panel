@@ -7,6 +7,10 @@ updates:
   - package-ecosystem: npm
     directory: /frontend
     schedule: { interval: weekly }
+    # major upgrades (React, Tailwind, Vite…) need a migration: done by hand in a dedicated PR
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     groups:
       frontend-minor:
         update-types: [minor, patch]

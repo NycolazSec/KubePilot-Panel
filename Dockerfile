@@ -19,7 +19,7 @@ COPY --from=web /src/backend/web ./web
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
     go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/kubepilot .
 
-FROM alpine:3.22
+FROM alpine:3.24
 LABEL org.opencontainers.image.title="KubePilot" \
       org.opencontainers.image.description="Kubernetes-native game server panel" \
       org.opencontainers.image.source="https://github.com/NycolazSec/KubePilot-Panel" \
