@@ -179,14 +179,16 @@ export function Modal({ open, onClose, title, children, footer, wide }: { open: 
   }, [open, onClose]);
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-4 sm:items-center" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div role="dialog" aria-modal="true" className={clsx('my-8 w-full animate-fade-in rounded-lg border border-ink-600 bg-ink-850 shadow-2xl shadow-black/50', wide === 'xl' ? 'max-w-5xl' : wide ? 'max-w-3xl' : 'max-w-lg')}>
-        <div className="flex items-center justify-between border-b border-ink-700 px-5 py-3">
-          <h3 className="text-[15px] font-semibold">{title}</h3>
+    // The dialog never grows taller than the screen: only its body scrolls, so the title and the
+    // footer buttons stay visible, and the top can never end up out of reach (long forms).
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-2 sm:p-4" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div role="dialog" aria-modal="true" className={clsx('flex max-h-full w-full animate-fade-in flex-col rounded-lg border border-ink-600 bg-ink-850 shadow-2xl shadow-black/50', wide === 'xl' ? 'max-w-5xl' : wide ? 'max-w-3xl' : 'max-w-lg')}>
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-ink-700 px-5 py-3">
+          <h3 className="min-w-0 truncate text-[15px] font-semibold">{title}</h3>
           <IconButton title={t('common.close')} onClick={onClose}><X /></IconButton>
         </div>
-        <div className="p-5">{children}</div>
-        {footer && <div className="flex justify-end gap-2 rounded-b-lg border-t border-ink-700 bg-ink-900/40 px-5 py-3">{footer}</div>}
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5">{children}</div>
+        {footer && <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 rounded-b-lg border-t border-ink-700 bg-ink-900/40 px-5 py-3">{footer}</div>}
       </div>
     </div>
   );
