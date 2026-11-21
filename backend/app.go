@@ -42,12 +42,17 @@ type App struct {
 	dbHost   dbHost       // MariaDB for the servers' databases (empty address: off)
 	s3       *s3Store     // S3 storage for new backups (nil: the panel's volume)
 	tickets  loginTickets // sign-ins waiting for their second factor
+
+	sleepMu sync.RWMutex
+	asleep  map[string]bool // servers stopped by auto-sleep (see sleep.go)
+	idle    idleTracker
 }
 
 func newApp(cfg Config, db *DB, kube *Kube) *App {
 	return &App{
 		cfg: cfg, db: db, kube: kube, ctx: context.Background(),
 		hubs: map[string]*Hub{}, locks: map[string]*sync.Mutex{}, disk: map[string]int64{},
+		asleep: map[string]bool{}, idle: idleTracker{since: map[string]time.Time{}},
 		dbHost:  dbHost{addr: cfg.DatabaseAddr, pass: cfg.DatabasePassword},
 		limiter: newRateLimiter(10, 10*time.Minute), accounts: newRateLimiter(20, 15*time.Minute), keyRate: newRateLimiter(apiRatePerMin, time.Minute),
 	}
@@ -57,6 +62,7 @@ func (a *App) startBackground(ctx context.Context) {
 	a.ctx = ctx
 	servers, err := a.db.AllServers()
 	if err == nil {
+		a.loadAsleep(servers)
 		for _, s := range servers {
 			a.hub(s.ID)
 		}
@@ -65,6 +71,7 @@ func (a *App) startBackground(ctx context.Context) {
 	go a.diskLoop(ctx)
 	go a.scheduleLoop(ctx)
 	go a.sessionCleanup(ctx)
+	go a.sleepLoop(ctx)
 }
 
 func (a *App) serverLock(id string) *sync.Mutex {
@@ -441,6 +448,7 @@ func (a *App) routes() http.Handler {
 
 	m.HandleFunc("GET /api/servers/{id}/activity", a.srv("activity", a.handleServerActivity))
 	m.HandleFunc("PUT /api/servers/{id}/settings", a.srv("settings", a.handleServerSettings))
+	m.HandleFunc("PUT /api/servers/{id}/auto-sleep", a.srv("settings", a.handleAutoSleep))
 	m.HandleFunc("POST /api/servers/{id}/reinstall", a.srv("settings", a.handleReinstall))
 
 	m.HandleFunc("GET /api/admin/overview", a.admin(a.handleAdminOverview))

@@ -7,7 +7,9 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels: {{- include "kubepilot.labels" . | nindent 4 }}
 ---
-# mc-router only reads the Services of the game servers namespace, to find their hostnames
+# mc-router reads the Services of the game servers namespace, to find their hostnames. With auto-sleep, it may
+# also start the servers the panel put to sleep — through the scale subresource only: it can change a replica
+# count, never a pod spec (it logs a warning that "patch" is forbidden, then uses the scale subresource).
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -18,6 +20,14 @@ rules:
   - apiGroups: [""]
     resources: [services]
     verbs: [list, watch]
+  {{- if .Values.minecraftRouter.autoSleep.enabled }}
+  - apiGroups: [apps]
+    resources: [statefulsets]
+    verbs: [list, watch]
+  - apiGroups: [apps]
+    resources: [statefulsets/scale]
+    verbs: [get, update]
+  {{- end }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -55,6 +65,16 @@ spec:
           env:
             - { name: KUBE_NAMESPACE, value: {{ .Values.serversNamespace.name | quote }} }
             - { name: PORT, value: "25565" }
+            {{- with .Values.minecraftRouter.autoSleep }}
+            {{- if .enabled }}
+            # The panel sets autoScaleUp=true only on the Services of sleeping servers (false on all the others),
+            # and autoScaleDown=false everywhere: going to sleep is the panel's job.
+            - { name: AUTO_SCALE_UP, value: "true" }
+            - { name: AUTO_SCALE_ASLEEP_MOTD, value: {{ .asleepMOTD | quote }} }
+            - { name: AUTO_SCALE_LOADING_MOTD, value: {{ .loadingMOTD | quote }} }
+            - { name: AUTO_SCALE_WAKE_KICK_MESSAGE, value: {{ .wakeMessage | quote }} }
+            {{- end }}
+            {{- end }}
           ports: [{ containerPort: 25565, name: minecraft }]
           resources: {{- toYaml .Values.minecraftRouter.resources | nindent 12 }}
           securityContext:

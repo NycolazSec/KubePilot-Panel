@@ -20,7 +20,7 @@ export default function PowerButtons({ id, status, size = 'md', onDone }: { id: 
     }
   };
   const up = status === 'running' || status === 'starting';
-  const off = status === 'offline' || status === 'crashed';
+  const off = status === 'offline' || status === 'crashed' || status === 'sleeping';
   return (
     <div className="flex flex-wrap items-center gap-2">
       <Button size={size} variant="primary" icon={<Play />} disabled={up || status === 'installing' || status === 'stopping'} loading={busy === 'start'} onClick={() => act('start')}>{t('power.start')}</Button>
@@ -28,7 +28,7 @@ export default function PowerButtons({ id, status, size = 'md', onDone }: { id: 
       {status === 'stopping' ? (
         <Button size={size} variant="danger" icon={<Skull />} loading={busy === 'kill'} onClick={() => act('kill')}>{t('power.kill')}</Button>
       ) : (
-        <Button size={size} variant="danger" icon={<Square />} disabled={off || status === 'installing'} loading={busy === 'stop'} onClick={() => act('stop')}>{t('power.stop')}</Button>
+        <Button size={size} variant="danger" icon={<Square />} disabled={(off && status !== 'sleeping') || status === 'installing'} loading={busy === 'stop'} onClick={() => act('stop')}>{t('power.stop')}</Button>
       )}
     </div>
   );

@@ -124,6 +124,13 @@ minecraftRouter:
   resources:
     requests: { cpu: 10m, memory: 32Mi }
     limits: { cpu: 500m, memory: 128Mi }
+  # Auto-sleep: servers whose owner turned it on stop after some minutes without players, and start again when
+  # a player joins their address. The texts below are what players see in their server list / when kicked.
+  autoSleep:
+    enabled: true
+    asleepMOTD: "§7Sleeping — join to wake it up"
+    loadingMOTD: "§eStarting… come back in a minute"
+    wakeMessage: "The server is waking up: reconnect in about a minute!"
 
 service:
   type: ClusterIP

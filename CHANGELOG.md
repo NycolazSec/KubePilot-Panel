@@ -6,6 +6,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- **Auto-sleep** for Minecraft Java servers with a router address (*Settings* → *Auto-sleep*, or
+  `PUT /servers/{id}/auto-sleep`): after 5 to 1440 minutes without players, the server stops by itself, and the next
+  player who joins `<hostname>.<domain>` starts it again. The panel counts the players itself (Server List Ping, so
+  players who joined through the IP and port count too), then writes the configuration files and pod spec before
+  handing the server to mc-router — suspension, disk quota and the eggs' `config.files` still apply. In the server
+  list, players see that the server is sleeping or starting; the first join attempt is answered with
+  `minecraftRouter.autoSleep.wakeMessage`. New server status `sleeping`.
+- mc-router may now change the replica count of the game StatefulSets (`statefulsets/scale` only — never a pod spec)
+  when `minecraftRouter.autoSleep.enabled` (default `true`). It logs a warning that `patch` is forbidden, then uses
+  the scale subresource.
+
 ## [0.2.0] - 2026-11-20
 
 **Pterodactyl parity**: hundreds of games through Pterodactyl / Pelican eggs, a built-in SFTP server, MySQL databases

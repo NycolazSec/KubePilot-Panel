@@ -31,6 +31,6 @@ Ideas and votes are welcome in the [issues](https://github.com/NycolazSec/KubePi
 - [ ] **Multi-node**: add a machine by joining it to the cluster; servers are scheduled where there is room
 - [ ] One-click **server transfer** between nodes
 - [ ] Standard game ports (e.g. `25565`) instead of NodePorts
-- [ ] **Auto-sleep**: empty servers stop by themselves and wake up when a player connects
+- [x] **Auto-sleep**: empty servers stop by themselves and wake up when a player connects (Minecraft Java, via the router)
 - [ ] Prometheus metrics, Grafana dashboard, Discord alerts
 - [ ] Native integration with the [KubePilot Discord bot](https://github.com/NycolazSec/KubePilot)

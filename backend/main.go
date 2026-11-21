@@ -32,6 +32,8 @@ type Config struct {
 	StorageClass string
 	// MinecraftRouter: the chart deployed mc-router, which routes players by hostname on port 25565
 	MinecraftRouter bool
+	// AutoSleep: mc-router may start sleeping servers (the chart gave it the right to scale them)
+	AutoSleep bool
 	// RootInstall: the game namespace allows root install containers (Pod Security "baseline"), for eggs
 	RootInstall bool
 	// SFTPListen: address of the built-in SFTP server ("" = off); SFTPPort: the port users connect to
@@ -61,6 +63,7 @@ func main() {
 	flag.StringVar(&cfg.StorageClass, "storage-class", env("KUBEPILOT_STORAGE_CLASS", "local-path"), "StorageClass of game server volumes (hostPath-based provisioner)")
 	flag.BoolVar(&cfg.RootInstall, "root-install", env("KUBEPILOT_ROOT_INSTALL", "false") == "true", "install scripts of egg templates may run as root (namespace Pod Security baseline)")
 	flag.BoolVar(&cfg.MinecraftRouter, "minecraft-router", env("KUBEPILOT_MINECRAFT_ROUTER", "false") == "true", "mc-router is deployed: give Minecraft servers hostnames on port 25565")
+	flag.BoolVar(&cfg.AutoSleep, "auto-sleep", env("KUBEPILOT_AUTO_SLEEP", "false") == "true", "mc-router can wake servers up: empty Minecraft servers may go to sleep")
 	flag.StringVar(&cfg.SFTPListen, "sftp-listen", env("KUBEPILOT_SFTP_LISTEN", ""), "SFTP listen address, e.g. :2022 (empty = SFTP off)")
 	flag.IntVar(&cfg.SFTPPort, "sftp-port", atoiOr(env("KUBEPILOT_SFTP_PORT", ""), 0), "SFTP port shown to users (default: the listen port)")
 	flag.StringVar(&cfg.DatabaseAddr, "database-addr", env("KUBEPILOT_DATABASE_ADDR", ""), "MariaDB host:port for the servers' databases (empty = off)")

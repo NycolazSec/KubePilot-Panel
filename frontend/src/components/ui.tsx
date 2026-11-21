@@ -133,6 +133,7 @@ export function Badge({ color = 'gray', children }: { color?: BadgeColor; childr
 
 export const statusColor: Record<Status, string> = {
   running: 'bg-emerald-400', starting: 'bg-amber-400', stopping: 'bg-amber-400', installing: 'bg-sky2-400', offline: 'bg-ink-500', crashed: 'bg-red-500',
+  sleeping: 'bg-brand-400',
 };
 
 export function StatusDot({ status, className }: { status: Status; className?: string }) {
@@ -140,7 +141,7 @@ export function StatusDot({ status, className }: { status: Status; className?: s
   return <span className={clsx('inline-block h-2 w-2 shrink-0 rounded-full', statusColor[status], transitional && 'animate-pulse', className)} />;
 }
 
-const statusBadge: Record<Status, BadgeColor> = { running: 'green', starting: 'yellow', stopping: 'yellow', installing: 'blue', offline: 'gray', crashed: 'red' };
+const statusBadge: Record<Status, BadgeColor> = { running: 'green', starting: 'yellow', stopping: 'yellow', installing: 'blue', offline: 'gray', crashed: 'red', sleeping: 'violet' };
 
 export function StatusPill({ status }: { status: Status }) {
   return <Badge color={statusBadge[status]}><StatusDot status={status} className="!h-1.5 !w-1.5" />{statusLabel[status]}</Badge>;

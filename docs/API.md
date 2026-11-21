@@ -49,6 +49,7 @@ Rules that always apply:
 | `GET` | `/servers/{id}/ws` | `console` | Live console (WebSocket, see below) |
 | `GET` | `/servers/{id}/activity` | `activity` | Activity log of the server |
 | `PUT` | `/servers/{id}/settings` | `settings` | `{"name": "…", "description": "…"}` |
+| `PUT` | `/servers/{id}/auto-sleep` | `settings` | `{"minutes": 10}` → stop after 10 minutes without players, start again when a player joins the server's router address (5–1440, `0` = off; Minecraft router with `minecraftRouter.autoSleep.enabled`) |
 | `POST` | `/servers/{id}/reinstall` | `settings` | Run the template's install script again (server stopped) |
 
 A server looks like this (`GET /servers/{id}`):
@@ -62,7 +63,8 @@ A server looks like this (`GET /servers/{id}`):
 }
 ```
 
-`state.status` is one of `offline`, `installing`, `starting`, `running`, `stopping`, `crashed` (with `state.reason`).
+`state.status` is one of `offline`, `installing`, `starting`, `running`, `stopping`, `crashed` (with `state.reason`), or
+`sleeping` (stopped by auto-sleep: the next player who joins starts it; `start` starts it now, `stop` keeps it off).
 `state.cpu` is in millicores, `state.memory` and `diskUsed` in bytes, `memory` / `disk` limits in MB, `cpu` limit in
 millicores (`0` = unlimited).
 

@@ -119,7 +119,7 @@ export default function Dashboard() {
               <tbody className="divide-y divide-ink-700/70">
                 {list.map((s) => {
                   const st = s.state;
-                  const off = st.status === 'offline' || st.status === 'installing';
+                  const off = st.status === 'offline' || st.status === 'installing' || st.status === 'sleeping';
                   return (
                     <tr key={s.id} onClick={() => nav(`/server/${s.id}`)} className="cursor-pointer transition-colors hover:bg-ink-800/50">
                       <td className="td">

@@ -114,7 +114,7 @@ export default function Console() {
 
   // stats history
   useEffect(() => {
-    if (state.status === 'offline') return;
+    if (state.status === 'offline' || state.status === 'sleeping') return;
     setCpuHist((h) => [...h.slice(-59), cpuPct(state.cpu, server.cpu)]);
     setMemHist((h) => [...h.slice(-59), state.memory]);
   }, [state, server.cpu]);
@@ -153,7 +153,7 @@ export default function Console() {
     URL.revokeObjectURL(a.href);
   };
 
-  const off = state.status === 'offline';
+  const off = state.status === 'offline' || state.status === 'sleeping';
   const memMax = server.memory * 1048576;
   const inputDisabled = !server.consoleInput || !can('console') || state.status !== 'running' && state.status !== 'starting';
 

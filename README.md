@@ -30,6 +30,7 @@ volume and `NodePort` service, and the panel drives the cluster through the Kube
 | Validated startup variables, image selection, extra ports, sub-users with fine-grained permissions |
 | **Plugins & mods** from Modrinth: compatible results only, one-click install with dependencies, updates | |
 | **Minecraft router**: each server at `survival.mc.example.com`, standard port, no port to type | |
+| **Auto-sleep**: empty servers stop by themselves and start again as soon as a player joins — RAM and CPU only for the servers people play on | |
 | **Minecraft panel**: live status (MOTD, version, icon), online players with their skin heads, whitelist / ops / bans in one click (RCON) | |
 | **Databases**: MySQL / MariaDB per server in one click, credentials and JDBC URL to copy | |
 | **SFTP** (FileZilla, WinSCP…) with your panel password or SSH keys, sub-user permission, quota-aware | |
@@ -142,8 +143,8 @@ docs/       logo and banner
 
 ## Roadmap
 
-v0.2 brought Pterodactyl parity (eggs, SFTP, databases, S3 backups). Coming next: multi-node, server transfers and
-auto-sleep (v0.3).
+v0.2 brought Pterodactyl parity (eggs, SFTP, databases, S3 backups). Coming next (v0.3): auto-sleep ✅, multi-node,
+server transfers.
 See the full [roadmap](ROADMAP.md).
 
 ## Contributing

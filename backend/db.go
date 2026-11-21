@@ -148,6 +148,12 @@ func openDB(path string) (*DB, error) {
 	if err := db.addColumn("servers", "internal_only", "INTEGER NOT NULL DEFAULT 0"); err != nil {
 		return nil, err
 	}
+	if err := db.addColumn("servers", "auto_sleep", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return nil, err
+	}
+	if err := db.addColumn("servers", "asleep", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return nil, err
+	}
 	if _, err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS servers_hostname ON servers(hostname) WHERE hostname<>''`); err != nil {
 		return nil, err
 	}
@@ -576,15 +582,17 @@ type Server struct {
 	CreatedAt       int64             `json:"createdAt"`
 	Hostname        string            `json:"hostname"`     // Minecraft router: <hostname>.<minecraftDomain>
 	InternalOnly    bool              `json:"internalOnly"` // no public port: only the owner's other servers reach it
+	AutoSleep       int               `json:"autoSleep"`    // minutes without players before sleeping (0 = never)
+	Asleep          bool              `json:"asleep"`       // stopped by auto-sleep: the next player connection wakes it up
 }
 
-const serverCols = `id, name, description, owner_id, template_id, image, startup, env, memory_mb, cpu_millis, disk_mb, backup_limit, allocation_limit, suspended, created_at, hostname, internal_only, database_limit`
+const serverCols = `id, name, description, owner_id, template_id, image, startup, env, memory_mb, cpu_millis, disk_mb, backup_limit, allocation_limit, suspended, created_at, hostname, internal_only, database_limit, auto_sleep, asleep`
 
 func scanServer(row interface{ Scan(...any) error }) (*Server, error) {
 	s := &Server{}
 	var env string
 	if err := row.Scan(&s.ID, &s.Name, &s.Description, &s.OwnerID, &s.TemplateID, &s.Image, &s.Startup, &env,
-		&s.MemoryMB, &s.CPUMillis, &s.DiskMB, &s.BackupLimit, &s.AllocationLimit, &s.Suspended, &s.CreatedAt, &s.Hostname, &s.InternalOnly, &s.DatabaseLimit); err != nil {
+		&s.MemoryMB, &s.CPUMillis, &s.DiskMB, &s.BackupLimit, &s.AllocationLimit, &s.Suspended, &s.CreatedAt, &s.Hostname, &s.InternalOnly, &s.DatabaseLimit, &s.AutoSleep, &s.Asleep); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}
@@ -626,9 +634,17 @@ func (db *DB) ServersForUser(uid int64) ([]*Server, error) {
 
 func (db *DB) InsertServer(s *Server) error {
 	env, _ := json.Marshal(s.Env)
-	_, err := db.Exec(`INSERT INTO servers(`+serverCols+`) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+	_, err := db.Exec(`INSERT INTO servers(`+serverCols+`) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		s.ID, s.Name, s.Description, s.OwnerID, s.TemplateID, s.Image, s.Startup, string(env),
-		s.MemoryMB, s.CPUMillis, s.DiskMB, s.BackupLimit, s.AllocationLimit, s.Suspended, s.CreatedAt, s.Hostname, s.InternalOnly, s.DatabaseLimit)
+		s.MemoryMB, s.CPUMillis, s.DiskMB, s.BackupLimit, s.AllocationLimit, s.Suspended, s.CreatedAt, s.Hostname, s.InternalOnly, s.DatabaseLimit,
+		s.AutoSleep, s.Asleep)
+	return err
+}
+
+// SetAsleep records whether auto-sleep stopped the server. Kept out of UpdateServer, so that saving a stale copy
+// of the server never wakes it up (or puts it to sleep) by accident.
+func (db *DB) SetAsleep(id string, asleep bool) error {
+	_, err := db.Exec(`UPDATE servers SET asleep=? WHERE id=?`, asleep, id)
 	return err
 }
 
