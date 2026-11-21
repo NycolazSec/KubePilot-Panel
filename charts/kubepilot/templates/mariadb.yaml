@@ -65,7 +65,7 @@ spec:
     metadata:
       labels: { app.kubernetes.io/name: kubepilot-mariadb, app.kubernetes.io/part-of: kubepilot }
       annotations:
-        checksum/password: {{ $password | sha256sum | trunc 12 }}
+        checksum/password: {{ $password | sha256sum | trunc 12 | quote }}
     spec:
       automountServiceAccountToken: false
       enableServiceLinks: false

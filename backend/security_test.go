@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -19,7 +18,7 @@ func TestPlantedFIFODoesNotBlock(t *testing.T) {
 	if err := syscall.Mkfifo(filepath.Join(dir, "trap"), 0o644); err != nil {
 		t.Skip("mkfifo unsupported:", err)
 	}
-	root, err := os.OpenRoot(dir)
+	root, err := openLocalVol(dir)
 	if err != nil {
 		t.Fatal(err)
 	}

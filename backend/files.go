@@ -26,12 +26,8 @@ const (
 
 // openRoot opens the server's data directory as an os.Root: every path below is
 // resolved inside it and can never escape, even through symlinks planted by the game.
-func (a *App) openRoot(ctx context.Context, s *Server) (*os.Root, int, error) {
-	dir, err := a.kube.DataDir(ctx, s.ID)
-	if err != nil {
-		return nil, 0, err
-	}
-	root, err := os.OpenRoot(dir)
+func (a *App) openRoot(ctx context.Context, s *Server) (Vol, int, error) {
+	root, err := a.kube.OpenVolume(ctx, s.ID)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -60,7 +56,7 @@ type FileEntry struct {
 	Symlink  bool   `json:"symlink"`
 }
 
-func (a *App) withRoot(w http.ResponseWriter, r *http.Request, c *Ctx, fn func(root *os.Root, uid int) error) {
+func (a *App) withRoot(w http.ResponseWriter, r *http.Request, c *Ctx, fn func(root Vol, uid int) error) {
 	root, uid, err := a.openRoot(r.Context(), c.Server)
 	if err != nil {
 		writeErr(w, r, err)
@@ -84,7 +80,7 @@ func (a *App) withRoot(w http.ResponseWriter, r *http.Request, c *Ctx, fn func(r
 }
 
 func (a *App) handleFileList(w http.ResponseWriter, r *http.Request, c *Ctx) {
-	a.withRoot(w, r, c, func(root *os.Root, _ int) error {
+	a.withRoot(w, r, c, func(root Vol, _ int) error {
 		f, err := root.Open(rel(r.URL.Query().Get("path")))
 		if err != nil {
 			return err
@@ -118,7 +114,7 @@ func (a *App) handleFileList(w http.ResponseWriter, r *http.Request, c *Ctx) {
 }
 
 func (a *App) handleFileRead(w http.ResponseWriter, r *http.Request, c *Ctx) {
-	a.withRoot(w, r, c, func(root *os.Root, _ int) error {
+	a.withRoot(w, r, c, func(root Vol, _ int) error {
 		f, st, err := openRegular(root, rel(r.URL.Query().Get("path")))
 		if err != nil {
 			return err
@@ -147,7 +143,7 @@ func (a *App) handleFileRead(w http.ResponseWriter, r *http.Request, c *Ctx) {
 	})
 }
 
-func chownNew(root *os.Root, p string, uid int) { _ = root.Lchown(p, uid, uid) }
+func chownNew(root Vol, p string, uid int) { _ = root.Lchown(p, uid, uid) }
 
 func (a *App) handleFileWrite(w http.ResponseWriter, r *http.Request, c *Ctx) {
 	p := rel(r.URL.Query().Get("path"))
@@ -160,7 +156,7 @@ func (a *App) handleFileWrite(w http.ResponseWriter, r *http.Request, c *Ctx) {
 		writeErr(w, r, errCode(413, "File too large for the editor (8 MB max): download it instead"))
 		return
 	}
-	a.withRoot(w, r, c, func(root *os.Root, uid int) error {
+	a.withRoot(w, r, c, func(root Vol, uid int) error {
 		grow := int64(len(body))
 		if st, err := root.Stat(p); err == nil {
 			grow -= st.Size()
@@ -194,7 +190,7 @@ func (a *App) handleMkdir(w http.ResponseWriter, r *http.Request, c *Ctx) {
 		return
 	}
 	p := rel(in.Path)
-	a.withRoot(w, r, c, func(root *os.Root, uid int) error {
+	a.withRoot(w, r, c, func(root Vol, uid int) error {
 		if err := root.Mkdir(p, 0o755); err != nil {
 			return err
 		}
@@ -216,7 +212,7 @@ func (a *App) handleRename(w http.ResponseWriter, r *http.Request, c *Ctx) {
 		writeErr(w, r, errCode(400, "Invalid path"))
 		return
 	}
-	a.withRoot(w, r, c, func(root *os.Root, _ int) error {
+	a.withRoot(w, r, c, func(root Vol, _ int) error {
 		if _, err := root.Lstat(to); err == nil {
 			return errCode(409, "The destination already exists")
 		}
@@ -235,7 +231,7 @@ func (a *App) handleDelete(w http.ResponseWriter, r *http.Request, c *Ctx) {
 		writeErr(w, r, err)
 		return
 	}
-	a.withRoot(w, r, c, func(root *os.Root, _ int) error {
+	a.withRoot(w, r, c, func(root Vol, _ int) error {
 		for _, p := range in.Paths {
 			rp := rel(p)
 			if rp == "." {
@@ -260,7 +256,7 @@ func (a *App) handleUpload(w http.ResponseWriter, r *http.Request, c *Ctx) {
 		writeErr(w, r, errCode(400, "Invalid upload"))
 		return
 	}
-	a.withRoot(w, r, c, func(root *os.Root, uid int) error {
+	a.withRoot(w, r, c, func(root Vol, uid int) error {
 		left := a.diskRemaining(c.Server)
 		if left <= 0 {
 			return errQuota()
@@ -321,7 +317,7 @@ func contentDisposition(name string) string {
 
 func (a *App) handleDownload(w http.ResponseWriter, r *http.Request, c *Ctx) {
 	p := rel(r.URL.Query().Get("path"))
-	a.withRoot(w, r, c, func(root *os.Root, _ int) error {
+	a.withRoot(w, r, c, func(root Vol, _ int) error {
 		st, err := root.Stat(p)
 		if err != nil {
 			return err
@@ -351,7 +347,7 @@ func (a *App) handleDownload(w http.ResponseWriter, r *http.Request, c *Ctx) {
 	})
 }
 
-func writeZip(zw *zip.Writer, root *os.Root, base string) error {
+func writeZip(zw *zip.Writer, root Vol, base string) error {
 	fsys := root.FS()
 	return fs.WalkDir(fsys, base, func(p string, d fs.DirEntry, err error) error {
 		if err != nil || p == base || d.Type()&fs.ModeSymlink != 0 {
@@ -391,7 +387,7 @@ func writeZip(zw *zip.Writer, root *os.Root, base string) error {
 }
 
 // writeTarGz archives `paths` (relative to root) into w. Symlinks are kept as links, never followed.
-func writeTarGz(w io.Writer, root *os.Root, paths []string) error {
+func writeTarGz(w io.Writer, root Vol, paths []string) error {
 	gz, _ := gzip.NewWriterLevel(w, gzip.BestSpeed)
 	tw := tar.NewWriter(gz)
 	fsys := root.FS()
@@ -448,7 +444,7 @@ func writeTarGz(w io.Writer, root *os.Root, paths []string) error {
 }
 
 // extractTar safely extracts a tar stream into root/dest. Links and special files are skipped.
-func extractTar(r io.Reader, root *os.Root, dest string, uid int, maxBytes int64) error {
+func extractTar(r io.Reader, root Vol, dest string, uid int, maxBytes int64) error {
 	tr := tar.NewReader(r)
 	var total int64
 	for entries := 0; ; entries++ {
@@ -493,7 +489,7 @@ func extractTar(r io.Reader, root *os.Root, dest string, uid int, maxBytes int64
 	}
 }
 
-func extractZip(zr *zip.Reader, root *os.Root, dest string, uid int, maxBytes int64) error {
+func extractZip(zr *zip.Reader, root Vol, dest string, uid int, maxBytes int64) error {
 	if len(zr.File) > maxArchiveEntries {
 		return errCode(413, "The archive contains too many files (%d max)", maxArchiveEntries)
 	}
@@ -553,7 +549,7 @@ func (a *App) handleCompress(w http.ResponseWriter, r *http.Request, c *Ctx) {
 		return
 	}
 	dir := rel(in.Dir)
-	a.withRoot(w, r, c, func(root *os.Root, uid int) error {
+	a.withRoot(w, r, c, func(root Vol, uid int) error {
 		name := "archive-" + time.Now().Format("2006-01-02_150405") + ".tar.gz"
 		target := path.Join(dir, name)
 		paths := []string{}
@@ -596,7 +592,7 @@ func (a *App) handleDecompress(w http.ResponseWriter, r *http.Request, c *Ctx) {
 		writeErr(w, r, errCode(413, "No disk space left"))
 		return
 	}
-	a.withRoot(w, r, c, func(root *os.Root, uid int) error {
+	a.withRoot(w, r, c, func(root Vol, uid int) error {
 		dest := path.Dir(p)
 		lower := strings.ToLower(p)
 		f, st, err := openRegular(root, p)
@@ -647,27 +643,14 @@ func dirSize(dir string) int64 {
 		return 0
 	}
 	defer root.Close()
-	var total int64
-	_ = fs.WalkDir(root.FS(), ".", func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return nil
-		}
-		if d.Type().IsRegular() {
-			if info, err := d.Info(); err == nil {
-				total += info.Size()
-			}
-		}
-		return nil
-	})
-	return total
+	return dirSizeRoot(root)
 }
 
 func (a *App) refreshDisk(ctx context.Context, id string) {
-	dir, err := a.kube.DataDir(ctx, id)
+	size, err := a.kube.VolumeSize(ctx, id)
 	if err != nil {
 		return
 	}
-	size := dirSize(dir)
 	a.diskMu.Lock()
 	a.disk[id] = size
 	a.diskMu.Unlock()

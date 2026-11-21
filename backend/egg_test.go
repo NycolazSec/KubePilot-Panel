@@ -180,7 +180,7 @@ func TestPropertiesOf(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "server.properties"), []byte("#Minecraft\nenable-rcon=true\nrcon.password=p\\:a\\\\ss\nrcon.port = 25580\nmotd=hi\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	root, err := os.OpenRoot(dir)
+	root, err := openLocalVol(dir)
 	if err != nil {
 		t.Fatal(err)
 	}

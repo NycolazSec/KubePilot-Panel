@@ -54,6 +54,12 @@ type Config struct {
 	Mail             MailConfig // emails (password reset, notifications) when Host is set
 	PublicURL        string     // https://panel.example.com: the panel's own address, for links in emails
 	SecureCookies    bool
+	// NodeName: the panel's node (its volumes are mounted); the node agents (nodeagent.go) serve the volumes of
+	// the other nodes (their shared token: KUBEPILOT_NODE_TOKEN_FILE), AgentNamespace / AgentSelector find their pods
+	NodeName       string
+	NodeAgents     bool
+	AgentNamespace string
+	AgentSelector  string
 }
 
 func env(key, def string) string {
@@ -66,6 +72,10 @@ func env(key, def string) string {
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "shield" { // the firewall agent of a node (DaemonSet), not the panel
 		runShieldAgent()
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "node" { // the volumes of a node, served to the panel (DaemonSet)
+		runNodeAgent()
 		return
 	}
 	cfg := Config{}
@@ -93,6 +103,10 @@ func main() {
 	ingressNS := flag.String("ingress-namespace", env("KUBEPILOT_INGRESS_NAMESPACE", ""), "namespace of the ingress controller game servers may reach (empty = none)")
 	ingressLabels := flag.String("ingress-pod-labels", env("KUBEPILOT_INGRESS_POD_LABELS", ""), "labels of the ingress controller's pods, e.g. app.kubernetes.io/name=traefik")
 	ingressPorts := flag.String("ingress-ports", env("KUBEPILOT_INGRESS_PORTS", ""), "its ports game servers may reach (names or numbers), e.g. web,websecure")
+	flag.StringVar(&cfg.NodeName, "node-name", env("NODE_NAME", ""), "the node the panel runs on (its game volumes are mounted)")
+	flag.BoolVar(&cfg.NodeAgents, "node-agents", env("KUBEPILOT_NODE_AGENTS", "false") == "true", "the node agents are deployed: files of servers on other nodes are reachable")
+	flag.StringVar(&cfg.AgentNamespace, "node-agent-namespace", env("KUBEPILOT_NODE_AGENT_NAMESPACE", ""), "namespace of the node agents")
+	flag.StringVar(&cfg.AgentSelector, "node-agent-selector", env("KUBEPILOT_NODE_AGENT_SELECTOR", "app.kubernetes.io/name=kubepilot-node"), "label selector of the node agents' pods")
 	secure := flag.Bool("secure-cookies", env("KUBEPILOT_SECURE_COOKIES", "true") == "true", "set Secure flag on cookies")
 	flag.Parse()
 	cfg.SecureCookies = *secure

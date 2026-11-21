@@ -11,7 +11,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"path"
 	"regexp"
 	"slices"
@@ -218,7 +217,7 @@ type installedPlugin struct {
 	Update      string     `json:"update,omitempty"` // newer compatible version, if any
 }
 
-func sha1File(root *os.Root, name string) (string, error) {
+func sha1File(root Vol, name string) (string, error) {
 	f, _, err := openRegular(root, name)
 	if err != nil {
 		return "", err
@@ -392,7 +391,7 @@ func latestVersion(ctx context.Context, projectID string, pc *pluginCtx) (*mrVer
 }
 
 // download fetches a Modrinth file into the server's extension folder, checking its SHA-512 and the quota.
-func (a *App) download(ctx context.Context, c *Ctx, root *os.Root, uid int, folder string, f *mrFile) (string, error) {
+func (a *App) download(ctx context.Context, c *Ctx, root Vol, uid int, folder string, f *mrFile) (string, error) {
 	u, err := url.Parse(f.URL)
 	if err != nil || u.Scheme != "https" || u.Host != "cdn.modrinth.com" {
 		return "", errCode(502, "Unexpected download address")
@@ -619,7 +618,7 @@ func (a *App) handlePluginFile(w http.ResponseWriter, r *http.Request, c *Ctx) {
 		writeErr(w, r, err)
 		return
 	}
-	a.withRoot(w, r, c, func(root *os.Root, _ int) error {
+	a.withRoot(w, r, c, func(root Vol, _ int) error {
 		p := path.Join(pc.soft.Folder, file)
 		if strings.HasSuffix(r.URL.Path, "/delete") {
 			if err := root.Remove(p); err != nil {

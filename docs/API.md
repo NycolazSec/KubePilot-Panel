@@ -193,7 +193,9 @@ accounts with two-factor authentication). API keys can't be used over SFTP.
 | `PUT` / `DELETE` | `/admin/templates/{tid}` | Update / delete |
 | `POST` | `/admin/templates/egg` | Convert a Pterodactyl / Pelican egg `{"url"}` (GitHub only) or `{"egg": <egg JSON>}` into a template draft → `{"template", "warnings"}` (not saved) |
 | `GET` | `/admin/eggs/catalog` | Community eggs of github.com/pelican-eggs `[{"repo", "name", "group", "url"}]` (cached 6 h) |
-| `POST` | `/admin/servers` | Create `{"name", "ownerId", "templateId", "image", "memory", "cpu", "disk", "backupLimit", "databaseLimit", "allocationLimit", "env", "startAfterInstall"}` |
+| `POST` | `/admin/servers` | Create `{"name", "ownerId", "templateId", "image", "memory", "cpu", "disk", "backupLimit", "databaseLimit", "allocationLimit", "env", "startAfterInstall", "node"}` — `node`: the machine to put it on (`""`: the one with the most free memory) |
+| `GET` | `/admin/nodes` | Machines: `{"agents", "nodes": [{"name", "ready", "panel", "agent", "cordoned", "address", "internalIP", "externalIP", "cpu", "cpuCap", "mem", "memCap", "servers", "memoryAllocated", "cpuAllocated", "diskAllocated", "publicHost", "acceptNew", "problem"}]}` |
+| `PUT` | `/admin/nodes/{name}` | `{"publicHost": "eu2.example.com", "acceptNew": true}` — the address players use for the servers of that machine (`""`: its IP), and whether automatic placement may use it |
 | `PUT` / `DELETE` | `/admin/servers/{id}` | Update / delete (volume and backups included) |
 | `GET` / `PUT` | `/admin/settings` | Panel settings |
 | `GET` | `/admin/firewall` | Firewall and anti-DDoS: `settings`, `effective` limits, global `rules`, and with `shield.enabled` what the nodes report: `nodes` (`stale`, `synced`, `error`), `counters` (packets dropped by reason), `bans` (`[{"ip", "expires"}]`, seconds left) |

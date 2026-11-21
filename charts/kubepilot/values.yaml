@@ -36,7 +36,8 @@ storage:
   # Directory where the provisioner creates volumes on the node:
   #   k3s: /var/lib/rancher/k3s/storage — rancher/local-path-provisioner: /opt/local-path-provisioner
   hostPath: /var/lib/rancher/k3s/storage
-  # Node that holds the volumes; the panel runs there. Leave empty on a single-node cluster.
+  # Node the panel runs on: it mounts the game volumes of that node and reaches the other nodes' volumes
+  # through their agents (nodeAgent). Leave empty on a single-node cluster.
   node: ""
 
 # Panel data: SQLite database and backups. The claim is kept on `helm uninstall`.
@@ -165,6 +166,19 @@ minecraftRouter:
 # The agents use the host network and the NET_ADMIN capability (nothing else): the release namespace must allow
 # it (Pod Security "privileged"). They filter what reaches the nodes; an attack bigger than a node's link has to be
 # stopped upstream (your host's anti-DDoS, or a provider such as path.net).
+# Several nodes: one small agent per node serves the files of the game servers placed on that node to the
+# panel (file manager, SFTP, backups, plugins). It listens on the pod network for the panel only (NetworkPolicy
+# + keys derived from a Secret the chart creates) and has no Kubernetes credentials. Without it, the panel
+# only reaches the files of its own node.
+nodeAgent:
+  enabled: true
+  resources:
+    requests: { cpu: 5m, memory: 16Mi }
+    limits: { cpu: 500m, memory: 256Mi }
+  nodeSelector: {}
+  # the nodes game servers may run on: none of the tainted ones by default, like the servers themselves
+  tolerations: []
+
 shield:
   enabled: false
   resources:

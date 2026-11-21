@@ -20,7 +20,7 @@ import (
 
 const maxArchiveEntries = 100_000
 
-func openRegular(root *os.Root, name string) (*os.File, fs.FileInfo, error) {
+func openRegular(root Vol, name string) (File, fs.FileInfo, error) {
 	f, err := root.OpenFile(name, os.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		return nil, nil, err
@@ -38,7 +38,7 @@ func openRegular(root *os.Root, name string) (*os.File, fs.FileInfo, error) {
 }
 
 // createRegular opens a file for writing (created if needed, truncated), refusing FIFOs and devices.
-func createRegular(root *os.Root, name string, perm fs.FileMode) (*os.File, error) {
+func createRegular(root Vol, name string, perm fs.FileMode) (File, error) {
 	if st, err := root.Stat(name); err == nil && !st.Mode().IsRegular() {
 		return nil, errCode(400, "Not a regular file")
 	}

@@ -131,7 +131,7 @@ func resolveReplacements(f ConfigFile, vars map[string]string) ([]replacement, [
 // ---------- Applying
 
 // applyConfigFiles edits the files and returns the ones that changed.
-func applyConfigFiles(root *os.Root, uid int, files []ConfigFile, vars map[string]string) (changed []string, errs []error) {
+func applyConfigFiles(root Vol, uid int, files []ConfigFile, vars map[string]string) (changed []string, errs []error) {
 	for _, f := range files {
 		p := rel(f.File)
 		reps, _ := resolveReplacements(f, vars)

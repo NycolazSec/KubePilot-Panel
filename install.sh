@@ -30,6 +30,12 @@ YES=${KUBEPILOT_YES:-false}
 CERT_WAIT=${KUBEPILOT_CERT_WAIT:-180}
 LOG=${KUBEPILOT_LOG:-/var/log/kubepilot-install.log}
 RELEASE=kubepilot
+INSTALL_URL=${KUBEPILOT_INSTALL_URL:-https://raw.githubusercontent.com/NycolazSec/KubePilot-Panel/main/install.sh}
+MODE=install # install (or update), add-node (main machine: invitation for a new one), join (new machine)
+SERVER=${KUBEPILOT_SERVER:-}         # join: https://<main machine>:6443
+TOKEN=${KUBEPILOT_TOKEN:-}           # join: the invitation printed by add-node
+NODE_NAME=${KUBEPILOT_NODE_NAME:-}   # join: name of the new machine in the cluster (default: its hostname)
+SERVER_ADDRESS=${KUBEPILOT_SERVER_ADDRESS:-} # add-node: address the new machine reaches this one at (default: its IP)
 
 # ---------- Output, in French or English
 
@@ -77,6 +83,11 @@ Installateur de KubePilot
 Chaque option existe aussi en variable d'environnement : KUBEPILOT_DOMAIN, KUBEPILOT_EMAIL,
 KUBEPILOT_ADMIN_USER, KUBEPILOT_MINECRAFT_ROUTER=true, KUBEPILOT_SHIELD=false, KUBEPILOT_VERSION, KUBEPILOT_YES=true.
 Relancé sur un serveur où KubePilot est installé, le script le met à jour.
+
+Ajouter une machine au cluster :
+  … | sudo sh -s -- add-node     sur la machine principale : affiche la commande pour la nouvelle machine
+  … | sudo sh -s -- join --server https://<machine principale>:6443 --token <invitation> [--node-name nom]
+                                 sur la nouvelle machine : installe k3s et rejoint le cluster
 EOF
 	else
 		cat <<'EOF'
@@ -96,6 +107,11 @@ KubePilot installer
 Every option is also an environment variable: KUBEPILOT_DOMAIN, KUBEPILOT_EMAIL, KUBEPILOT_ADMIN_USER,
 KUBEPILOT_MINECRAFT_ROUTER=true, KUBEPILOT_SHIELD=false, KUBEPILOT_VERSION, KUBEPILOT_YES=true.
 Run again on a server where KubePilot is installed, the script updates it.
+
+Add a machine to the cluster:
+  … | sudo sh -s -- add-node     on the main machine: prints the command for the new machine
+  … | sudo sh -s -- join --server https://<main machine>:6443 --token <invitation> [--node-name name]
+                                 on the new machine: installs k3s and joins the cluster
 EOF
 	fi
 }
@@ -117,6 +133,14 @@ while [ $# -gt 0 ]; do
 	-y | --yes) YES=true ;;
 	--lang=*) L=${1#*=} ;;
 	--lang) L=${2:-en} && shift ;;
+	add-node) MODE="add-node" ;;
+	join) MODE="join" ;;
+	--server=*) SERVER=${1#*=} ;;
+	--server) SERVER=${2:-} && shift ;;
+	--token=*) TOKEN=${1#*=} ;;
+	--token) TOKEN=${2:-} && shift ;;
+	--node-name=*) NODE_NAME=${1#*=} ;;
+	--node-name) NODE_NAME=${2:-} && shift ;;
 	-h | --help) usage && exit 0 ;;
 	*) die "Unknown option: $1 (see --help)" "Option inconnue : $1 (voir --help)" ;;
 	esac
@@ -174,6 +198,99 @@ MEM=$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo)
 ok "Linux $ARCH, $MEM MB RAM" "Linux $ARCH, $MEM Mo de RAM"
 [ "$MEM" -ge 1800 ] || warn "Less than 2 GB of RAM: enough for the panel, short for game servers." "Moins de 2 Go de RAM : assez pour le panel, juste pour des serveurs de jeu."
 IP=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i < NF; i++) if ($i == "src") {print $(i + 1); exit}}' || true)
+
+ufw_active() { command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q 'Status: active'; }
+
+# ---------- add-node: on the main machine, an invitation for a new machine
+
+if [ "$MODE" = add-node ]; then
+	step "Invitation for a new machine" "Invitation pour une nouvelle machine"
+	{ command -v k3s >/dev/null 2>&1 && [ -f /etc/rancher/k3s/k3s.yaml ]; } ||
+		die "Run add-node on the main machine of the cluster (the k3s server KubePilot was installed on)." \
+			"Lance add-node sur la machine principale du cluster (le serveur k3s où KubePilot est installé)."
+	KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+	export KUBECONFIG
+	kubectl get nodes --request-timeout=10s >/dev/null 2>&1 || die "k3s doesn't answer (systemctl status k3s)." "k3s ne répond pas (systemctl status k3s)."
+	ADDR=${SERVER_ADDRESS:-$IP}
+	[ -n "$ADDR" ] || die "Can't find this machine's address: give it with KUBEPILOT_SERVER_ADDRESS=<ip>." \
+		"Impossible de trouver l'adresse de cette machine : donne-la avec KUBEPILOT_SERVER_ADDRESS=<ip>."
+	JOIN=$(k3s token create --ttl 24h --description "KubePilot: new machine" 2>>"$LOG") && [ -n "$JOIN" ] ||
+		die "Can't create the invitation (k3s token create, see $LOG)." "Impossible de créer l'invitation (k3s token create, voir $LOG)."
+	ok "Invitation created, valid for 24 hours" "Invitation créée, valable 24 heures"
+	BACKEND=$(kubectl get nodes -o jsonpath='{.items[0].metadata.annotations.flannel\.alpha\.coreos\.com/backend-type}' 2>/dev/null || true)
+	UDP=51820
+	if [ "$BACKEND" != wireguard-native ]; then
+		UDP=8472
+		warn "On this cluster the traffic between machines isn't encrypted (flannel ${BACKEND:-vxlan}): only add machines of the same private network, or switch k3s to --flannel-backend=wireguard-native first." \
+			"Sur ce cluster, le trafic entre les machines n'est pas chiffré (flannel ${BACKEND:-vxlan}) : n'ajoute que des machines du même réseau privé, ou passe d'abord k3s en --flannel-backend=wireguard-native."
+	fi
+	if ufw_active && confirm "ufw is active: open 6443/tcp, 10250/tcp and $UDP/udp for the new machine?" "ufw est actif : ouvrir 6443/tcp, 10250/tcp et $UDP/udp pour la nouvelle machine ?" y; then
+		for p in 6443/tcp 10250/tcp "$UDP/udp"; do run ufw allow "$p"; done
+		ok "Ports opened" "Ports ouverts"
+	fi
+	printf '\n  %s\n\n    %scurl -sfL %s | sudo sh -s -- join --server https://%s:6443 --token %s%s\n\n' \
+		"$(tr2 "On the new machine (a fresh Linux server), run:" "Sur la nouvelle machine (un serveur Linux neuf), lance :")" "$B" "$INSTALL_URL" "$ADDR" "$JOIN" "$N"
+	say "It must reach this machine on 6443/tcp; the machines talk to each other on 10250/tcp and $UDP/udp." \
+		"Elle doit joindre cette machine sur 6443/tcp ; les machines se parlent sur 10250/tcp et $UDP/udp."
+	say "Keep the invitation secret: it lets a machine join the cluster." "Garde l'invitation secrète : elle permet à une machine de rejoindre le cluster."
+	printf '\n'
+	exit 0
+fi
+
+# ---------- join: on a new machine, join the cluster of the main one
+
+if [ "$MODE" = join ]; then
+	step "Joining the cluster" "Connexion au cluster"
+	{ [ -n "$SERVER" ] && [ -n "$TOKEN" ]; } || die "join needs --server and --token: run add-node on the main machine to get them." \
+		"join a besoin de --server et --token : lance add-node sur la machine principale pour les obtenir."
+	case $SERVER in https://?*) ;; *) die "--server: https://<main machine>:6443 expected" "--server : https://<machine principale>:6443 attendu" ;; esac
+	SERVER=${SERVER%/}
+	if command -v k3s >/dev/null 2>&1 || [ -e /etc/systemd/system/k3s.service ] || [ -e /etc/systemd/system/k3s-agent.service ] || [ -d /var/lib/rancher/k3s/data ]; then
+		die "k3s is already installed on this machine: join a fresh one, or uninstall k3s first (k3s-uninstall.sh or k3s-agent-uninstall.sh)." \
+			"k3s est déjà installé sur cette machine : utilise une machine neuve, ou désinstalle d'abord k3s (k3s-uninstall.sh ou k3s-agent-uninstall.sh)."
+	fi
+	if [ -n "$NODE_NAME" ]; then
+		printf '%s' "$NODE_NAME" | grep -Eq '^[a-z0-9]([a-z0-9.-]{0,61}[a-z0-9])?$' || die "Invalid machine name: $NODE_NAME (lowercase letters, digits, - and .)" \
+			"Nom de machine invalide : $NODE_NAME (minuscules, chiffres, - et .)"
+	fi
+	curl -sk --max-time 10 "$SERVER/cacerts" >/dev/null 2>&1 ||
+		die "Can't reach $SERVER: open port 6443/tcp on the main machine (its firewall, and the provider's) and check the address." \
+			"Impossible de joindre $SERVER : ouvre le port 6443/tcp sur la machine principale (son pare-feu, et celui de l'hébergeur) et vérifie l'adresse."
+	ok "Main machine reachable: $SERVER" "Machine principale joignable : $SERVER"
+	if port_busy 10250; then
+		die "Port 10250 is already used by another program: the cluster needs it on this machine." "Le port 10250 est déjà utilisé par un autre programme : le cluster en a besoin sur cette machine."
+	fi
+	say "Installing k3s (agent)…" "Installation de k3s (agent)…"
+	curl -sfL https://get.k3s.io -o /tmp/kubepilot-k3s-install.sh || die "Can't download k3s (https://get.k3s.io)." "Impossible de télécharger k3s (https://get.k3s.io)."
+	K3S_URL=$SERVER
+	K3S_TOKEN=$TOKEN
+	export K3S_URL K3S_TOKEN
+	set -- agent
+	[ -z "$NODE_NAME" ] || set -- "$@" --node-name "$NODE_NAME"
+	run sh /tmp/kubepilot-k3s-install.sh "$@" || die "The k3s installation failed (see $LOG)." "L'installation de k3s a échoué (voir $LOG)."
+	rm -f /tmp/kubepilot-k3s-install.sh
+	i=0
+	until [ -f /var/lib/rancher/k3s/agent/client-kubelet.crt ] && systemctl is-active --quiet k3s-agent; do
+		i=$((i + 1))
+		[ $i -lt 60 ] || die "The machine doesn't join the cluster (journalctl -u k3s-agent): expired invitation, or the same name as another machine (use --node-name)?" \
+			"La machine ne rejoint pas le cluster (journalctl -u k3s-agent) : invitation expirée, ou le même nom qu'une autre machine (utilise --node-name) ?"
+		sleep 3
+	done
+	ok "Joined the cluster as ${NODE_NAME:-$(hostname)}" "Cluster rejoint sous le nom ${NODE_NAME:-$(hostname)}"
+	if ufw_active; then
+		PORTS="10250/tcp 51820/udp 8472/udp 30100:30299/tcp 30100:30299/udp"
+		if confirm "ufw is active: open $PORTS (cluster and game ports)?" "ufw est actif : ouvrir $PORTS (cluster et ports de jeu) ?" y; then
+			for p in $PORTS; do run ufw allow "$p"; done
+			ok "Ports opened" "Ports ouverts"
+		fi
+	fi
+	printf '\n%s%s%s\n\n' "$G$B" "$(tr2 "This machine is part of the cluster!" "Cette machine fait partie du cluster !")" "$N"
+	say "In the panel, Admin → Machines: it shows up within a minute with its KubePilot agent, and new servers can go there." \
+		"Dans le panel, Admin → Machines : elle apparaît dans la minute avec son agent KubePilot, et les nouveaux serveurs peuvent y aller."
+	say "Players reach the servers of this machine at ${IP:-its address}." "Les joueurs rejoignent les serveurs de cette machine à ${IP:-son adresse}."
+	printf '\n'
+	exit 0
+fi
 
 # ---------- 2. Kubernetes
 
@@ -282,7 +399,10 @@ fi
 if [ "$CLUSTER" != true ]; then
 	step "Installing k3s" "Installation de k3s"
 	curl -sfL https://get.k3s.io -o /tmp/kubepilot-k3s-install.sh || die "Can't download k3s (https://get.k3s.io)." "Impossible de télécharger k3s (https://get.k3s.io)."
-	run sh /tmp/kubepilot-k3s-install.sh || die "The k3s installation failed." "L'installation de k3s a échoué."
+	# WireGuard between machines when the kernel has it: machines added later talk over an encrypted network
+	set --
+	if [ -e /sys/module/wireguard ] || modprobe wireguard >/dev/null 2>&1; then set -- --flannel-backend=wireguard-native; fi
+	run sh /tmp/kubepilot-k3s-install.sh "$@" || die "The k3s installation failed." "L'installation de k3s a échoué."
 	rm -f /tmp/kubepilot-k3s-install.sh
 	KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 	export KUBECONFIG
@@ -442,7 +562,7 @@ fi
 
 # ---------- 10. Firewall of the server
 
-if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q 'Status: active'; then
+if ufw_active; then
 	step "Firewall (ufw)" "Pare-feu (ufw)"
 	PORTS="80/tcp 443/tcp 30100:30299/tcp 30100:30299/udp $SFTP_PORT/tcp"
 	[ "$MC_ROUTER" != true ] || PORTS="$PORTS 25565/tcp"
@@ -491,6 +611,7 @@ fi
 say "· players join ${IP:-<server>}:<port>; game ports are 30100-30299 (open them if your provider has a firewall)" \
 	"· les joueurs rejoignent ${IP:-<serveur>}:<port> ; les ports de jeu sont 30100-30299 (ouvre-les si ton hébergeur a un pare-feu)"
 say "· update KubePilot: run this command again" "· mettre à jour KubePilot : relance cette commande"
+say "· more machines: Admin → Machines → Add a machine" "· plus de machines : Admin → Machines → Ajouter une machine"
 say "· uninstall: helm uninstall $RELEASE -n $NAMESPACE (game servers and their files are kept)" \
 	"· désinstaller : helm uninstall $RELEASE -n $NAMESPACE (les serveurs de jeu et leurs fichiers sont gardés)"
 printf '\n'

@@ -108,11 +108,16 @@ type ServerView struct {
 	NodeAddress  string        `json:"nodeAddress"`        // <node>:<NodePort>, always reachable
 	Internal     string        `json:"internalAddress"`    // reachable by the owner's other servers
 	RouterDomain string        `json:"routerDomain"`       // set when this server can get a <hostname>.<domain> address
+	NodeName     string        `json:"nodeName,omitempty"` // the node it runs on (owners and admins)
 	AutoSleep    bool          `json:"autoSleepAvailable"` // the router can wake this server up (see sleep.go)
 }
 
 func (a *App) view(s *Server, perms []string, host string, tpls map[int64]*Template, users map[int64]string) ServerView {
 	v := ServerView{Server: s, State: sleepingState(a.kube.State(s.ID), s.Asleep), Permissions: perms, Owner: users[s.OwnerID]}
+	host = a.serverHost(a.ctx, s, host)
+	if slices.Contains(perms, "settings") {
+		v.NodeName = a.serverNode(s)
+	}
 	if t := tpls[s.TemplateID]; t != nil {
 		v.Template, v.TemplateSlug, v.ConsoleInput = t.Name, t.Slug, t.ConsoleInput
 	}
@@ -507,7 +512,7 @@ func (a *App) handleNetwork(w http.ResponseWriter, r *http.Request, c *Ctx) {
 		writeErr(w, r, err)
 		return
 	}
-	writeJSON(w, 200, map[string]any{"host": a.publicHost(r), "allocations": allocs, "limit": c.Server.AllocationLimit})
+	writeJSON(w, 200, map[string]any{"host": a.serverHost(r.Context(), c.Server, a.publicHost(r)), "allocations": allocs, "limit": c.Server.AllocationLimit})
 }
 
 func (a *App) handleAllocAdd(w http.ResponseWriter, r *http.Request, c *Ctx) {
@@ -750,6 +755,7 @@ type serverInput struct {
 	Suspended       bool              `json:"suspended"`
 	Env             map[string]string `json:"env"`
 	StartAfter      bool              `json:"startAfterInstall"`
+	Node            string            `json:"node"` // creation only: "" = the node with the most free memory
 }
 
 func (in *serverInput) validate() error {
@@ -802,6 +808,10 @@ func (a *App) handleAdminServerCreate(w http.ResponseWriter, r *http.Request, u 
 			s.Env[v.Key] = val
 		}
 	}
+	if s.Node, err = a.placeServer(r.Context(), strings.TrimSpace(in.Node), s.MemoryMB); err != nil {
+		writeErr(w, r, err)
+		return
+	}
 
 	a.allocMu.Lock()
 	if tpl, err := a.db.Template(s.TemplateID); err == nil && a.routerAvailable(tpl, a.db.Settings()) {
@@ -830,7 +840,11 @@ func (a *App) handleAdminServerCreate(w http.ResponseWriter, r *http.Request, u 
 		writeErr(w, r, errCode(500, "Server created, but the installation failed: %s", err.Error()))
 		return
 	}
-	a.db.LogActivity(s.ID, u, clientIP(r), "server.create", s.Name)
+	meta := s.Name
+	if s.Node != "" {
+		meta += " (" + s.Node + ")"
+	}
+	a.db.LogActivity(s.ID, u, clientIP(r), "server.create", meta)
 	if in.StartAfter {
 		go a.startAfterInstall(s.ID)
 	}

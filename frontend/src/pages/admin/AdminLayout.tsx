@@ -8,6 +8,7 @@ const sections: Record<string, [string, string]> = {
   users: [t('nav.users'), t('admin.usersHint')],
   templates: [t('nav.templates'), t('admin.templatesHint')],
   settings: [t('nav.settings'), t('admin.settingsHint')],
+  nodes: [t('nav.nodes'), t('admin.nodesHint')],
   firewall: [t('nav.firewall'), t('admin.firewallHint')],
   activity: [t('nav.activity'), t('admin.activityHint')],
 };
