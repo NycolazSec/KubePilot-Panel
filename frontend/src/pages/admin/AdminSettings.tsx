@@ -4,6 +4,7 @@ import { get, put, Settings } from '../../api';
 import { Button, Card, ErrorBox, Field, Loading, useLoad, useUI } from '../../components/ui';
 import { useAuth } from '../../main';
 import BackupStorageCard from '../../components/BackupStorageCard';
+import MailCard from '../../components/MailCard';
 import { t } from '../../i18n';
 
 export default function AdminSettings() {
@@ -44,6 +45,7 @@ export default function AdminSettings() {
         </Field>
       </div>
     </Card>
+    <MailCard />
     <BackupStorageCard />
     </div>
   );

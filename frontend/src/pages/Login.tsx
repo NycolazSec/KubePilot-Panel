@@ -1,7 +1,8 @@
 import { ArrowLeft, ShieldCheck } from 'lucide-react';
-import { useState } from 'react';
-import { Me, post } from '../api';
-import LanguageSelect from '../components/LanguageSelect';
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { get, Me, post } from '../api';
+import AuthShell from '../components/AuthShell';
 import { Button, ErrorBox, Field } from '../components/ui';
 import { useAuth } from '../main';
 import { t } from '../i18n';
@@ -17,6 +18,8 @@ export default function Login() {
   const [recovery, setRecovery] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [canReset, setCanReset] = useState(false);
+  useEffect(() => { get<{ passwordReset: boolean }>('/auth/options').then((o) => setCanReset(o.passwordReset)).catch(() => {}); }, []);
 
   const run = async (fn: () => Promise<void>) => {
     setLoading(true);
@@ -45,13 +48,7 @@ export default function Login() {
   };
 
   return (
-    <div className="flex min-h-full flex-col items-center justify-center bg-ink-950 px-4 py-12">
-      <div className="w-full max-w-[360px]">
-        <div className="mb-8 flex flex-col items-center text-center">
-          <img src="/kubepilot.svg" alt="" width={48} height={48} />
-          <h1 className="mt-4 text-xl font-semibold tracking-tight">{ticket ? t('login.2faTitle') : t('login.title')}</h1>
-          <p className="mt-1 text-[13px] text-ink-400">{ticket ? (recovery ? t('login.recoveryHint') : t('login.2faHint')) : t('login.subtitle')}</p>
-        </div>
+    <AuthShell title={ticket ? t('login.2faTitle') : t('login.title')} subtitle={ticket ? (recovery ? t('login.recoveryHint') : t('login.2faHint')) : t('login.subtitle')}>
         {!ticket ? (
           <form onSubmit={submitPassword} className="card space-y-4 p-6">
             {error && <ErrorBox error={error} />}
@@ -61,6 +58,7 @@ export default function Login() {
             <Field label={t('login.password')}>
               <input className="input" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
             </Field>
+            {canReset && <div className="-mt-2 text-right"><Link to="/forgot-password" className="text-xs text-brand-300 hover:underline">{t('login.forgot')}</Link></div>}
             <Button type="submit" variant="primary" loading={loading} className="!h-9 w-full">{t('login.submit')}</Button>
           </form>
         ) : (
@@ -85,9 +83,6 @@ export default function Login() {
             </div>
           </form>
         )}
-        <p className="mt-6 text-center text-2xs text-ink-500">{t('login.footer')}</p>
-        <div className="mt-4 flex justify-center"><LanguageSelect compact /></div>
-      </div>
-    </div>
+    </AuthShell>
   );
 }

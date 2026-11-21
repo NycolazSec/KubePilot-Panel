@@ -37,6 +37,17 @@ Rules that always apply:
 - Behind Cloudflare, the default User-Agent of Python's `urllib` is blocked (error `1010`): set your own
   `User-Agent`, or use `requests`, `aiohttp` or `websockets`, which go through.
 
+### Password reset (no key, browser flow)
+
+These endpoints need no authentication; they are rate-limited per IP (10 per 15 minutes) and per account
+(3 emails per hour).
+
+| Method | Path | Body / result |
+|---|---|---|
+| `GET` | `/auth/options` | `{"passwordReset": true, "panelName": "…"}`: whether the panel can send reset emails |
+| `POST` | `/auth/forgot` | `{"login": "username or email"}` → always `{"ok": true}` (no hint whether the account exists); the email links to `<publicURL>/reset-password#<token>` |
+| `POST` | `/auth/reset` | `{"token": "…", "password": "…"}` → the token works once, for one hour; every session of the account is signed out |
+
 ## Servers
 
 | Method | Path | Permission | Description |
@@ -169,6 +180,8 @@ accounts with two-factor authentication). API keys can't be used over SFTP.
 
 | Method | Path | Description |
 |---|---|---|
+| `GET` | `/admin/mail` | How emails are sent: `{"enabled": false}` or `{"enabled": true, "host", "port", "tls", "from", "auth", "publicURL", "passwordReset"}` (never the password) |
+| `POST` | `/admin/mail/test` | Send a test email to yourself: `{"sentTo": "…"}`, or `502` with the SMTP error |
 | `GET` | `/admin/backup-storage` | Where new backups go: `{"storage": "local"}` or `{"storage": "s3", "endpoint", "bucket", "prefix", "encrypted", "status"}` |
 | `GET` | `/admin/overview` | Nodes, allocated resources, ports |
 | `GET` / `POST` | `/admin/users` | List / create `{"username", "email", "password", "isAdmin"}` |

@@ -41,7 +41,11 @@ type App struct {
 	sftp     *sftpServer  // nil when SFTP is off
 	dbHost   dbHost       // MariaDB for the servers' databases (empty address: off)
 	s3       *s3Store     // S3 storage for new backups (nil: the panel's volume)
-	tickets  loginTickets // sign-ins waiting for their second factor
+	mail     *mailer      // SMTP (nil: no emails)
+
+	resetLimiter    *rateLimiter // password reset requests per IP
+	resetPerAccount *rateLimiter // reset emails per account
+	tickets         loginTickets // sign-ins waiting for their second factor
 
 	sleepMu sync.RWMutex
 	asleep  map[string]bool // servers stopped by auto-sleep (see sleep.go)
@@ -55,6 +59,7 @@ func newApp(cfg Config, db *DB, kube *Kube) *App {
 		asleep: map[string]bool{}, idle: idleTracker{since: map[string]time.Time{}},
 		dbHost:  dbHost{addr: cfg.DatabaseAddr, pass: cfg.DatabasePassword},
 		limiter: newRateLimiter(10, 10*time.Minute), accounts: newRateLimiter(20, 15*time.Minute), keyRate: newRateLimiter(apiRatePerMin, time.Minute),
+		resetLimiter: newRateLimiter(10, 15*time.Minute), resetPerAccount: newRateLimiter(3, time.Hour),
 	}
 }
 
@@ -90,6 +95,7 @@ func (a *App) sessionCleanup(ctx context.Context) {
 	defer t.Stop()
 	for {
 		_, _ = a.db.Exec(`DELETE FROM sessions WHERE expires_at < ?`, now())
+		_, _ = a.db.Exec(`DELETE FROM password_resets WHERE expires_at < ?`, now())
 		_, _ = a.db.Exec(`DELETE FROM activity WHERE created_at < ?`, time.Now().Add(-90*24*time.Hour).Unix())
 		select {
 		case <-ctx.Done():
@@ -360,6 +366,7 @@ func (a *App) handlePassword(w http.ResponseWriter, r *http.Request, u *User) {
 	if c, err := r.Cookie(a.cookieName()); err == nil {
 		a.db.DeleteOtherSessions(u.ID, c.Value)
 	}
+	_, _ = a.db.Exec(`DELETE FROM password_resets WHERE user_id=?`, u.ID) // a link sent before is no longer needed
 	a.db.LogActivity("", u, clientIP(r), "account.password", "")
 	writeJSON(w, 200, map[string]bool{"ok": true})
 }
@@ -370,6 +377,9 @@ func (a *App) routes() http.Handler {
 	m := http.NewServeMux()
 	m.HandleFunc("POST /api/auth/login", a.handleLogin)
 	m.HandleFunc("POST /api/auth/logout", a.handleLogout)
+	m.HandleFunc("GET /api/auth/options", a.handleAuthOptions)
+	m.HandleFunc("POST /api/auth/forgot", a.handleForgot)
+	m.HandleFunc("POST /api/auth/reset", a.handleReset)
 	m.HandleFunc("GET /api/auth/me", a.authed(a.handleMe))
 	m.HandleFunc("PUT /api/account/password", a.authed(a.handlePassword))
 	m.HandleFunc("POST /api/auth/login/2fa", a.handleLogin2FA)
@@ -468,6 +478,8 @@ func (a *App) routes() http.Handler {
 	m.HandleFunc("DELETE /api/admin/servers/{id}", a.admin(a.handleAdminServerDelete))
 	m.HandleFunc("GET /api/admin/settings", a.admin(a.handleAdminSettings))
 	m.HandleFunc("PUT /api/admin/settings", a.admin(a.handleAdminSettingsSave))
+	m.HandleFunc("GET /api/admin/mail", a.admin(a.handleAdminMail))
+	m.HandleFunc("POST /api/admin/mail/test", a.admin(a.handleAdminMailTest))
 	m.HandleFunc("GET /api/admin/activity", a.admin(a.handleAdminActivity))
 
 	m.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("ok")) })

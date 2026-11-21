@@ -8,6 +8,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
+- **Password reset by email** ("Forgot your password?" on the sign-in page) once an SMTP server is set in the chart
+  (`email.smtp.*`, `email.from`; password in a Secret). The link carries a 256-bit token in its `#fragment` (never in
+  server logs), stored hashed, valid once for one hour; a reset signs the account out everywhere and sends a
+  confirmation email. Two-factor authentication still applies. Rate-limited per IP and per account, and the answer
+  never tells whether an account exists. STARTTLS is mandatory in `starttls` mode and no password is ever sent over
+  an unencrypted connection. *Admin* → *Settings* shows the email setup and sends a test email.
+- `publicURL` (default `https://<ingress.host>`): the panel's address, for links in emails.
+
 - **Auto-sleep** for Minecraft Java servers with a router address (*Settings* → *Auto-sleep*, or
   `PUT /servers/{id}/auto-sleep`): after 5 to 1440 minutes without players, the server stops by itself, and the next
   player who joins `<hostname>.<domain>` starts it again. The panel counts the players itself (Server List Ping, so

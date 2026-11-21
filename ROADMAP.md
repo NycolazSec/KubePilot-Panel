@@ -27,7 +27,8 @@ Ideas and votes are welcome in the [issues](https://github.com/NycolazSec/KubePi
 
 ## v0.3 and beyond — what Pterodactyl can't do
 
-- [ ] Password reset and notifications by email
+- [x] Password reset by email (SMTP)
+- [ ] Notifications by email
 - [ ] **Multi-node**: add a machine by joining it to the cluster; servers are scheduled where there is room
 - [ ] One-click **server transfer** between nodes
 - [ ] Standard game ports (e.g. `25565`) instead of NodePorts

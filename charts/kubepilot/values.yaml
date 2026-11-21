@@ -98,6 +98,24 @@ backups:
     # copy somewhere safe: without it, encrypted backups can't be restored (age -d -i key.txt also works by hand).
     encryptionKey: ""
 
+# Emails: "forgot your password" links (and notifications). Off while smtp.host is empty.
+email:
+  smtp:
+    host: "" # e.g. smtp.gmail.com, smtp-relay.brevo.com, ssl0.ovh.net, email-smtp.eu-west-3.amazonaws.com
+    port: 0 # 0 = the usual port of the TLS mode (587, 465 or 25)
+    # starttls (port 587) | tls (implicit TLS, port 465) | none (unencrypted: an in-cluster relay only; the
+    # panel never sends a password without TLS)
+    tls: starttls
+    username: ""
+    # Secret with the key "password"; or pass the password with --set email.smtp.password=… and the chart
+    # creates that Secret.
+    existingSecret: ""
+  # Sender, e.g. "KubePilot <panel@example.com>" (the SMTP account must be allowed to send as this address)
+  from: ""
+
+# The panel's public address, for links in emails. Default: https://<ingress.host>
+publicURL: ""
+
 # MySQL / MariaDB databases for the game servers (Databases tab): one MariaDB next to the servers, one database and
 # one user per request, reachable only by the game servers and the panel.
 databases:

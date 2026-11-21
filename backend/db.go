@@ -128,7 +128,7 @@ func openDB(path string) (*DB, error) {
 	// A single connection: SQLite serialises writes anyway and this avoids SQLITE_BUSY.
 	// Rule: never run a query while iterating another result set.
 	sqldb.SetMaxOpenConns(1)
-	if _, err := sqldb.Exec(schema + totpSchema + apiKeySchema + sshKeySchema + databaseSchema); err != nil {
+	if _, err := sqldb.Exec(schema + totpSchema + apiKeySchema + sshKeySchema + databaseSchema + mailSchema); err != nil {
 		return nil, err
 	}
 	db := &DB{sqldb}

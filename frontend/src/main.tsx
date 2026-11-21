@@ -10,6 +10,8 @@ import { get, Me } from './api';
 import { Loading, UIProvider } from './components/ui';
 import Layout from './components/Layout';
 import Login from './pages/Login';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 import Dashboard from './pages/Dashboard';
 import Account from './pages/Account';
 import ServerLayout from './pages/server/ServerLayout';
@@ -68,7 +70,11 @@ function App() {
     <Auth.Provider value={{ me, setMe, refresh }}>
       <BrowserRouter>
         {!me ? (
-          <Routes><Route path="*" element={<Login />} /></Routes>
+          <Routes>
+            <Route path="forgot-password" element={<ForgotPassword />} />
+            <Route path="reset-password" element={<ResetPassword />} />
+            <Route path="*" element={<Login />} />
+          </Routes>
         ) : me.twoFactorRequired ? (
           // 2FA is mandatory and not set up yet: only the account page is reachable
           <Routes>
