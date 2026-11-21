@@ -65,6 +65,8 @@ data is ever lost by accident. Delete them by hand if you really want to.
 | `service.type` / `service.port` | `ClusterIP` / `80` | Panel Service |
 | `minecraftRouter.enabled` | `false` | Deploy mc-router: Java servers get `<hostname>.<domain>` on port 25565 (set the domain in the admin settings, wildcard DNS record, DNS only) |
 | `minecraftRouter.service.type` / `.port` | `LoadBalancer` / `25565` | How the router is exposed |
+| `minecraftRouter.autoSleep.enabled` | `true` | Let servers sleep when nobody plays, and wake up when a player joins (mc-router may scale the game StatefulSets, through the scale subresource only) |
+| `minecraftRouter.autoSleep.asleepMOTD` / `.loadingMOTD` / `.wakeMessage` | English texts | What players see in their server list, and the message of the first join attempt |
 | `secureCookies` | `true` | Send cookies over HTTPS only. Set `false` only to test over plain HTTP |
 | `resources` | 50m / 64Mi → 2 CPU / 1Gi | Panel resources |
 | `extraEnv`, `podAnnotations`, `tolerations` | empty | Extra pod settings |

@@ -43,7 +43,7 @@ export const del = <T = any>(p: string) => api<T>(p, { method: 'DELETE' });
 export interface User { id: number; username: string; email: string; isAdmin: boolean; twoFactor: boolean; createdAt: number; servers?: number }
 export interface Me { user: User; panelName: string; version: string; twoFactorRequired: boolean }
 
-export type Status = 'offline' | 'installing' | 'starting' | 'running' | 'stopping' | 'crashed';
+export type Status = 'offline' | 'installing' | 'starting' | 'running' | 'stopping' | 'crashed' | 'sleeping';
 export interface State { status: Status; reason?: string; startedAt?: number; restarts: number; installError?: boolean; cpu: number; memory: number }
 
 export interface Allocation { port: number; serverId: string; protocol: string; name: string; targetPort: number; isPrimary: boolean; notes: string }
@@ -55,6 +55,7 @@ export interface Server {
   template: string; templateSlug: string; consoleInput: boolean; owner: string; state: State; diskUsed: number;
   address: string; allocations: Allocation[]; permissions: string[]; features: string[];
   hostname: string; nodeAddress: string; routerDomain: string; internalAddress: string; internalOnly: boolean;
+  autoSleep: number; asleep: boolean; autoSleepAvailable: boolean; // auto-sleep: minutes without players (0 = off)
 }
 
 export interface FileEntry { name: string; dir: boolean; size: number; mode: string; modified: number; symlink: boolean }

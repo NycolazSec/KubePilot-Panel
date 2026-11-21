@@ -50,6 +50,7 @@ export const dateTime = (ts: number) =>
 
 export const statusLabel: Record<string, string> = {
   running: t('status.running'), starting: t('status.starting'), stopping: t('status.stopping'), offline: t('status.offline'), installing: t('status.installing'), crashed: t('status.crashed'),
+  sleeping: t('status.sleeping'),
 };
 
 export function joinPath(dir: string, name: string) {

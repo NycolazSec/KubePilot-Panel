@@ -73,7 +73,8 @@ func (a *App) spec(s *Server) (Spec, error) {
 		return Spec{}, err
 	}
 	st := a.db.Settings()
-	return Spec{Server: s, Template: t, Allocs: allocs, Settings: st, Routed: a.routedHost(s, t, st)}, nil
+	routed := a.routedHost(s, t, st)
+	return Spec{Server: s, Template: t, Allocs: allocs, Settings: st, Routed: routed, Wakeable: a.wakeable(s, routed)}, nil
 }
 
 func (a *App) publicHost(r *http.Request) string {
@@ -103,14 +104,15 @@ type ServerView struct {
 	Address      string        `json:"address"`
 	Allocations  []*Allocation `json:"allocations"`
 	Permissions  []string      `json:"permissions"`
-	Features     []string      `json:"features"`        // game-specific pages (see templateFeatures)
-	NodeAddress  string        `json:"nodeAddress"`     // <node>:<NodePort>, always reachable
-	Internal     string        `json:"internalAddress"` // reachable by the owner's other servers
-	RouterDomain string        `json:"routerDomain"`    // set when this server can get a <hostname>.<domain> address
+	Features     []string      `json:"features"`           // game-specific pages (see templateFeatures)
+	NodeAddress  string        `json:"nodeAddress"`        // <node>:<NodePort>, always reachable
+	Internal     string        `json:"internalAddress"`    // reachable by the owner's other servers
+	RouterDomain string        `json:"routerDomain"`       // set when this server can get a <hostname>.<domain> address
+	AutoSleep    bool          `json:"autoSleepAvailable"` // the router can wake this server up (see sleep.go)
 }
 
 func (a *App) view(s *Server, perms []string, host string, tpls map[int64]*Template, users map[int64]string) ServerView {
-	v := ServerView{Server: s, State: a.kube.State(s.ID), Permissions: perms, Owner: users[s.OwnerID]}
+	v := ServerView{Server: s, State: sleepingState(a.kube.State(s.ID), s.Asleep), Permissions: perms, Owner: users[s.OwnerID]}
 	if t := tpls[s.TemplateID]; t != nil {
 		v.Template, v.TemplateSlug, v.ConsoleInput = t.Name, t.Slug, t.ConsoleInput
 	}
@@ -139,6 +141,7 @@ func (a *App) view(s *Server, perms []string, host string, tpls map[int64]*Templ
 	}
 	if a.routerAvailable(tpls[s.TemplateID], st) {
 		v.RouterDomain = st.MinecraftDomain
+		v.AutoSleep = a.autoSleepAvailable(tpls[s.TemplateID], st)
 		if routed := a.routedHost(s, tpls[s.TemplateID], st); routed != "" {
 			v.Address = routed // standard port 25565: no port to type
 		}
@@ -146,7 +149,8 @@ func (a *App) view(s *Server, perms []string, host string, tpls map[int64]*Templ
 	if !slices.Contains(perms, "settings") {
 		v.Server = &Server{ID: s.ID, Name: s.Name, Description: s.Description, OwnerID: s.OwnerID, TemplateID: s.TemplateID,
 			Image: s.Image, MemoryMB: s.MemoryMB, CPUMillis: s.CPUMillis, DiskMB: s.DiskMB, BackupLimit: s.BackupLimit, DatabaseLimit: s.DatabaseLimit,
-			AllocationLimit: s.AllocationLimit, Suspended: s.Suspended, CreatedAt: s.CreatedAt, Env: map[string]string{}, Hostname: s.Hostname, InternalOnly: s.InternalOnly}
+			AllocationLimit: s.AllocationLimit, Suspended: s.Suspended, CreatedAt: s.CreatedAt, Env: map[string]string{}, Hostname: s.Hostname, InternalOnly: s.InternalOnly,
+			AutoSleep: s.AutoSleep, Asleep: s.Asleep}
 	}
 	return v
 }
@@ -254,6 +258,11 @@ func (a *App) power(s *Server, action string) error {
 		return errCode(409, "Installation in progress, please wait")
 	}
 	ctx := a.ctx
+	switch action {
+	case "start", "stop", "kill", "restart":
+		a.idle.forget(s.ID)
+		a.clearAsleep(ctx, s) // started or stopped by hand: no longer waiting for a player
+	}
 	switch action {
 	case "start":
 		if st.Status == "running" || st.Status == "starting" {
@@ -710,6 +719,7 @@ func (a *App) handleReinstall(w http.ResponseWriter, r *http.Request, c *Ctx) {
 		writeErr(w, r, errCode(409, "Stop the server before reinstalling it"))
 		return
 	}
+	a.clearAsleep(r.Context(), c.Server) // mc-router must not start it during the installation
 	if st.Status == "crashed" {
 		_ = a.kube.SetReplicas(r.Context(), c.Server.ID, 0)
 		a.waitPodGone(r.Context(), c.Server.ID, 30*time.Second)
@@ -883,6 +893,7 @@ func (a *App) handleAdminServerUpdate(w http.ResponseWriter, r *http.Request, u 
 		return
 	}
 	if s.Suspended && !wasSuspended {
+		a.clearAsleep(r.Context(), s) // a suspended server must not wake up
 		_ = a.kube.SetReplicas(r.Context(), s.ID, 0)
 		a.hub(s.ID).daemon("Server suspended by an administrator.")
 	}
@@ -896,6 +907,7 @@ func (a *App) handleAdminServerDelete(w http.ResponseWriter, r *http.Request, u 
 		writeErr(w, r, err)
 		return
 	}
+	a.clearAsleep(r.Context(), s) // mc-router must not start it while it's being deleted
 	if err := a.kube.DeleteServer(r.Context(), s.ID); err != nil {
 		writeErr(w, r, errCode(500, "Kubernetes deletion failed: %s", err.Error()))
 		return
@@ -1141,7 +1153,7 @@ func (a *App) handleAdminOverview(w http.ResponseWriter, r *http.Request, u *Use
 	counts := map[string]int{}
 	var memAlloc, cpuAlloc, diskAlloc, diskUsed int64
 	for _, s := range servers {
-		counts[a.kube.State(s.ID).Status]++
+		counts[sleepingState(a.kube.State(s.ID), s.Asleep).Status]++
 		memAlloc += int64(s.MemoryMB)
 		cpuAlloc += int64(s.CPUMillis)
 		diskAlloc += int64(s.DiskMB)

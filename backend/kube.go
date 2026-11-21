@@ -240,6 +240,7 @@ type Spec struct {
 	Allocs   []*Allocation
 	Settings Settings
 	Routed   string // hostname given to the Minecraft router ("" = not routed)
+	Wakeable bool   // asleep (auto-sleep): mc-router starts it when a player connects
 }
 
 func escapeDollar(s string) string { return strings.ReplaceAll(s, "$", "$$") }
@@ -473,10 +474,7 @@ func (k *Kube) EnsureService(ctx context.Context, sp Spec) error {
 	if sp.Server.InternalOnly { // reachable through its ClusterIP only (the owner's other servers)
 		spec.Type, spec.ExternalTrafficPolicy = corev1.ServiceTypeClusterIP, ""
 	}
-	annotations := map[string]string{}
-	if sp.Routed != "" {
-		annotations[mcRouterAnnotation] = sp.Routed
-	}
+	annotations := routerAnnotations(sp)
 	if apierrors.IsNotFound(err) {
 		_, err = api.Create(ctx, &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: name, Labels: srvLabels(sp.Server.ID, "service"), Annotations: annotations}, Spec: spec}, metav1.CreateOptions{})
 		return err
@@ -486,7 +484,9 @@ func (k *Kube) EnsureService(ctx context.Context, sp Spec) error {
 	if cur.Annotations == nil {
 		cur.Annotations = map[string]string{}
 	}
-	delete(cur.Annotations, mcRouterAnnotation)
+	for _, k := range routerAnnotationKeys {
+		delete(cur.Annotations, k)
+	}
 	for k, v := range annotations {
 		cur.Annotations[k] = v
 	}
@@ -503,7 +503,7 @@ func (k *Kube) ApplyStatefulSet(ctx context.Context, sp Spec, replicas int32) er
 	cur, err := api.Get(ctx, name, metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
 		sts := &appsv1.StatefulSet{
-			ObjectMeta: metav1.ObjectMeta{Name: name, Labels: srvLabels(sp.Server.ID, "server")},
+			ObjectMeta: metav1.ObjectMeta{Name: name, Labels: srvLabels(sp.Server.ID, "server"), Annotations: map[string]string{specHashAnnotation: sp.hash()}},
 			Spec: appsv1.StatefulSetSpec{
 				Replicas:    &replicas,
 				ServiceName: name,
@@ -518,8 +518,33 @@ func (k *Kube) ApplyStatefulSet(ctx context.Context, sp Spec, replicas int32) er
 	}
 	cur.Spec.Template = tpl
 	cur.Spec.Replicas = &replicas
+	if cur.Annotations == nil {
+		cur.Annotations = map[string]string{}
+	}
+	cur.Annotations[specHashAnnotation] = sp.hash()
 	_, err = api.Update(ctx, cur, metav1.UpdateOptions{})
 	return err
+}
+
+// Replicas is the StatefulSet's desired replica count (-1: no StatefulSet).
+func (k *Kube) Replicas(id string) int32 {
+	sts, err := k.sts.StatefulSets(k.ns).Get(stsName(id))
+	if err != nil {
+		return -1
+	}
+	if sts.Spec.Replicas == nil {
+		return 1
+	}
+	return *sts.Spec.Replicas
+}
+
+// SpecHash is the hash of the spec the StatefulSet was last written with (see Spec.hash).
+func (k *Kube) SpecHash(id string) string {
+	sts, err := k.sts.StatefulSets(k.ns).Get(stsName(id))
+	if err != nil {
+		return ""
+	}
+	return sts.Annotations[specHashAnnotation]
 }
 
 func (k *Kube) SetReplicas(ctx context.Context, id string, n int32) error {

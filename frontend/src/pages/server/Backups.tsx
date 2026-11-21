@@ -100,9 +100,9 @@ export default function Backups() {
       </Modal>
 
       <Modal open={!!restore} onClose={() => setRestore(null)} title={t('backups.restoreTitle', { name: restore?.name ?? '' })}
-        footer={<><Button variant="ghost" onClick={() => setRestore(null)}>{t('common.cancel')}</Button><Button variant="danger" loading={busy} disabled={state.status !== 'offline'} onClick={doRestore}>{t('backups.restore')}</Button></>}>
+        footer={<><Button variant="ghost" onClick={() => setRestore(null)}>{t('common.cancel')}</Button><Button variant="danger" loading={busy} disabled={state.status !== 'offline' && state.status !== 'sleeping'} onClick={doRestore}>{t('backups.restore')}</Button></>}>
         <div className="space-y-4 text-sm text-ink-300">
-          {state.status !== 'offline' && <ErrorBox error={t('backups.stopFirst')} />}
+          {state.status !== 'offline' && state.status !== 'sleeping' && <ErrorBox error={t('backups.stopFirst')} />}
           <p>{t('backups.restoreBody')}</p>
           <Toggle checked={truncate} onChange={setTruncate} label={t('backups.truncate')} />
         </div>

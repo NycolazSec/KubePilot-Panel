@@ -369,5 +369,5 @@ func (a *App) handleConsoleHistory(w http.ResponseWriter, r *http.Request, c *Ct
 			out[i] = ansiRe.ReplaceAllString(out[i], "")
 		}
 	}
-	writeJSON(w, 200, map[string]any{"lines": out, "status": a.kube.State(c.Server.ID).Status})
+	writeJSON(w, 200, map[string]any{"lines": out, "status": a.state(c.Server.ID).Status})
 }

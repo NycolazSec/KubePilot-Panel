@@ -236,6 +236,7 @@ func (a *App) handleBackupRestore(w http.ResponseWriter, r *http.Request, c *Ctx
 		return
 	}
 	defer lock.Unlock()
+	a.clearAsleep(r.Context(), c.Server) // mc-router must not start it while its files are replaced
 	h := a.hub(c.Server.ID)
 	h.daemon("Restoring “%s”…", b.Name)
 	a.withRoot(w, r, c, func(root *os.Root, uid int) error {

@@ -109,19 +109,20 @@ var statusText = map[string]string{
 	"stopping":   "Stopping the server…",
 	"offline":    "Server stopped.",
 	"installing": "Installing…",
+	"sleeping":   "Server asleep: it will start again when a player joins.",
 }
 
 func (a *App) watchState(ctx context.Context, h *Hub) {
 	t := time.NewTicker(time.Second)
 	defer t.Stop()
-	last := a.kube.State(h.id)
+	last := a.state(h.id)
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-t.C:
 		}
-		st := a.kube.State(h.id)
+		st := a.state(h.id)
 		if st.Status != last.Status || (st.Status == "crashed" && st.Restarts != last.Restarts) {
 			if st.Status == "crashed" {
 				h.daemonErr("The server crashed: %s", st.Reason)
@@ -277,7 +278,7 @@ func (a *App) handleWS(w http.ResponseWriter, r *http.Request, c *Ctx) {
 		_ = conn.SetWriteDeadline(time.Now().Add(15 * time.Second))
 		return conn.WriteJSON(m)
 	}
-	st := a.kube.State(c.Server.ID)
+	st := a.state(c.Server.ID)
 	if write(WSMsg{Type: "history", Lines: history}) != nil || write(WSMsg{Type: "status", State: &st, Disk: a.diskUsed(c.Server.ID)}) != nil {
 		return
 	}
@@ -337,7 +338,7 @@ func (a *App) handleWS(w http.ResponseWriter, r *http.Request, c *Ctx) {
 					return
 				}
 			case <-stats.C:
-				st := a.kube.State(c.Server.ID)
+				st := a.state(c.Server.ID)
 				if write(WSMsg{Type: "stats", State: &st, Disk: a.diskUsed(c.Server.ID)}) != nil {
 					return
 				}

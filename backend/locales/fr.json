@@ -210,5 +210,11 @@
   "Username or email already in use": "Nom d'utilisateur ou email déjà utilisé",
   "Volume type not supported by the file manager": "Type de volume non supporté pour le gestionnaire de fichiers",
   "You can't delete your own account": "Tu ne peux pas supprimer ton propre compte",
-  "You can't remove your own admin role": "Tu ne peux pas retirer ton propre rôle admin"
+  "You can't remove your own admin role": "Tu ne peux pas retirer ton propre rôle admin",
+  "Nobody played for %s minutes: the server goes to sleep. It will start again when a player joins.": "Personne n'a joué depuis %s minutes : le serveur se met en veille. Il redémarrera dès qu'un joueur se connectera.",
+  "Auto-sleep failed: %s": "Échec de la mise en veille : %s",
+  "A player is joining: the server wakes up…": "Un joueur se connecte : le serveur se réveille…",
+  "The delay must be between %s and %s minutes (0 turns auto-sleep off)": "Le délai doit être compris entre %s et %s minutes (0 désactive la mise en veille)",
+  "Auto-sleep needs the Minecraft router and an address for this server (Network tab)": "La mise en veille nécessite le routeur Minecraft et une adresse pour ce serveur (onglet Réseau)",
+  "Server asleep: it will start again when a player joins.": "Serveur en veille : il redémarrera dès qu'un joueur se connectera."
 }
