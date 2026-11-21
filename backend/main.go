@@ -38,6 +38,8 @@ type Config struct {
 	AutoSleep bool
 	// RootInstall: the game namespace allows root install containers (Pod Security "baseline"), for eggs
 	RootInstall bool
+	// Ingress: the ingress controller's pods, that game servers may reach on its web ports (the cluster's own websites)
+	Ingress IngressPeer
 	// SFTPListen: address of the built-in SFTP server ("" = off); SFTPPort: the port users connect to
 	SFTPListen string
 	SFTPPort   int
@@ -78,9 +80,16 @@ func main() {
 	cfg.Mail = MailConfig{Host: os.Getenv("KUBEPILOT_SMTP_HOST"), Port: atoiOr(os.Getenv("KUBEPILOT_SMTP_PORT"), 0), TLS: os.Getenv("KUBEPILOT_SMTP_TLS"),
 		Username: os.Getenv("KUBEPILOT_SMTP_USERNAME"), Password: os.Getenv("KUBEPILOT_SMTP_PASSWORD"), From: os.Getenv("KUBEPILOT_MAIL_FROM")}
 	flag.StringVar(&cfg.PublicURL, "public-url", env("KUBEPILOT_PUBLIC_URL", ""), "the panel's public address (https://…), for links in emails")
+	ingressNS := flag.String("ingress-namespace", env("KUBEPILOT_INGRESS_NAMESPACE", ""), "namespace of the ingress controller game servers may reach (empty = none)")
+	ingressLabels := flag.String("ingress-pod-labels", env("KUBEPILOT_INGRESS_POD_LABELS", ""), "labels of the ingress controller's pods, e.g. app.kubernetes.io/name=traefik")
+	ingressPorts := flag.String("ingress-ports", env("KUBEPILOT_INGRESS_PORTS", ""), "its ports game servers may reach (names or numbers), e.g. web,websecure")
 	secure := flag.Bool("secure-cookies", env("KUBEPILOT_SECURE_COOKIES", "true") == "true", "set Secure flag on cookies")
 	flag.Parse()
 	cfg.SecureCookies = *secure
+	var err error
+	if cfg.Ingress, err = parseIngressPeer(*ingressNS, *ingressLabels, *ingressPorts); err != nil {
+		log.Fatalf("ingress controller: %v", err)
+	}
 	if cfg.PublicURL = strings.TrimRight(cfg.PublicURL, "/"); cfg.PublicURL != "" {
 		if u, err := url.Parse(cfg.PublicURL); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || u.Path != "" {
 			log.Fatalf("public URL %q: expected https://panel.example.com", cfg.PublicURL)

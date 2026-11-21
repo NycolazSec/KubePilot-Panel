@@ -27,6 +27,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   when `minecraftRouter.autoSleep.enabled` (default `true`). It logs a warning that `patch` is forbidden, then uses
   the scale subresource.
 
+### Fixed
+
+- Game servers can reach the websites of their own cluster through their public address (a Discord bot whose music
+  player fetches tracks from the bot's own dashboard, for instance). kube-proxy sends those connections straight to the
+  ingress controller's pods, which the network isolation refused ("connection refused"). The isolation now opens
+  only the controller's HTTP and HTTPS entry points — new chart value `serversNamespace.ingressController` (default:
+  Traefik on k3s; `namespace: ""` keeps it closed). The node's own IPs and the rest of the cluster stay blocked.
+
 ## [0.2.0] - 2026-11-20
 
 **Pterodactyl parity**: hundreds of games through Pterodactyl / Pelican eggs, a built-in SFTP server, MySQL databases
