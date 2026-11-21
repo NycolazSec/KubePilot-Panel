@@ -485,6 +485,8 @@ func (a *App) routes() http.Handler {
 	m.HandleFunc("POST /api/admin/servers", a.admin(a.handleAdminServerCreate))
 	m.HandleFunc("PUT /api/admin/servers/{id}", a.admin(a.handleAdminServerUpdate))
 	m.HandleFunc("DELETE /api/admin/servers/{id}", a.admin(a.handleAdminServerDelete))
+	m.HandleFunc("GET /api/admin/nodes", a.admin(a.handleAdminNodes))
+	m.HandleFunc("PUT /api/admin/nodes/{name}", a.admin(a.handleAdminNodeSave))
 	m.HandleFunc("GET /api/admin/firewall", a.admin(a.handleAdminShield))
 	m.HandleFunc("PUT /api/admin/firewall", a.admin(a.handleAdminShieldSave))
 	m.HandleFunc("POST /api/admin/firewall/rules", a.admin(a.handleAdminShieldRuleAdd))

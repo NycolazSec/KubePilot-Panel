@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import { Activity, Boxes, Gauge, Layers, LogOut, Menu, Server, Settings, Shield, User, Users, X } from 'lucide-react';
+import { Activity, Boxes, Gauge, Layers, LogOut, Menu, Network, Server, Settings, Shield, User, Users, X } from 'lucide-react';
 import React, { useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { post } from '../api';
@@ -57,6 +57,7 @@ export default function Layout() {
           <Item to="/admin/users" icon={Users}>{t('nav.users')}</Item>
           <Item to="/admin/templates" icon={Layers}>{t('nav.templates')}</Item>
           <Item to="/admin/settings" icon={Settings}>{t('nav.settings')}</Item>
+          <Item to="/admin/nodes" icon={Network}>{t('nav.nodes')}</Item>
           <Item to="/admin/firewall" icon={Shield}>{t('nav.firewall')}</Item>
           <Item to="/admin/activity" icon={Activity}>{t('nav.activity')}</Item>
         </Section>

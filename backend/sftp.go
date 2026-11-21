@@ -45,7 +45,7 @@ type sftpServer struct {
 	a           *App
 	config      *ssh.ServerConfig
 	fingerprint string
-	openRoot    func(*Server) (*os.Root, int, error) // the server's volume (replaced in tests)
+	openRoot    func(*Server) (Vol, int, error) // the server's volume (replaced in tests)
 
 	mu    sync.Mutex
 	perIP map[string]int
@@ -79,7 +79,7 @@ func newSFTPServer(a *App, hostKeyFile string) (*sftpServer, error) {
 		return nil, fmt.Errorf("sftp host key: %w", err)
 	}
 	s := &sftpServer{a: a, perIP: map[string]int{}, fingerprint: ssh.FingerprintSHA256(key.PublicKey()),
-		openRoot: func(srv *Server) (*os.Root, int, error) { return a.openRoot(a.ctx, srv) }}
+		openRoot: func(srv *Server) (Vol, int, error) { return a.openRoot(a.ctx, srv) }}
 	s.config = &ssh.ServerConfig{
 		ServerVersion:     "SSH-2.0-KubePilot",
 		MaxAuthTries:      6,
@@ -311,7 +311,7 @@ func (s *sftpServer) serveSFTP(ch ssh.Channel, u *User, srv *Server, ip string) 
 type sftpFS struct {
 	a    *App
 	srv  *Server
-	root *os.Root
+	root Vol
 	uid  int
 
 	mu                               sync.Mutex
@@ -373,7 +373,7 @@ func (h *sftpFS) Fileread(r *sftp.Request) (io.ReaderAt, error) {
 // shared with the other sessions and the web file manager.
 type sftpFile struct {
 	h    *sftpFS
-	f    *os.File
+	f    File
 	path string
 
 	mu       sync.Mutex

@@ -30,7 +30,7 @@ func TestPluginDependencies(t *testing.T) {
 	writeJar(t, dir, "paper.jar", "paper-plugin.yml", "name: Modern\ndependencies:\n  server:\n    LuckPerms:\n      load: BEFORE\n    Optional:\n      required: false\n")
 	writeJar(t, dir, "worldedit.jar", "plugin.yml", "name: WorldEdit\n")
 	writeJar(t, dir, "evil.jar", "plugin.yml", "name: Evil\ndepend: ['../../etc', 'x; rm -rf /']\n")
-	root, err := os.OpenRoot(dir)
+	root, err := openLocalVol(dir)
 	if err != nil {
 		t.Fatal(err)
 	}

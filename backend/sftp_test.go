@@ -19,7 +19,7 @@ import (
 // sftpPipe serves dir over SFTP in memory, as one session of server s.
 func sftpPipe(t *testing.T, a *App, s *Server, dir string) *sftp.Client {
 	t.Helper()
-	root, err := os.OpenRoot(dir)
+	root, err := openLocalVol(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,7 +151,7 @@ func TestSFTPAuth(t *testing.T) {
 	}
 	data := t.TempDir()
 	os.WriteFile(filepath.Join(data, "server.properties"), []byte("motd=hi\n"), 0o644)
-	s.openRoot = func(*Server) (*os.Root, int, error) { r, err := os.OpenRoot(data); return r, os.Getuid(), err }
+	s.openRoot = func(*Server) (Vol, int, error) { r, err := openLocalVol(data); return r, os.Getuid(), err }
 	ln, _ := net.Listen("tcp", "127.0.0.1:0")
 	go s.serve(a.ctx, ln)
 	t.Cleanup(func() { ln.Close() })

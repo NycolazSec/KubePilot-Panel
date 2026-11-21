@@ -56,6 +56,7 @@ export interface Server {
   address: string; allocations: Allocation[]; permissions: string[]; features: string[];
   hostname: string; nodeAddress: string; routerDomain: string; internalAddress: string; internalOnly: boolean;
   autoSleep: number; asleep: boolean; autoSleepAvailable: boolean; // auto-sleep: minutes without players (0 = off)
+  node?: string; nodeName?: string; // node it was placed on / runs on
 }
 
 export interface FileEntry { name: string; dir: boolean; size: number; mode: string; modified: number; symlink: boolean }
@@ -85,6 +86,11 @@ export interface ShieldInfo {
 
 export interface Settings { panelName: string; publicHost: string; portMin: number; portMax: number; timezone: string; twoFactorPolicy: '' | 'admins' | 'everyone'; minecraftDomain: string }
 export interface NodeInfo { name: string; ready: boolean; version: string; os: string; cpuCap: number; memCap: number; cpu: number; mem: number; pods: number; address: string }
+export interface NodeView extends NodeInfo {
+  internalIP: string; externalIP: string; controlPlane: boolean; cordoned: boolean; panel: boolean; agent: boolean; arch: string;
+  servers: number; memoryAllocated: number; cpuAllocated: number; diskAllocated: number; publicHost: string; acceptNew: boolean; problem?: string; createdAt: number;
+}
+export interface NodesInfo { nodes: NodeView[]; agents: boolean }
 
 const templateOrder = ['minecraft-java', 'minecraft-bedrock', 'nodejs', 'python'];
 export function sortTemplates<T extends { slug: string; name: string }>(list: T[]): T[] {

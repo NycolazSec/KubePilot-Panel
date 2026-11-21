@@ -1,7 +1,7 @@
 import { Boxes, ExternalLink, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { del, get, post, put, Server, sortTemplates, Template, User } from '../../api';
+import { del, get, NodesInfo, NodeView, post, put, Server, sortTemplates, Template, User } from '../../api';
 import { Button, Card, Empty, ErrorBox, Field, IconButton, Loading, Modal, StatusPill, Toggle, useLoad, useUI } from '../../components/ui';
 import { bytes, cpuLabel, mb } from '../../lib/format';
 import TemplateIcon from '../../components/TemplateIcon';
@@ -10,10 +10,10 @@ import { t, tx } from '../../i18n';
 type Form = {
   id?: string; name: string; description: string; ownerId: number; templateId: number; image: string; startup?: string;
   memory: number; cpu: number; disk: number; backupLimit: number; databaseLimit: number; allocationLimit: number; suspended: boolean;
-  env: Record<string, string>; startAfterInstall: boolean;
+  env: Record<string, string>; startAfterInstall: boolean; node: string;
 };
 
-function ServerForm({ form, setForm, users, templates }: { form: Form; setForm: (f: Form) => void; users: User[]; templates: Template[] }) {
+function ServerForm({ form, setForm, users, templates, nodes }: { form: Form; setForm: (f: Form) => void; users: User[]; templates: Template[]; nodes: NodeView[] }) {
   const tpl = templates.find((x) => x.id === form.templateId);
   const set = (k: keyof Form, v: any) => setForm({ ...form, [k]: v });
   const pickTemplate = (id: number) => {
@@ -46,6 +46,18 @@ function ServerForm({ form, setForm, users, templates }: { form: Form; setForm: 
         </Field>
       </div>
       <Field label={t('adminServers.descOptional')}><input className="input" value={form.description} onChange={(e) => set('description', e.target.value)} /></Field>
+      {!form.id && nodes.length > 1 && (
+        <Field label={t('adminServers.node')} hint={t('adminServers.nodeHint')}>
+          <select className="input" value={form.node} onChange={(e) => set('node', e.target.value)}>
+            <option value="">{t('adminServers.nodeAuto')}</option>
+            {nodes.map((n) => (
+              <option key={n.name} value={n.name} disabled={!!n.problem}>
+                {n.name} — {t('adminServers.nodeFree', { free: mb(Math.max(0, Math.round(n.memCap / 1048576) - n.memoryAllocated)) })}{n.problem ? ` (${n.problem})` : ''}
+              </option>
+            ))}
+          </select>
+        </Field>
+      )}
       <div className="grid gap-4 sm:grid-cols-3">
         <Field label={t('adminServers.memoryMb')} hint={mb(form.memory || 0)}><input type="number" className="input" min={128} step={256} value={form.memory} onChange={(e) => set('memory', +e.target.value)} /></Field>
         <Field label={t('adminServers.cpuMilli')} hint={t('adminServers.cpuHint', { cpu: cpuLabel(form.cpu || 0) })}><input type="number" className="input" min={0} step={250} value={form.cpu} onChange={(e) => set('cpu', +e.target.value)} /></Field>
@@ -93,6 +105,8 @@ export default function AdminServers() {
   const servers = useLoad(() => get<Server[]>('/servers?all=1'));
   const users = useLoad(() => get<User[]>('/admin/users'));
   const templates = useLoad(() => get<Template[]>('/admin/templates').then(sortTemplates));
+  const nodes = useLoad(() => get<NodesInfo>('/admin/nodes').then((r) => r.nodes).catch(() => [] as NodeView[]));
+  const several = (nodes.data?.length ?? 0) > 1;
   const [form, setForm] = useState<Form | null>(null);
   const [busy, setBusy] = useState(false);
   const [q, setQ] = useState('');
@@ -102,9 +116,9 @@ export default function AdminServers() {
   const openCreate = () => {
     const first = templates.data?.[0];
     if (!first || !users.data?.length) return;
-    setForm({ name: '', description: '', ownerId: users.data[0].id, templateId: first.id, image: first.images[0]?.image, memory: first.defaultMemory, cpu: first.defaultCpu, disk: first.defaultDisk, backupLimit: 3, databaseLimit: 1, allocationLimit: 1, suspended: false, env: {}, startAfterInstall: true });
+    setForm({ name: '', description: '', ownerId: users.data[0].id, templateId: first.id, image: first.images[0]?.image, memory: first.defaultMemory, cpu: first.defaultCpu, disk: first.defaultDisk, backupLimit: 3, databaseLimit: 1, allocationLimit: 1, suspended: false, env: {}, startAfterInstall: true, node: '' });
   };
-  const openEdit = (s: Server) => setForm({ id: s.id, name: s.name, description: s.description, ownerId: s.ownerId, templateId: s.templateId, image: s.image, startup: s.startup, memory: s.memory, cpu: s.cpu, disk: s.disk, backupLimit: s.backupLimit, databaseLimit: s.databaseLimit, allocationLimit: s.allocationLimit, suspended: s.suspended, env: s.env, startAfterInstall: false });
+  const openEdit = (s: Server) => setForm({ id: s.id, name: s.name, description: s.description, ownerId: s.ownerId, templateId: s.templateId, image: s.image, startup: s.startup, memory: s.memory, cpu: s.cpu, disk: s.disk, backupLimit: s.backupLimit, databaseLimit: s.databaseLimit, allocationLimit: s.allocationLimit, suspended: s.suspended, env: s.env, startAfterInstall: false, node: s.node || '' });
 
   const save = async () => {
     if (!form) return;
@@ -114,6 +128,7 @@ export default function AdminServers() {
       else { await post('/admin/servers', form); toast(t('adminServers.created')); }
       setForm(null);
       servers.reload(true);
+      nodes.reload(true);
     } catch (e: any) { toast(e.message, 'err'); } finally { setBusy(false); }
   };
 
@@ -138,7 +153,7 @@ export default function AdminServers() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead><tr className="border-b border-ink-700">
-                <th className="th">{t('adminServers.server')}</th><th className="th">{t('adminServers.owner')}</th><th className="th">{t('overview.state')}</th><th className="th">{t('adminServers.resources')}</th><th className="th">{t('common.address')}</th><th className="w-32" />
+                <th className="th">{t('adminServers.server')}</th><th className="th">{t('adminServers.owner')}</th><th className="th">{t('overview.state')}</th><th className="th">{t('adminServers.resources')}</th>{several && <th className="th">{t('adminServers.node')}</th>}<th className="th">{t('common.address')}</th><th className="w-32" />
               </tr></thead>
               <tbody>
                 {list.map((s) => (
@@ -147,6 +162,7 @@ export default function AdminServers() {
                     <td className="px-4 py-3 text-ink-300">{s.owner}</td>
                     <td className="px-4 py-3">{s.suspended ? <span className="text-xs text-red-300">{t('server.suspended')}</span> : <StatusPill status={s.state.status} />}</td>
                     <td className="px-4 py-3 text-xs text-ink-400">{mb(s.memory)} · {cpuLabel(s.cpu)} · {bytes(s.diskUsed, 0)} / {mb(s.disk)}</td>
+                    {several && <td className="px-4 py-3 font-mono text-xs text-ink-300">{s.nodeName || '—'}</td>}
                     <td className="px-4 py-3 font-mono text-xs text-ink-300">{s.address || '—'}</td>
                     <td className="px-4 py-2"><div className="flex justify-end gap-1">
                       <Link to={`/server/${s.id}`} title={t('common.open')} className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-ink-300 hover:bg-ink-700 hover:text-ink-100"><ExternalLink className="h-4 w-4" /></Link>
@@ -162,7 +178,7 @@ export default function AdminServers() {
       </Card>
       <Modal open={!!form} onClose={() => setForm(null)} wide title={form?.id ? t('adminServers.editTitle', { name: form.name }) : t('adminServers.create')}
         footer={<><Button variant="ghost" onClick={() => setForm(null)}>{t('common.cancel')}</Button><Button variant="primary" loading={busy} onClick={save}>{form?.id ? t('common.save') : t('adminServers.createInstall')}</Button></>}>
-        {form && users.data && templates.data && <ServerForm form={form} setForm={setForm} users={users.data} templates={templates.data} />}
+        {form && users.data && templates.data && <ServerForm form={form} setForm={setForm} users={users.data} templates={templates.data} nodes={nodes.data || []} />}
       </Modal>
     </>
   );

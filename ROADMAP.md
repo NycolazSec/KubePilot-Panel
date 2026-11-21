@@ -35,7 +35,7 @@ Ideas and votes are welcome in the [issues](https://github.com/NycolazSec/KubePi
 ## v0.4 and beyond — what Pterodactyl can't do
 
 - [ ] Notifications by email
-- [ ] **Multi-node**: add a machine by joining it to the cluster; servers are scheduled where there is room
+- [x] **Multi-node**: add a machine by joining it to the cluster; servers are scheduled where there is room
 - [ ] One-click **server transfer** between nodes
 - [ ] Standard game ports (e.g. `25565`) instead of NodePorts
 - [ ] Prometheus metrics, Grafana dashboard, Discord alerts

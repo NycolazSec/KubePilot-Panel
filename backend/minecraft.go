@@ -11,7 +11,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"os"
 	"regexp"
 	"slices"
 	"strconv"
@@ -412,7 +411,7 @@ func bedrockPing(ctx context.Context, host string, port int) (*mcStatus, error) 
 // ---------- Files of the server
 
 // readSmall reads a small regular file of the server's volume.
-func readSmall(root *os.Root, name string, limit int64) ([]byte, error) {
+func readSmall(root Vol, name string, limit int64) ([]byte, error) {
 	f, st, err := openRegular(root, name)
 	if err != nil {
 		return nil, err
@@ -436,7 +435,7 @@ type mcListEntry struct {
 	Expires string `json:"expires,omitempty"`
 }
 
-func readMCList(root *os.Root, name string) []mcListEntry {
+func readMCList(root Vol, name string) []mcListEntry {
 	out := []mcListEntry{}
 	b, err := readSmall(root, name, 1<<20)
 	if err != nil {
@@ -461,7 +460,7 @@ func readMCList(root *os.Root, name string) []mcListEntry {
 
 var shownProperties = []string{"white-list", "enforce-whitelist", "online-mode", "max-players", "gamemode", "difficulty", "pvp", "level-name", "server-port"}
 
-func readProperties(root *os.Root) map[string]string {
+func readProperties(root Vol) map[string]string {
 	out := propertiesOf(root, shownProperties...)
 	for k, v := range out {
 		out[k] = truncate(v, 100)
@@ -470,7 +469,7 @@ func readProperties(root *os.Root) map[string]string {
 }
 
 // propertiesOf reads these keys from server.properties (Java properties: "\x" escapes x).
-func propertiesOf(root *os.Root, keys ...string) map[string]string {
+func propertiesOf(root Vol, keys ...string) map[string]string {
 	out := map[string]string{}
 	b, err := readSmall(root, "server.properties", 256<<10)
 	if err != nil {

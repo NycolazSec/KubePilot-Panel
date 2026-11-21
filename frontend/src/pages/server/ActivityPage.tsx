@@ -46,6 +46,7 @@ const labels: Record<string, string> = {
   'admin.template.save': t('act.admin.template.save'),
   'admin.template.delete': t('act.admin.template.delete'),
   'admin.settings.update': t('act.admin.settings.update'),
+  'admin.node.update': t('act.admin.node.update'),
   'auth.login': t('act.auth.login'),
   'auth.fail': t('act.auth.fail'),
   'account.password': t('act.account.password'),

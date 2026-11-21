@@ -252,5 +252,15 @@
   "Invalid IPv4 address": "Adresse IPv4 invalide",
   "This address is never filtered (private network or allow list): a ban would do nothing": "Cette adresse n'est jamais filtrée (réseau privé ou liste blanche) : un ban n'aurait aucun effet",
   "This panel already has an account: sign in": "Ce panel a déjà un compte : connecte-toi",
-  "Invalid setup token: copy it from the panel's logs": "Jeton d'installation invalide : copie-le depuis les logs du panel"
+  "Invalid setup token: copy it from the panel's logs": "Jeton d'installation invalide : copie-le depuis les logs du panel",
+  "This server is on the node %s and the node agents are turned off (nodeAgent.enabled): its files are out of reach": "Ce serveur est sur la machine %s et les agents de machine sont désactivés (nodeAgent.enabled) : ses fichiers sont inaccessibles",
+  "The node %s doesn't answer: the files of this server are out of reach for now": "La machine %s ne répond pas : les fichiers de ce serveur sont inaccessibles pour le moment",
+  "The node %s isn't ready": "La machine %s n'est pas prête",
+  "The node %s is cordoned (maintenance)": "La machine %s est en maintenance (cordon)",
+  "The KubePilot agent of the node %s isn't running: its files would be out of reach": "L'agent KubePilot de la machine %s ne tourne pas : ses fichiers seraient inaccessibles",
+  "The node %s doesn't accept workloads (taint %s)": "La machine %s n'accepte pas de charges de travail (taint %s)",
+  "Unknown node: %s": "Machine inconnue : %s",
+  "No node can take a new server: every node is full, not ready, or closed to new servers": "Aucune machine ne peut prendre un nouveau serveur : elles sont toutes pleines, pas prêtes ou fermées aux nouveaux serveurs",
+  "No node has enough free memory for this server (%s MB free at most)": "Aucune machine n'a assez de mémoire libre pour ce serveur (%s Mo libres au plus)",
+  "Invalid address: a domain name or an IP address": "Adresse invalide : un nom de domaine ou une adresse IP"
 }

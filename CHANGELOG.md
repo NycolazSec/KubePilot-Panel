@@ -6,6 +6,27 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- **Several machines**: `install.sh add-node` on the main machine prints an invitation (valid 24 hours) and the
+  command to run on a new machine, `install.sh join` installs k3s there and joins the cluster. New servers go to the
+  machine with the most free memory among those that accept new servers, or to the one the admin picks; a server
+  stays on its machine (node affinity), and its address is that machine's.
+- *Admin* → *Machines*: each machine's state, CPU and memory, the servers and resources KubePilot placed there, its
+  agent, a public address per machine, and whether automatic placement may use it.
+- **Node agent** (`nodeAgent.enabled`, on by default): one small pod per node serves the files of the servers of
+  its node to the panel (file manager, SFTP, backups, plugins, configuration files, disk usage). SFTP over SSH, with
+  keys derived on both ends from a Secret the chart creates; a NetworkPolicy lets only the panel in; no Kubernetes
+  credentials. On the panel's own node nothing changes: the volumes are still opened directly.
+- Fresh k3s installs use WireGuard between machines (`--flannel-backend=wireguard-native`) when the kernel has it.
+
+### Upgrading
+
+- The panel gets the right to list the pods of its own namespace (to find the node agents), and its pod mounts the
+  agents' token. Single-node installs behave as before: servers aren't pinned to a node until there are several.
+- Upgrade with `helm upgrade … --reset-then-reuse-values` (the installer does): with `--reuse-values`, Helm doesn't
+  apply the defaults of new options, so the node agents would stay off.
+
 ## [0.3.0] - 2026-11-21
 
 **Easy to install, protected, and lighter on resources**: a one-command installer and a first start from the

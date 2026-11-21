@@ -149,7 +149,7 @@ func TestApplyConfigFiles(t *testing.T) {
 	os.WriteFile(filepath.Join(outside, "server.properties"), []byte("server-port=1\n"), 0o644)
 	os.Symlink(filepath.Join(outside, "server.properties"), filepath.Join(dir, "link.properties"))
 	syscall.Mkfifo(filepath.Join(dir, "fifo.json"), 0o644)
-	root, _ := os.OpenRoot(dir)
+	root, _ := openLocalVol(dir)
 	defer root.Close()
 	val := func(s string) json.RawMessage { b, _ := json.Marshal(s); return b }
 	files := []ConfigFile{

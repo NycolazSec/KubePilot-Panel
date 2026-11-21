@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"io"
 	"net/url"
-	"os"
 	"path"
 	"regexp"
 	"strings"
@@ -27,7 +26,7 @@ type pluginMeta struct {
 }
 
 // readPluginMeta reads plugin.yml / paper-plugin.yml from a plugin jar of the server's volume.
-func readPluginMeta(root *os.Root, p string) *pluginMeta {
+func readPluginMeta(root Vol, p string) *pluginMeta {
 	f, st, err := openRegular(root, p)
 	if err != nil {
 		return nil
@@ -102,7 +101,7 @@ func containsFold(list []string, s string) bool {
 }
 
 // installedPluginNames returns the plugin names declared by the enabled jars of the folder.
-func installedPluginNames(root *os.Root, folder string) map[string]bool {
+func installedPluginNames(root Vol, folder string) map[string]bool {
 	names := map[string]bool{}
 	f, err := root.Open(folder)
 	if err != nil {

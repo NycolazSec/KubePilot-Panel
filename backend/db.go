@@ -128,7 +128,7 @@ func openDB(path string) (*DB, error) {
 	// A single connection: SQLite serialises writes anyway and this avoids SQLITE_BUSY.
 	// Rule: never run a query while iterating another result set.
 	sqldb.SetMaxOpenConns(1)
-	if _, err := sqldb.Exec(schema + totpSchema + apiKeySchema + sshKeySchema + databaseSchema + mailSchema + shieldSchema); err != nil {
+	if _, err := sqldb.Exec(schema + totpSchema + apiKeySchema + sshKeySchema + databaseSchema + mailSchema + shieldSchema + nodeSchema); err != nil {
 		return nil, err
 	}
 	db := &DB{sqldb}
@@ -152,6 +152,9 @@ func openDB(path string) (*DB, error) {
 		return nil, err
 	}
 	if err := db.addColumn("servers", "asleep", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return nil, err
+	}
+	if err := db.addColumn("servers", "node", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		return nil, err
 	}
 	if _, err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS servers_hostname ON servers(hostname) WHERE hostname<>''`); err != nil {
@@ -584,15 +587,16 @@ type Server struct {
 	InternalOnly    bool              `json:"internalOnly"` // no public port: only the owner's other servers reach it
 	AutoSleep       int               `json:"autoSleep"`    // minutes without players before sleeping (0 = never)
 	Asleep          bool              `json:"asleep"`       // stopped by auto-sleep: the next player connection wakes it up
+	Node            string            `json:"node"`         // node it was placed on ("" = wherever its volume is: single-node clusters, older servers)
 }
 
-const serverCols = `id, name, description, owner_id, template_id, image, startup, env, memory_mb, cpu_millis, disk_mb, backup_limit, allocation_limit, suspended, created_at, hostname, internal_only, database_limit, auto_sleep, asleep`
+const serverCols = `id, name, description, owner_id, template_id, image, startup, env, memory_mb, cpu_millis, disk_mb, backup_limit, allocation_limit, suspended, created_at, hostname, internal_only, database_limit, auto_sleep, asleep, node`
 
 func scanServer(row interface{ Scan(...any) error }) (*Server, error) {
 	s := &Server{}
 	var env string
 	if err := row.Scan(&s.ID, &s.Name, &s.Description, &s.OwnerID, &s.TemplateID, &s.Image, &s.Startup, &env,
-		&s.MemoryMB, &s.CPUMillis, &s.DiskMB, &s.BackupLimit, &s.AllocationLimit, &s.Suspended, &s.CreatedAt, &s.Hostname, &s.InternalOnly, &s.DatabaseLimit, &s.AutoSleep, &s.Asleep); err != nil {
+		&s.MemoryMB, &s.CPUMillis, &s.DiskMB, &s.BackupLimit, &s.AllocationLimit, &s.Suspended, &s.CreatedAt, &s.Hostname, &s.InternalOnly, &s.DatabaseLimit, &s.AutoSleep, &s.Asleep, &s.Node); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}
@@ -634,10 +638,10 @@ func (db *DB) ServersForUser(uid int64) ([]*Server, error) {
 
 func (db *DB) InsertServer(s *Server) error {
 	env, _ := json.Marshal(s.Env)
-	_, err := db.Exec(`INSERT INTO servers(`+serverCols+`) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+	_, err := db.Exec(`INSERT INTO servers(`+serverCols+`) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		s.ID, s.Name, s.Description, s.OwnerID, s.TemplateID, s.Image, s.Startup, string(env),
 		s.MemoryMB, s.CPUMillis, s.DiskMB, s.BackupLimit, s.AllocationLimit, s.Suspended, s.CreatedAt, s.Hostname, s.InternalOnly, s.DatabaseLimit,
-		s.AutoSleep, s.Asleep)
+		s.AutoSleep, s.Asleep, s.Node)
 	return err
 }
 

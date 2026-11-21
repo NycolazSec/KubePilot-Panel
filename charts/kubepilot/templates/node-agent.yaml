@@ -1,0 +1,122 @@
+{{- $agent := .Values.nodeAgent | default dict }}
+{{- if $agent.enabled }}
+{{- $name := printf "%s-node" (include "kubepilot.fullname" .) }}
+{{- $existing := lookup "v1" "Secret" .Release.Namespace $name }}
+# Several nodes: a server's files live on the node it was placed on. One agent per node serves the game
+# volumes of its node to the panel, over SSH, with keys derived from this token (kept across upgrades).
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "kubepilot.labels" . | nindent 4 }}
+type: Opaque
+data:
+  {{- if and $existing $existing.data (index $existing.data "token") }}
+  token: {{ index $existing.data "token" }}
+  {{- else }}
+  token: {{ randAlphaNum 48 | b64enc }}
+  {{- end }}
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "kubepilot.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kubepilot-node
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  updateStrategy: { type: RollingUpdate }
+  template:
+    metadata:
+      labels:
+        # not the panel's labels: its Service must never send traffic here
+        app.kubernetes.io/name: kubepilot-node
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      # no Kubernetes credentials at all: it only serves files to the panel
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: 10
+      securityContext:
+        seccompProfile: { type: RuntimeDefault }
+      {{- with $agent.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $agent.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: node
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: [node]
+          env:
+            - { name: KUBEPILOT_STORAGE_ROOT, value: {{ include "kubepilot.volumesPath" . | quote }} }
+            - { name: KUBEPILOT_NAMESPACE, value: {{ .Values.serversNamespace.name | quote }} }
+            - { name: KUBEPILOT_NODE_TOKEN_FILE, value: /etc/kubepilot-node/token }
+          ports:
+            - { containerPort: 7070, name: agent }
+          readinessProbe: { tcpSocket: { port: agent }, periodSeconds: 10 }
+          securityContext:
+            # the same rights as the panel on the game files, nothing more
+            runAsUser: 0
+            runAsNonRoot: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL], add: [CHOWN, DAC_OVERRIDE, FOWNER] }
+          resources: {{- toYaml ($agent.resources | default dict) | nindent 12 }}
+          volumeMounts:
+            - { name: token, mountPath: /etc/kubepilot-node, readOnly: true }
+            # only the game volumes of this node
+            - { name: storage, mountPath: {{ include "kubepilot.volumesPath" . | quote }} }
+      volumes:
+        - name: token
+          secret: { secretName: {{ $name }}, defaultMode: 0400 }
+        - name: storage
+          hostPath: { path: {{ include "kubepilot.volumesPath" . | quote }}, type: DirectoryOrCreate }
+---
+# Only the panel may connect to the agents (they also check its key)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "kubepilot.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: kubepilot-node
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {{- include "kubepilot.selectorLabels" . | nindent 14 }}
+      ports:
+        - { port: 7070, protocol: TCP }
+---
+# The panel finds the agent of each node
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "kubepilot.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "kubepilot.labels" . | nindent 4 }}
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: {{ $name }} }
+subjects: [{ kind: ServiceAccount, name: {{ include "kubepilot.fullname" . }}, namespace: {{ .Release.Namespace }} }]
+{{- end }}

@@ -85,9 +85,13 @@ type Kube struct {
 	sts  appslisters.StatefulSetLister
 	jobs batchlisters.JobLister
 
+	nodeName  string    // the panel's node: its volumes are mounted, the others' are reached through their agent
+	nodes     *nodePool // nil: node agents turned off
+	nodeCache nodeCache
+
 	mu      sync.RWMutex
 	metrics map[string]Usage
-	pvPaths map[string]string
+	vols    map[string]VolRef
 
 	attachMu sync.Mutex
 	attach   map[string]*attachSess
@@ -109,10 +113,16 @@ func newKube(cfg Config) (*Kube, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Kube{
+	k := &Kube{
 		cs: cs, rc: rc, ns: cfg.Namespace, storageRoot: filepath.Clean(cfg.StorageRoot), storageClass: cfg.StorageClass, rootInstall: cfg.RootInstall, ingress: cfg.Ingress,
-		metrics: map[string]Usage{}, pvPaths: map[string]string{}, attach: map[string]*attachSess{},
-	}, nil
+		nodeName: cfg.NodeName, metrics: map[string]Usage{}, vols: map[string]VolRef{}, attach: map[string]*attachSess{},
+	}
+	if cfg.NodeAgents && cfg.AgentNamespace != "" {
+		if k.nodes, err = newNodePool(k, cfg.AgentNamespace, cfg.AgentSelector, nodeTokenSource()); err != nil {
+			return nil, err
+		}
+	}
+	return k, nil
 }
 
 func (k *Kube) start(ctx context.Context) error {
@@ -484,6 +494,7 @@ func (sp Spec) podTemplate() corev1.PodTemplateSpec {
 		Spec: corev1.PodSpec{
 			AutomountServiceAccountToken:  boolp(false),
 			EnableServiceLinks:            boolp(false),
+			Affinity:                      onNode(s.Node),
 			TerminationGracePeriodSeconds: &grace,
 			SecurityContext:               psc,
 			Containers:                    []corev1.Container{c},
@@ -493,6 +504,18 @@ func (sp Spec) podTemplate() corev1.PodTemplateSpec {
 			},
 		},
 	}
+}
+
+// onNode pins a pod to the node its server was placed on.
+func onNode(node string) *corev1.Affinity {
+	if node == "" {
+		return nil
+	}
+	return &corev1.Affinity{NodeAffinity: &corev1.NodeAffinity{RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+		NodeSelectorTerms: []corev1.NodeSelectorTerm{{MatchFields: []corev1.NodeSelectorRequirement{
+			{Key: "metadata.name", Operator: corev1.NodeSelectorOpIn, Values: []string{node}},
+		}}},
+	}}}
 }
 
 func (k *Kube) EnsurePVC(ctx context.Context, s *Server) error {
@@ -700,6 +723,7 @@ func (k *Kube) RunInstall(ctx context.Context, sp Spec) error {
 				Spec: corev1.PodSpec{
 					RestartPolicy:                corev1.RestartPolicyNever,
 					AutomountServiceAccountToken: boolp(false),
+					Affinity:                     onNode(s.Node), // the volume is created where the install runs first
 					EnableServiceLinks:           boolp(false),
 					SecurityContext:              psc,
 					Containers: []corev1.Container{{
@@ -740,7 +764,7 @@ func (k *Kube) DeleteServer(ctx context.Context, id string) error {
 	ignore(k.cs.CoreV1().Pods(k.ns).DeleteCollection(ctx, metav1.DeleteOptions{GracePeriodSeconds: &zero}, metav1.ListOptions{LabelSelector: sel}))
 	ignore(k.cs.CoreV1().PersistentVolumeClaims(k.ns).Delete(ctx, pvcName(id), metav1.DeleteOptions{}))
 	k.mu.Lock()
-	delete(k.pvPaths, id)
+	delete(k.vols, id)
 	k.mu.Unlock()
 	if len(errs) > 0 {
 		return errors.New(strings.Join(errs, "; "))
@@ -765,45 +789,111 @@ func (k *Kube) UsedNodePorts(ctx context.Context) (map[int]bool, error) {
 	return used, nil
 }
 
-// ---------- Volume path (local-path provisioner = hostPath on the node)
+// ---------- Volumes (local-path provisioner = a folder on one node)
 
-func (k *Kube) DataDir(ctx context.Context, id string) (string, error) {
+// VolRef is where a server's volume lives.
+type VolRef struct {
+	Node string // node holding it ("" when the volume doesn't say: treated as the panel's node)
+	Path string // folder on that node
+}
+
+func (k *Kube) Volume(ctx context.Context, id string) (VolRef, error) {
 	k.mu.RLock()
-	p, ok := k.pvPaths[id]
+	ref, ok := k.vols[id]
 	k.mu.RUnlock()
 	if ok {
-		return p, nil
+		return ref, nil
 	}
 	pvc, err := k.cs.CoreV1().PersistentVolumeClaims(k.ns).Get(ctx, pvcName(id), metav1.GetOptions{})
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			return "", ErrNoVolume
+			return ref, ErrNoVolume
 		}
-		return "", err
+		return ref, err
 	}
 	if pvc.Spec.VolumeName == "" || pvc.Status.Phase != corev1.ClaimBound {
-		return "", ErrNoVolume
+		return ref, ErrNoVolume
 	}
 	pv, err := k.cs.CoreV1().PersistentVolumes().Get(ctx, pvc.Spec.VolumeName, metav1.GetOptions{})
 	if err != nil {
-		return "", err
+		return ref, err
 	}
+	var p string
 	switch {
 	case pv.Spec.HostPath != nil:
 		p = pv.Spec.HostPath.Path
 	case pv.Spec.Local != nil:
 		p = pv.Spec.Local.Path
 	default:
-		return "", errors.New("Volume type not supported by the file manager")
+		return ref, errors.New("Volume type not supported by the file manager")
 	}
 	p = filepath.Clean(p)
-	if !strings.HasPrefix(p, k.storageRoot+"/") {
-		return "", errCode(500, "Unexpected volume path: %s", p)
+	if filepath.Dir(p) != k.storageRoot {
+		return ref, errCode(500, "Unexpected volume path: %s", p)
 	}
+	ref = VolRef{Node: pvNode(pv), Path: p}
 	k.mu.Lock()
-	k.pvPaths[id] = p
+	k.vols[id] = ref
 	k.mu.Unlock()
-	return p, nil
+	return ref, nil
+}
+
+// pvNode is the node a local volume is bound to (its required node affinity).
+func pvNode(pv *corev1.PersistentVolume) string {
+	if pv.Spec.NodeAffinity == nil || pv.Spec.NodeAffinity.Required == nil {
+		return ""
+	}
+	for _, t := range pv.Spec.NodeAffinity.Required.NodeSelectorTerms {
+		for _, e := range t.MatchExpressions {
+			if e.Key == corev1.LabelHostname && e.Operator == corev1.NodeSelectorOpIn && len(e.Values) == 1 {
+				return e.Values[0]
+			}
+		}
+		for _, f := range t.MatchFields {
+			if f.Key == "metadata.name" && f.Operator == corev1.NodeSelectorOpIn && len(f.Values) == 1 {
+				return f.Values[0]
+			}
+		}
+	}
+	return ""
+}
+
+// local: the volumes of this node are mounted in the panel's pod.
+func (k *Kube) local(node string) bool { return node == "" || k.nodeName == "" || node == k.nodeName }
+
+// OpenVolume opens a server's volume: directly on the panel's node, through the node's agent elsewhere.
+func (k *Kube) OpenVolume(ctx context.Context, id string) (Vol, error) {
+	ref, err := k.Volume(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if k.local(ref.Node) {
+		return openLocalVol(ref.Path)
+	}
+	if k.nodes == nil {
+		return nil, errCode(503, "This server is on the node %s and the node agents are turned off (nodeAgent.enabled): its files are out of reach", ref.Node)
+	}
+	v, err := k.nodes.openVol(ctx, ref.Node, filepath.Base(ref.Path))
+	if err != nil {
+		log.Printf("node %s: %v", ref.Node, err)
+		return nil, errCode(503, "The node %s doesn't answer: the files of this server are out of reach for now", ref.Node)
+	}
+	return v, nil
+}
+
+// VolumeSize adds up the files of a server's volume.
+func (k *Kube) VolumeSize(ctx context.Context, id string) (int64, error) {
+	ref, err := k.Volume(ctx, id)
+	if err != nil {
+		return 0, err
+	}
+	if k.local(ref.Node) {
+		return dirSize(ref.Path), nil
+	}
+	if k.nodes == nil {
+		return 0, errNoAgent
+	}
+	return k.nodes.du(ctx, ref.Node, filepath.Base(ref.Path))
 }
 
 // ---------- State

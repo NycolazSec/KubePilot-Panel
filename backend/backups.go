@@ -10,7 +10,6 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -109,7 +108,7 @@ func (a *App) createBackup(s *Server, name string, rotate bool) (*Backup, error)
 			return nil, err
 		}
 	}
-	if _, err := a.kube.DataDir(a.ctx, s.ID); err != nil {
+	if _, err := a.kube.Volume(a.ctx, s.ID); err != nil {
 		return nil, err
 	}
 	name = strings.TrimSpace(name)
@@ -239,7 +238,7 @@ func (a *App) handleBackupRestore(w http.ResponseWriter, r *http.Request, c *Ctx
 	a.clearAsleep(r.Context(), c.Server) // mc-router must not start it while its files are replaced
 	h := a.hub(c.Server.ID)
 	h.daemon("Restoring “%s”…", b.Name)
-	a.withRoot(w, r, c, func(root *os.Root, uid int) error {
+	a.withRoot(w, r, c, func(root Vol, uid int) error {
 		if in.Truncate {
 			entries, err := fs.ReadDir(root.FS(), ".")
 			if err != nil {

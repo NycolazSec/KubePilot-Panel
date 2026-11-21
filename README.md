@@ -21,6 +21,7 @@ volume and `NodePort` service, and the panel drives the cluster through the Kube
 | For players & server owners | For admins |
 |---|---|
 | Live dashboard: status, CPU, RAM, disk, one-click address copy | Cluster overview: nodes, CPU/RAM usage, ports, disk, backups |
+| | **Several machines**: add one with two commands, new servers go where there is room (or where you choose), each machine with its own public address |
 | Real-time console over WebSocket (ANSI colors, command history, search, log export) | Create servers from templates (owner, resources, variables, auto-start) |
 | Start / restart / stop / kill, crash detection (OOMKilled, exit codes, image errors) | Edit resources, image, startup command, suspend servers |
 | File manager: CodeMirror editor, drag & drop upload, zip download, archive / extract | Users & roles, two-factor authentication (TOTP + recovery codes), password reset by email, editable templates with JSON import/export |
@@ -48,7 +49,8 @@ flowchart LR
   U[Browser] -- HTTPS / WSS --> I[Ingress + cert-manager]
   I --> P[KubePilot panel<br/>Go + embedded React<br/>ns: kubepilot-system]
   P -- Kubernetes API --> K[(kube-apiserver)]
-  P -- os.Root file access --> V[(local-path volumes)]
+  P -- os.Root file access --> V[(local-path volumes<br/>panel's node)]
+  P -- SSH + SFTP --> A[node agent<br/>other nodes] --> V2[(local-path volumes)]
   K --> S1[StatefulSet srv-xxxx<br/>+ PVC + NodePort]
   K --> S2[StatefulSet srv-yyyy<br/>+ PVC + NodePort]
   G[Players] -- NodePort 30100-30299 --> S1 & S2
@@ -65,7 +67,8 @@ flowchart LR
 | Console output | pod logs, streamed and buffered by the panel |
 | Console input | `pods/attach` to the container's stdin |
 | CPU / RAM | `metrics.k8s.io` |
-| Files, backups | the volume's directory on the node, opened with Go's traversal-safe `os.Root` |
+| Files, backups | the volume's directory on the node, opened with Go's traversal-safe `os.Root` — directly on the panel's node, through that node's agent on the others |
+| Several machines | each server is pinned to its node (node affinity); `NodePort` with `externalTrafficPolicy: Local`, so players use that node's address |
 
 ## Security
 
@@ -73,6 +76,7 @@ flowchart LR
 - **Network isolation**: a `NetworkPolicy` gives game servers Internet + DNS access but blocks private ranges, the cluster network and the node IPs (databases, API server…). The one opening is the ingress controller's HTTP/HTTPS entry points, so a server can reach the websites the cluster serves through their public address, as anyone on the Internet can (`serversNamespace.ingressController`).
 - **Firewall and anti-DDoS** (optional, `shield.enabled`): one agent per node (host network, `NET_ADMIN` only) filters the game ports with an nftables table of its own: per-server and global rules, limits per source IP, automatic bans. SSH, the panel, the Kubernetes API and private networks are never filtered, and the table is removed when the agent stops. It handles what reaches the node; an attack bigger than its link has to be stopped upstream (your host's anti-DDoS, or a provider such as path.net).
 - **Least privilege**: the panel's ServiceAccount has full rights *only* in `kubepilot-servers`, and read-only access to nodes, PVs, services and metrics. No access to Secrets.
+- **Node agents** (several machines): one pod per node serves the game volumes of its node to the panel only — SFTP over SSH, keys derived from a Secret on both ends (the panel checks the agent's host key), a NetworkPolicy that lets only the panel in, every path inside `os.Root`, FIFOs refused. It has no Kubernetes credentials at all.
 - **Storage isolation**: game volumes live in their own folder (dedicated `kubepilot-local` StorageClass) and the panel only mounts that folder — it never sees the volumes of the other applications of the cluster.
 - **Origin lock** (optional, Traefik): with `ingress.cloudflareOnly`, the panel only answers requests coming from Cloudflare, so its protections can't be bypassed by hitting the node's IP.
 - **Backups**: on S3, archives can be encrypted with an age key before they leave the panel; S3 credentials live in a Kubernetes Secret and never reach the browser.
@@ -139,8 +143,18 @@ A user who lost both their phone and their recovery codes can have two-factor au
 Players connect to `<node address>:<port>`; game ports are NodePorts in `30100-30299` (configurable in the admin
 settings, within `30000-32767`). Open that range (TCP + UDP) if a firewall sits in front of the node.
 
+### More machines
+
+Add a machine to spread your servers: on the main machine, `… | sudo sh -s -- add-node` prints the command to run
+on the new one (`… | sudo sh -s -- join --server https://<main>:6443 --token <invitation>`), which installs k3s and
+joins the cluster in about a minute. The machine shows up in *Admin* → *Machines* with its KubePilot agent; new
+servers go to the machine with the most free memory, or to the one you pick. The machines reach each other on
+`6443/tcp`, `10250/tcp` and `51820/udp`: the installer sets k3s up with WireGuard, so the traffic between machines
+is encrypted (on a cluster that uses VXLAN, `add-node` warns you — keep the machines on a private network).
+
 All chart options (storage, node, ingress, resources…) are documented in the [chart README](charts/kubepilot/README.md).
-Upgrade with `helm upgrade kubepilot oci://ghcr.io/nycolazsec/charts/kubepilot -n kubepilot-system --reuse-values`.
+Upgrade with `helm upgrade kubepilot oci://ghcr.io/nycolazsec/charts/kubepilot -n kubepilot-system --reset-then-reuse-values`
+(your settings, on top of the new version's defaults: new options get their default value).
 
 ## Development
 
@@ -162,8 +176,9 @@ docs/       logo and banner
 
 ## Notes & limitations
 
-- The file manager and backups read `local-path` volumes directly, so the panel is pinned to the node that holds
-  them (`storage.node`). Multi-node storage would need a CSI driver with a file API.
+- With several machines, a server stays on the machine it was created on (its `local-path` volume is a folder of
+  that machine): moving it to another machine is on the roadmap (server transfers). If a machine is down, its
+  servers and their files are out of reach until it's back.
 - Java heap is set to the memory limit minus max(640 MB, 20 %) to avoid OOM kills; templates get it as `SERVER_JVM_MEMORY`.
 - Databases live in the chart's MariaDB volume: they aren't counted in the servers' disk quota and aren't part of
   server backups.
@@ -174,8 +189,8 @@ docs/       logo and banner
 ## Roadmap
 
 v0.2 brought Pterodactyl parity (eggs, SFTP, databases, S3 backups); v0.3 the one-command installer, auto-sleep, the
-firewall and anti-DDoS, and password reset by email. Coming next (v0.4): email notifications, multi-node, server
-transfers.
+firewall and anti-DDoS, and password reset by email. Coming next (v0.4): several machines (in progress), standard
+game ports, Prometheus metrics, email notifications, server transfers.
 See the full [roadmap](ROADMAP.md).
 
 ## Contributing
