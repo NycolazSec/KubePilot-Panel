@@ -107,9 +107,9 @@ email:
     # panel never sends a password without TLS)
     tls: starttls
     username: ""
-    # Secret with the key "password"; or set password below and the chart creates it.
+    # Secret with the key "password"; or pass the password with --set email.smtp.password=… and the chart
+    # creates that Secret.
     existingSecret: ""
-    password: ""
   # Sender, e.g. "KubePilot <panel@example.com>" (the SMTP account must be allowed to send as this address)
   from: ""
 
