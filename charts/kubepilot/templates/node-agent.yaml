@@ -1,4 +1,5 @@
-{{- if .Values.nodeAgent.enabled }}
+{{- $agent := .Values.nodeAgent | default dict }}
+{{- if $agent.enabled }}
 {{- $name := printf "%s-node" (include "kubepilot.fullname" .) }}
 {{- $existing := lookup "v1" "Secret" .Release.Namespace $name }}
 # Several nodes: a server's files live on the node it was placed on. One agent per node serves the game
@@ -42,10 +43,10 @@ spec:
       terminationGracePeriodSeconds: 10
       securityContext:
         seccompProfile: { type: RuntimeDefault }
-      {{- with .Values.nodeAgent.nodeSelector }}
+      {{- with $agent.nodeSelector }}
       nodeSelector: {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.nodeAgent.tolerations }}
+      {{- with $agent.tolerations }}
       tolerations: {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:
@@ -67,7 +68,7 @@ spec:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             capabilities: { drop: [ALL], add: [CHOWN, DAC_OVERRIDE, FOWNER] }
-          resources: {{- toYaml .Values.nodeAgent.resources | nindent 12 }}
+          resources: {{- toYaml ($agent.resources | default dict) | nindent 12 }}
           volumeMounts:
             - { name: token, mountPath: /etc/kubepilot-node, readOnly: true }
             # only the game volumes of this node
