@@ -8,6 +8,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
+- **One-command installer**: `curl -sfL https://raw.githubusercontent.com/NycolazSec/KubePilot-Panel/main/install.sh | sudo sh`.
+  On a bare Linux server it installs k3s; with a cluster `kubectl` already reaches, it uses it. Then Helm (pinned
+  version, checksum verified), cert-manager with a Let's Encrypt issuer, KubePilot, and the first administrator (its
+  password goes through stdin and is shown once). It asks its questions first, in English or French, then works on
+  its own; every answer is also an option (`--domain`, `--email`, `--yes`…). It checks the server (root, arch, RAM,
+  ports 80/443, DNS pointing here), finds the local-path folder and the ingress class, opens the ports in ufw when
+  it's active, and waits for the certificate. Run again, it updates KubePilot with the same settings.
+- **First start from the browser**: a panel without any account prints a one-time setup token in its logs and asks
+  for it at `/setup` to create the administrator — no `kubectl exec` needed after a Helm install, and nobody without
+  access to the cluster can claim a fresh panel. The token lives in memory only and dies with the first account.
+- CLI: `user:create` and `user:password` take `--password-stdin` (no password in a command line), new `user:list`.
+
 - **Firewall and anti-DDoS** (optional, chart value `shield.enabled`). One agent per node (`kubepilot shield`, a
   DaemonSet with the host network and the `NET_ADMIN` capability only) filters the game ports with an nftables table
   of its own: the servers' ports and the Minecraft router, never SSH, the panel, the Kubernetes API or private

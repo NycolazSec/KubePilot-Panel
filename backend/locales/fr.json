@@ -250,5 +250,7 @@
   "This rule already exists": "Cette règle existe déjà",
   "The firewall and anti-DDoS protection aren't enabled: set shield.enabled in the Helm chart": "Le pare-feu et l'anti-DDoS ne sont pas activés : mets shield.enabled dans le chart Helm",
   "Invalid IPv4 address": "Adresse IPv4 invalide",
-  "This address is never filtered (private network or allow list): a ban would do nothing": "Cette adresse n'est jamais filtrée (réseau privé ou liste blanche) : un ban n'aurait aucun effet"
+  "This address is never filtered (private network or allow list): a ban would do nothing": "Cette adresse n'est jamais filtrée (réseau privé ou liste blanche) : un ban n'aurait aucun effet",
+  "This panel already has an account: sign in": "Ce panel a déjà un compte : connecte-toi",
+  "Invalid setup token: copy it from the panel's logs": "Jeton d'installation invalide : copie-le depuis les logs du panel"
 }

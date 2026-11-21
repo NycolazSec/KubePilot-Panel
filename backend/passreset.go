@@ -33,7 +33,7 @@ func (a *App) passwordResetAvailable() bool {
 
 // GET /api/auth/options: what the sign-in page may offer (public).
 func (a *App) handleAuthOptions(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, 200, map[string]any{"passwordReset": a.passwordResetAvailable(), "panelName": a.db.Settings().PanelName})
+	writeJSON(w, 200, map[string]any{"passwordReset": a.passwordResetAvailable(), "panelName": a.db.Settings().PanelName, "setup": a.setupNeeded()})
 }
 
 // POST /api/auth/forgot {login}: always answers the same way, whether the account exists or not.

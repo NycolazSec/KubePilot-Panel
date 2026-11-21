@@ -22,6 +22,8 @@ jobs:
         run: test -z "$(gofmt -l backend)" || { gofmt -l backend; exit 1; }
       - name: Build (typecheck + frontend + go vet + go test + binary)
         run: ./build.sh
+      - name: Installer script (POSIX sh, as run by curl | sh)
+        run: shellcheck -s sh install.sh && shellcheck -s dash install.sh
 
   security:
     runs-on: ubuntu-latest

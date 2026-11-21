@@ -82,7 +82,30 @@ flowchart LR
 - **Disk quotas**: uploads, archives and the editor stop at each server's limit, and a running server that writes far beyond it is stopped, so no server can fill the node's disk.
 - **Auth**: bcrypt (cost 12), TOTP two-factor authentication with single-use recovery codes (can be made mandatory for admins or everyone), hashed session tokens in a `__Host-` `HttpOnly` `Secure` `SameSite=Lax` cookie, mandatory anti-CSRF header, WebSocket origin check, sign-in limits per IP and per account, strict CSP, HSTS, activity log.
 
-## Requirements
+## Getting started
+
+### One command
+
+On a Linux server (amd64 or arm64, 2 GB of RAM or more):
+
+```sh
+curl -sfL https://raw.githubusercontent.com/NycolazSec/KubePilot-Panel/main/install.sh | sudo sh
+```
+
+The installer asks for the panel's address, your email and two options (Minecraft router, firewall), then does the
+rest on its own: [k3s](https://k3s.io) if the server has no Kubernetes yet (or the cluster `kubectl` already reaches),
+Helm, [cert-manager](https://cert-manager.io) with a Let's Encrypt certificate, KubePilot, and the first
+administrator, whose password it shows at the end. No domain? It offers `<your-ip>.sslip.io`, which already points
+at the server. It speaks English or French, following the system's language.
+
+- Without questions: `curl -sfL …/install.sh | sudo sh -s -- --domain panel.example.com --email you@example.com --yes`
+  (all options: `sh install.sh --help`).
+- Update: run the same command again.
+- Uninstall: `helm uninstall kubepilot -n kubepilot-system` (game servers and their files are kept).
+
+### With Helm, on an existing cluster
+
+Requirements:
 
 - A Kubernetes cluster (≥ 1.29) — developed on **k3s**, which ships everything below except cert-manager
 - A hostPath-based storage provisioner for game volumes: `local-path` (built into k3s, or
@@ -90,22 +113,27 @@ flowchart LR
 - [metrics-server](https://github.com/kubernetes-sigs/metrics-server), an ingress controller and
   [cert-manager](https://cert-manager.io) with a `ClusterIssuer` for HTTPS
 
-## Getting started
-
-KubePilot is installed with Helm. Images are published for `amd64` and `arm64` on every release.
+Images are published for `amd64` and `arm64` on every release.
 
 ```sh
 helm install kubepilot oci://ghcr.io/nycolazsec/charts/kubepilot \
   --namespace kubepilot-system --create-namespace \
   --set ingress.host=panel.example.com \
   --set ingress.clusterIssuer=letsencrypt-prod
-
-# create the first admin account
-kubectl -n kubepilot-system exec deploy/kubepilot -- \
-  kubepilot user:create --username admin --email you@example.com --password 'change-me-please' --admin
 ```
 
-Then point a DNS record for your domain at the cluster and open `https://<your domain>`.
+Point a DNS record for your domain at the cluster and open `https://<your domain>`. On its first start the panel
+asks for a **setup token** to create the administrator; it prints it in its logs, so only someone with access to the
+cluster can claim the panel:
+
+```sh
+kubectl -n kubepilot-system logs deploy/kubepilot | grep "Setup token"
+```
+
+(Or create the account from the command line:
+`kubectl -n kubepilot-system exec -i deploy/kubepilot -- kubepilot user:create --username admin --email you@example.com --password-stdin --admin`,
+then type the password.)
+
 A user who lost both their phone and their recovery codes can have two-factor authentication reset by an admin in
 *Users*, or with `kubectl -n kubepilot-system exec deploy/kubepilot -- kubepilot user:2fa-reset --username <name>`.
 Players connect to `<node address>:<port>`; game ports are NodePorts in `30100-30299` (configurable in the admin

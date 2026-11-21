@@ -1,6 +1,6 @@
 import { ArrowLeft, ShieldCheck } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { get, Me, post } from '../api';
 import AuthShell from '../components/AuthShell';
 import { Button, ErrorBox, Field } from '../components/ui';
@@ -19,7 +19,8 @@ export default function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [canReset, setCanReset] = useState(false);
-  useEffect(() => { get<{ passwordReset: boolean }>('/auth/options').then((o) => setCanReset(o.passwordReset)).catch(() => {}); }, []);
+  const [setup, setSetup] = useState(false); // fresh panel: no account yet
+  useEffect(() => { get<{ passwordReset: boolean; setup: boolean }>('/auth/options').then((o) => { setCanReset(o.passwordReset); setSetup(o.setup); }).catch(() => {}); }, []);
 
   const run = async (fn: () => Promise<void>) => {
     setLoading(true);
@@ -47,6 +48,7 @@ export default function Login() {
     });
   };
 
+  if (setup) return <Navigate to="/setup" replace />;
   return (
     <AuthShell title={ticket ? t('login.2faTitle') : t('login.title')} subtitle={ticket ? (recovery ? t('login.recoveryHint') : t('login.2faHint')) : t('login.subtitle')}>
         {!ticket ? (
