@@ -158,7 +158,8 @@ servers go to the machine with the most free memory, or to the one you pick. The
 is encrypted (on a cluster that uses VXLAN, `add-node` warns you — keep the machines on a private network).
 
 All chart options (storage, node, ingress, resources…) are documented in the [chart README](charts/kubepilot/README.md).
-Upgrade with `helm upgrade kubepilot oci://ghcr.io/nycolazsec/charts/kubepilot -n kubepilot-system --reuse-values`.
+Upgrade with `helm upgrade kubepilot oci://ghcr.io/nycolazsec/charts/kubepilot -n kubepilot-system --reset-then-reuse-values`
+(your settings, on top of the new version's defaults: new options get their default value).
 
 ## Development
 

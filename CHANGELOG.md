@@ -32,6 +32,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   agents' token. Single-node installs behave as before: servers aren't pinned to a node until there are several.
 - The ports table of the database is rebuilt on the first start (every port kept), so that a standard port can
   be used once per machine.
+- Upgrade with `helm upgrade … --reset-then-reuse-values` (the installer does): with `--reuse-values`, Helm doesn't
+  apply the defaults of new options, so the node agents would stay off.
 
 ## [0.3.0] - 2026-11-21
 

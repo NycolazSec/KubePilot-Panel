@@ -13,7 +13,8 @@ kubectl -n kubepilot-system exec deploy/kubepilot -- \
   kubepilot user:create --username admin --email you@example.com --password 'change-me-please' --admin
 ```
 
-Upgrade with `helm upgrade kubepilot oci://ghcr.io/nycolazsec/charts/kubepilot -n kubepilot-system --reuse-values`.
+Upgrade with `helm upgrade kubepilot oci://ghcr.io/nycolazsec/charts/kubepilot -n kubepilot-system --reset-then-reuse-values`
+(your settings, on top of the new version's defaults: new options get their default value).
 
 `helm uninstall` removes the panel but **keeps** the game servers namespace and the panel's data volume, so no game
 data is ever lost by accident. Delete them by hand if you really want to.

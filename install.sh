@@ -311,7 +311,8 @@ if [ "$CLUSTER" = true ] && command -v helm >/dev/null 2>&1 && helm status "$REL
 if [ "$UPDATE" = true ]; then
 	# ---------- Update: same settings, new version (plus the options given on the command line)
 	step "Updating KubePilot" "Mise à jour de KubePilot"
-	set -- --reuse-values
+	# the release's own settings, on top of the new chart's defaults (new options get their default value)
+	if helm upgrade --help 2>/dev/null | grep -q -- '--reset-then-reuse-values'; then set -- --reset-then-reuse-values; else set -- --reuse-values; fi
 	[ -z "$VERSION" ] || set -- "$@" --version "$VERSION"
 	[ -z "$MC_ROUTER" ] || set -- "$@" --set minecraftRouter.enabled="$MC_ROUTER"
 	[ -z "$SHIELD" ] || set -- "$@" --set shield.enabled="$SHIELD"

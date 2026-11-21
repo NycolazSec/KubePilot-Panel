@@ -45,7 +45,7 @@ spec:
             - { name: KUBEPILOT_MINECRAFT_ROUTER_PORT, value: {{ .Values.minecraftRouter.service.port | toString | quote }} }
             - name: NODE_NAME
               valueFrom: { fieldRef: { fieldPath: spec.nodeName } }
-            {{- if .Values.nodeAgent.enabled }}
+            {{- if (.Values.nodeAgent | default dict).enabled }}
             - { name: KUBEPILOT_NODE_AGENTS, value: "true" }
             - { name: KUBEPILOT_NODE_AGENT_NAMESPACE, value: {{ .Release.Namespace | quote }} }
             - { name: KUBEPILOT_NODE_AGENT_SELECTOR, value: {{ printf "app.kubernetes.io/name=kubepilot-node,app.kubernetes.io/instance=%s" .Release.Name | quote }} }
@@ -123,7 +123,7 @@ spec:
             # only the game volumes: never the other applications' volumes on the node
             - { name: storage, mountPath: {{ include "kubepilot.volumesPath" . | quote }} }
             - { name: tmp, mountPath: /tmp }
-            {{- if .Values.nodeAgent.enabled }}
+            {{- if (.Values.nodeAgent | default dict).enabled }}
             - { name: node-token, mountPath: /etc/kubepilot-node, readOnly: true }
             {{- end }}
       volumes:
@@ -133,7 +133,7 @@ spec:
           hostPath: { path: {{ include "kubepilot.volumesPath" . | quote }}, type: DirectoryOrCreate }
         - name: tmp
           emptyDir: { sizeLimit: 1Gi }
-        {{- if .Values.nodeAgent.enabled }}
+        {{- if (.Values.nodeAgent | default dict).enabled }}
         - name: node-token
           secret: { secretName: {{ printf "%s-node" (include "kubepilot.fullname" .) }}, defaultMode: 0400 }
         {{- end }}
