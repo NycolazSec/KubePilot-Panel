@@ -7,6 +7,7 @@ export KUBECONFIG=${KUBECONFIG:-/etc/rancher/k3s/k3s.yaml}
 [ -f deploy/config.env ] || { echo "Missing deploy/config.env (copy deploy/config.env.example)"; exit 1; }
 . deploy/config.env
 : "${KUBEPILOT_HOST:?}" "${KUBEPILOT_NODE:=}" "${KUBEPILOT_ISSUER:=}" "${KUBEPILOT_INGRESS_CLASS:=}" "${KUBEPILOT_CLOUDFLARE_ONLY:=false}" "${KUBEPILOT_MINECRAFT_ROUTER:=false}" "${KUBEPILOT_SFTP_PORT:=2022}"
+: "${KUBEPILOT_SHIELD:=false}"
 : "${KUBEPILOT_SMTP_HOST:=}" "${KUBEPILOT_SMTP_PORT:=0}" "${KUBEPILOT_SMTP_TLS:=starttls}" "${KUBEPILOT_SMTP_USERNAME:=}" "${KUBEPILOT_MAIL_FROM:=}"
 # Emails: the SMTP password stays in the Secret kubepilot-smtp (key "password"), created once by hand:
 #   kubectl -n kubepilot-system create secret generic kubepilot-smtp --from-file=password=<file>
@@ -24,6 +25,6 @@ helm upgrade --install kubepilot charts/kubepilot --namespace kubepilot-system -
   --set ingress.host="$KUBEPILOT_HOST" --set ingress.clusterIssuer="$KUBEPILOT_ISSUER" \
   --set ingress.className="$KUBEPILOT_INGRESS_CLASS" --set storage.node="$KUBEPILOT_NODE" \
   --set persistence.storageClass=local-path --set ingress.cloudflareOnly="$KUBEPILOT_CLOUDFLARE_ONLY" --set minecraftRouter.enabled="$KUBEPILOT_MINECRAFT_ROUTER" \
-  --set sftp.port="$KUBEPILOT_SFTP_PORT" "$@" \
+  --set sftp.port="$KUBEPILOT_SFTP_PORT" --set shield.enabled="$KUBEPILOT_SHIELD" "$@" \
   --wait --timeout 5m >/dev/null
 echo "Deployed: KubePilot $VERSION (kubepilot:$TAG) → https://$KUBEPILOT_HOST"

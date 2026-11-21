@@ -58,7 +58,7 @@ jobs:
             --set ingress.host=panel.example.com --set ingress.clusterIssuer=letsencrypt-prod --set storage.node=node-1 \
             | ./kubeconform -strict -summary
           helm template kubepilot charts/kubepilot -n kubepilot-system --set ingress.host=panel.example.com \
-            --set ingress.cloudflareOnly=true --set storage.isolated=false --set storage.className=local-path \
+            --set ingress.cloudflareOnly=true --set storage.isolated=false --set storage.className=local-path --set shield.enabled=true \
             | ./kubeconform -strict -summary -ignore-missing-schemas
 
   image:

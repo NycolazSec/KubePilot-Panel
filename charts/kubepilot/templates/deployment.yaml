@@ -41,6 +41,17 @@ spec:
             - { name: KUBEPILOT_MINECRAFT_ROUTER, value: {{ .Values.minecraftRouter.enabled | toString | quote }} }
             - { name: KUBEPILOT_AUTO_SLEEP, value: {{ and .Values.minecraftRouter.enabled .Values.minecraftRouter.autoSleep.enabled | toString | quote }} }
             - { name: KUBEPILOT_ROOT_INSTALL, value: {{ .Values.serversNamespace.rootInstall | toString | quote }} }
+            - { name: KUBEPILOT_SHIELD, value: {{ .Values.shield.enabled | toString | quote }} }
+            - { name: KUBEPILOT_MINECRAFT_ROUTER_PORT, value: {{ .Values.minecraftRouter.service.port | toString | quote }} }
+            {{- with .Values.serversNamespace.ingressController }}
+            {{- if .namespace }}
+            {{- $labels := list }}
+            {{- range $k, $v := .podLabels }}{{ $labels = append $labels (printf "%s=%s" $k $v) }}{{ end }}
+            - { name: KUBEPILOT_INGRESS_NAMESPACE, value: {{ .namespace | quote }} }
+            - { name: KUBEPILOT_INGRESS_POD_LABELS, value: {{ join "," $labels | quote }} }
+            - { name: KUBEPILOT_INGRESS_PORTS, value: {{ join "," .ports | quote }} }
+            {{- end }}
+            {{- end }}
             {{- $publicURL := .Values.publicURL | default (and .Values.ingress.enabled .Values.ingress.host (printf "https://%s" .Values.ingress.host)) }}
             {{- with $publicURL }}
             - { name: KUBEPILOT_PUBLIC_URL, value: {{ . | quote }} }

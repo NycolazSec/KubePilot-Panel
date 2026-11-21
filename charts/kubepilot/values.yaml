@@ -13,6 +13,15 @@ serversNamespace:
   # always created non-root, without capabilities (the "restricted" profile is still audited and warned about).
   # false = "restricted" enforced: eggs whose install script needs root won't install.
   rootInstall: true
+  # Game servers are cut off from the cluster, but may reach the websites it serves through their public address
+  # (a bot fetching its own dashboard, a plugin calling a site of yours): those connections land on the ingress
+  # controller's pods, so only these ports of these pods open up. Defaults: Traefik on k3s. namespace "" = closed.
+  ingressController:
+    namespace: kube-system
+    podLabels:
+      app.kubernetes.io/name: traefik
+    # its entry points (container port names or numbers) for HTTP and HTTPS: not its dashboard or metrics
+    ports: [web, websecure]
 
 # Game server volumes. The file manager and backups read them directly on the node,
 # so they must come from a hostPath-based provisioner such as local-path.
@@ -149,6 +158,22 @@ minecraftRouter:
     asleepMOTD: "§7Sleeping — join to wake it up"
     loadingMOTD: "§eStarting… come back in a minute"
     wakeMessage: "The server is waking up: reconnect in about a minute!"
+
+# Firewall and anti-DDoS, managed in Admin → Firewall (off by default). One agent per node filters the game ports
+# with nftables — the servers' ports and the Minecraft router, never SSH, the panel or the Kubernetes API:
+# firewall rules per server and for the whole panel, limits per source IP, automatic bans, an "under attack" mode.
+# The agents use the host network and the NET_ADMIN capability (nothing else): the release namespace must allow
+# it (Pod Security "privileged"). They filter what reaches the nodes; an attack bigger than a node's link has to be
+# stopped upstream (your host's anti-DDoS, or a provider such as path.net).
+shield:
+  enabled: false
+  resources:
+    requests: { cpu: 10m, memory: 24Mi }
+    limits: { cpu: 200m, memory: 96Mi }
+  # Nodes to protect: every node by default (the agent tolerates every taint)
+  nodeSelector: {}
+  tolerations:
+    - operator: Exists
 
 service:
   type: ClusterIP

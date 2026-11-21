@@ -38,6 +38,11 @@ type Config struct {
 	AutoSleep bool
 	// RootInstall: the game namespace allows root install containers (Pod Security "baseline"), for eggs
 	RootInstall bool
+	// Ingress: the ingress controller's pods, that game servers may reach on its web ports (the cluster's own websites)
+	Ingress IngressPeer
+	// Shield: the chart deployed the firewall / anti-DDoS agents (shield.go); RouterPort: the router's public port
+	Shield     bool
+	RouterPort int
 	// SFTPListen: address of the built-in SFTP server ("" = off); SFTPPort: the port users connect to
 	SFTPListen string
 	SFTPPort   int
@@ -58,6 +63,10 @@ func env(key, def string) string {
 }
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "shield" { // the firewall agent of a node (DaemonSet), not the panel
+		runShieldAgent()
+		return
+	}
 	cfg := Config{}
 	flag.StringVar(&cfg.Listen, "listen", env("KUBEPILOT_LISTEN", ":8080"), "HTTP listen address")
 	flag.StringVar(&cfg.DataDir, "data", env("KUBEPILOT_DATA", "/data"), "data directory (database, backups)")
@@ -67,6 +76,8 @@ func main() {
 	flag.StringVar(&cfg.StorageClass, "storage-class", env("KUBEPILOT_STORAGE_CLASS", "local-path"), "StorageClass of game server volumes (hostPath-based provisioner)")
 	flag.BoolVar(&cfg.RootInstall, "root-install", env("KUBEPILOT_ROOT_INSTALL", "false") == "true", "install scripts of egg templates may run as root (namespace Pod Security baseline)")
 	flag.BoolVar(&cfg.MinecraftRouter, "minecraft-router", env("KUBEPILOT_MINECRAFT_ROUTER", "false") == "true", "mc-router is deployed: give Minecraft servers hostnames on port 25565")
+	flag.BoolVar(&cfg.Shield, "shield", env("KUBEPILOT_SHIELD", "false") == "true", "the shield agents are deployed: firewall and anti-DDoS on the game ports")
+	flag.IntVar(&cfg.RouterPort, "minecraft-router-port", atoiOr(env("KUBEPILOT_MINECRAFT_ROUTER_PORT", ""), 25565), "public port of the Minecraft router")
 	flag.BoolVar(&cfg.AutoSleep, "auto-sleep", env("KUBEPILOT_AUTO_SLEEP", "false") == "true", "mc-router can wake servers up: empty Minecraft servers may go to sleep")
 	flag.StringVar(&cfg.SFTPListen, "sftp-listen", env("KUBEPILOT_SFTP_LISTEN", ""), "SFTP listen address, e.g. :2022 (empty = SFTP off)")
 	flag.IntVar(&cfg.SFTPPort, "sftp-port", atoiOr(env("KUBEPILOT_SFTP_PORT", ""), 0), "SFTP port shown to users (default: the listen port)")
@@ -78,9 +89,16 @@ func main() {
 	cfg.Mail = MailConfig{Host: os.Getenv("KUBEPILOT_SMTP_HOST"), Port: atoiOr(os.Getenv("KUBEPILOT_SMTP_PORT"), 0), TLS: os.Getenv("KUBEPILOT_SMTP_TLS"),
 		Username: os.Getenv("KUBEPILOT_SMTP_USERNAME"), Password: os.Getenv("KUBEPILOT_SMTP_PASSWORD"), From: os.Getenv("KUBEPILOT_MAIL_FROM")}
 	flag.StringVar(&cfg.PublicURL, "public-url", env("KUBEPILOT_PUBLIC_URL", ""), "the panel's public address (https://…), for links in emails")
+	ingressNS := flag.String("ingress-namespace", env("KUBEPILOT_INGRESS_NAMESPACE", ""), "namespace of the ingress controller game servers may reach (empty = none)")
+	ingressLabels := flag.String("ingress-pod-labels", env("KUBEPILOT_INGRESS_POD_LABELS", ""), "labels of the ingress controller's pods, e.g. app.kubernetes.io/name=traefik")
+	ingressPorts := flag.String("ingress-ports", env("KUBEPILOT_INGRESS_PORTS", ""), "its ports game servers may reach (names or numbers), e.g. web,websecure")
 	secure := flag.Bool("secure-cookies", env("KUBEPILOT_SECURE_COOKIES", "true") == "true", "set Secure flag on cookies")
 	flag.Parse()
 	cfg.SecureCookies = *secure
+	var err error
+	if cfg.Ingress, err = parseIngressPeer(*ingressNS, *ingressLabels, *ingressPorts); err != nil {
+		log.Fatalf("ingress controller: %v", err)
+	}
 	if cfg.PublicURL = strings.TrimRight(cfg.PublicURL, "/"); cfg.PublicURL != "" {
 		if u, err := url.Parse(cfg.PublicURL); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || u.Path != "" {
 			log.Fatalf("public URL %q: expected https://panel.example.com", cfg.PublicURL)

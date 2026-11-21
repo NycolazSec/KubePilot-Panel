@@ -34,6 +34,7 @@ import AdminUsers from './pages/admin/AdminUsers';
 import AdminTemplates from './pages/admin/AdminTemplates';
 import AdminSettings from './pages/admin/AdminSettings';
 import AdminActivity from './pages/admin/AdminActivity';
+import AdminFirewall from './pages/admin/AdminFirewall';
 
 type AuthCtx = { me: Me | null; setMe: (m: Me | null) => void; refresh: () => Promise<void> };
 const Auth = createContext<AuthCtx>(null!);
@@ -109,6 +110,7 @@ function App() {
                   <Route path="users" element={<AdminUsers />} />
                   <Route path="templates" element={<AdminTemplates />} />
                   <Route path="settings" element={<AdminSettings />} />
+                  <Route path="firewall" element={<AdminFirewall />} />
                   <Route path="activity" element={<AdminActivity />} />
                 </Route>
               )}

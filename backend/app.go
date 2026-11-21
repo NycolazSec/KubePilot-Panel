@@ -50,6 +50,8 @@ type App struct {
 	sleepMu sync.RWMutex
 	asleep  map[string]bool // servers stopped by auto-sleep (see sleep.go)
 	idle    idleTracker
+
+	shield shieldState // firewall / anti-DDoS configuration published to the agents (see shield.go)
 }
 
 func newApp(cfg Config, db *DB, kube *Kube) *App {
@@ -57,6 +59,7 @@ func newApp(cfg Config, db *DB, kube *Kube) *App {
 		cfg: cfg, db: db, kube: kube, ctx: context.Background(),
 		hubs: map[string]*Hub{}, locks: map[string]*sync.Mutex{}, disk: map[string]int64{},
 		asleep: map[string]bool{}, idle: idleTracker{since: map[string]time.Time{}},
+		shield:  shieldState{kick: make(chan struct{}, 1)},
 		dbHost:  dbHost{addr: cfg.DatabaseAddr, pass: cfg.DatabasePassword},
 		limiter: newRateLimiter(10, 10*time.Minute), accounts: newRateLimiter(20, 15*time.Minute), keyRate: newRateLimiter(apiRatePerMin, time.Minute),
 		resetLimiter: newRateLimiter(10, 15*time.Minute), resetPerAccount: newRateLimiter(3, time.Hour),
@@ -77,6 +80,7 @@ func (a *App) startBackground(ctx context.Context) {
 	go a.scheduleLoop(ctx)
 	go a.sessionCleanup(ctx)
 	go a.sleepLoop(ctx)
+	go a.shieldLoop(ctx)
 }
 
 func (a *App) serverLock(id string) *sync.Mutex {
@@ -450,6 +454,9 @@ func (a *App) routes() http.Handler {
 	m.HandleFunc("PUT /api/servers/{id}/hostname", a.srv("network", a.handleHostname))
 	m.HandleFunc("PUT /api/servers/{id}/exposure", a.srv("network", a.handleExposure))
 	m.HandleFunc("DELETE /api/servers/{id}/network/{port}", a.srv("network", a.handleAllocDelete))
+	m.HandleFunc("GET /api/servers/{id}/firewall", a.srv("network", a.handleServerFirewall))
+	m.HandleFunc("POST /api/servers/{id}/firewall", a.srv("network", a.handleServerFirewallAdd))
+	m.HandleFunc("DELETE /api/servers/{id}/firewall/{rid}", a.srv("network", a.handleServerFirewallDelete))
 
 	m.HandleFunc("GET /api/servers/{id}/users", a.srv("users", a.handleSubUsers))
 	m.HandleFunc("POST /api/servers/{id}/users", a.srv("users", a.handleSubUserSave))
@@ -476,6 +483,12 @@ func (a *App) routes() http.Handler {
 	m.HandleFunc("POST /api/admin/servers", a.admin(a.handleAdminServerCreate))
 	m.HandleFunc("PUT /api/admin/servers/{id}", a.admin(a.handleAdminServerUpdate))
 	m.HandleFunc("DELETE /api/admin/servers/{id}", a.admin(a.handleAdminServerDelete))
+	m.HandleFunc("GET /api/admin/firewall", a.admin(a.handleAdminShield))
+	m.HandleFunc("PUT /api/admin/firewall", a.admin(a.handleAdminShieldSave))
+	m.HandleFunc("POST /api/admin/firewall/rules", a.admin(a.handleAdminShieldRuleAdd))
+	m.HandleFunc("DELETE /api/admin/firewall/rules/{rid}", a.admin(a.handleAdminShieldRuleDelete))
+	m.HandleFunc("POST /api/admin/firewall/bans", a.admin(a.handleAdminShieldBan))
+	m.HandleFunc("DELETE /api/admin/firewall/bans/{ip}", a.admin(a.handleAdminShieldUnban))
 	m.HandleFunc("GET /api/admin/settings", a.admin(a.handleAdminSettings))
 	m.HandleFunc("PUT /api/admin/settings", a.admin(a.handleAdminSettingsSave))
 	m.HandleFunc("GET /api/admin/mail", a.admin(a.handleAdminMail))

@@ -44,6 +44,9 @@ data is ever lost by accident. Delete them by hand if you really want to.
 | `sftp.port` | `2022` | SFTP port (use another one if Pterodactyl Wings runs on the nodes) |
 | `sftp.hostPort` | `true` | Open `sftp.port` on the panel's node, keeping client IPs (k3s ServiceLB would hide them) |
 | `sftp.service.type` | `LoadBalancer` | With `sftp.hostPort=false`: SFTP Service type (`externalTrafficPolicy: Local`) |
+| `shield.enabled` | `false` | Firewall and anti-DDoS on the game ports: one agent per node (DaemonSet, host network, `NET_ADMIN` only, nftables). Managed in *Admin* → *Firewall*; the release namespace must allow Pod Security `privileged` |
+| `shield.nodeSelector` / `shield.tolerations` | every node | Nodes to protect |
+| `serversNamespace.ingressController` | Traefik (`kube-system`, `web`/`websecure`) | Ingress controller pods and ports game servers may reach, for the cluster's websites through their public address. `namespace: ""` closes it |
 | `serversNamespace.rootInstall` | `true` | Let egg install scripts run as root (namespace enforced at `baseline`; games stay non-root). `false` enforces `restricted` |
 | `storage.isolated` | `true` | Create a StorageClass that keeps game volumes in their own folder; the panel mounts only that folder, never other apps' volumes (local-path-provisioner ≥ v0.0.27) |
 | `storage.className` | `kubepilot-local` | StorageClass of game volumes (created when `isolated`, else an existing hostPath-based one) |

@@ -28,6 +28,7 @@ Ideas and votes are welcome in the [issues](https://github.com/NycolazSec/KubePi
 ## v0.3 and beyond — what Pterodactyl can't do
 
 - [x] Password reset by email (SMTP)
+- [x] **Firewall and anti-DDoS** (optional): per-server and global rules, limits per source IP, automatic bans, "under attack" mode (nftables, one agent per node)
 - [ ] Notifications by email
 - [ ] **Multi-node**: add a machine by joining it to the cluster; servers are scheduled where there is room
 - [ ] One-click **server transfer** between nodes

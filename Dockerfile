@@ -20,6 +20,8 @@ RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
     go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/kubepilot .
 
 FROM alpine:3.24
+# nft: used only by the firewall agent (`kubepilot shield`, chart value shield.enabled)
+RUN apk add --no-cache nftables
 LABEL org.opencontainers.image.title="KubePilot" \
       org.opencontainers.image.description="Kubernetes-native game server panel" \
       org.opencontainers.image.source="https://github.com/NycolazSec/KubePilot-Panel" \
