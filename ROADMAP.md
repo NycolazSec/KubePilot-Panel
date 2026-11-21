@@ -25,14 +25,18 @@ Ideas and votes are welcome in the [issues](https://github.com/NycolazSec/KubePi
 - [x] MySQL / MariaDB databases per server (MariaDB deployed by the chart)
 - [x] Backups to S3-compatible storage (optionally encrypted with age)
 
-## v0.3 and beyond — what Pterodactyl can't do
+## v0.3 — Easy, protected, lighter ✅
 
-- [x] Password reset by email (SMTP)
+- [x] **One-command installer** (k3s, Helm, cert-manager, KubePilot, first administrator) and first start from the browser
+- [x] **Auto-sleep**: empty servers stop by themselves and wake up when a player connects (Minecraft Java, via the router)
 - [x] **Firewall and anti-DDoS** (optional): per-server and global rules, limits per source IP, automatic bans, "under attack" mode (nftables, one agent per node)
+- [x] Password reset by email (SMTP)
+
+## v0.4 and beyond — what Pterodactyl can't do
+
 - [ ] Notifications by email
 - [ ] **Multi-node**: add a machine by joining it to the cluster; servers are scheduled where there is room
 - [ ] One-click **server transfer** between nodes
 - [ ] Standard game ports (e.g. `25565`) instead of NodePorts
-- [x] **Auto-sleep**: empty servers stop by themselves and wake up when a player connects (Minecraft Java, via the router)
 - [ ] Prometheus metrics, Grafana dashboard, Discord alerts
 - [ ] Native integration with the [KubePilot Discord bot](https://github.com/NycolazSec/KubePilot)

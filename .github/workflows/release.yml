@@ -71,6 +71,14 @@ jobs:
 
           ## Install
 
+          On a Linux server (k3s, HTTPS and the first administrator included), or to update an installation:
+
+          \`\`\`sh
+          curl -sfL https://raw.githubusercontent.com/NycolazSec/KubePilot-Panel/main/install.sh | sudo sh -s -- --version ${V}
+          \`\`\`
+
+          With Helm, on an existing cluster (then open the panel and enter the setup token from its logs):
+
           \`\`\`sh
           helm install kubepilot ${CHARTS}/kubepilot --version ${V} \\
             --namespace kubepilot-system --create-namespace \\
