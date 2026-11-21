@@ -6,6 +6,25 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-21
+
+**Easy to install, protected, and lighter on resources**: a one-command installer and a first start from the
+browser, an optional firewall and anti-DDoS on the game ports, Minecraft servers that sleep when nobody plays, and
+password reset by email.
+
+### Upgrading from 0.2.0
+
+- Nothing changes until you turn the new options on: `shield.enabled` (firewall and anti-DDoS, off by default: its
+  agents need the host network and `NET_ADMIN`) and `email.smtp.*` (off without a host).
+- With the Minecraft router, `minecraftRouter.autoSleep.enabled` is on: mc-router gets the right to change the
+  replica count of game StatefulSets (`statefulsets/scale` only), so owners can turn auto-sleep on.
+- The panel may now read and write ConfigMaps in the servers' namespace (the firewall configuration), and game
+  servers may reach the cluster's own websites on the ingress controller's HTTP/HTTPS ports
+  (`serversNamespace.ingressController`, Traefik by default).
+- With Helm 4, an upgrade may stop on a conflict with fields last written by `kubectl` (for instance a Role edited
+  by hand): run it again with `--force-conflicts`.
+- Or simply run the installer again: on a server where KubePilot is installed, it updates it with the same settings.
+
 ### Added
 
 - **One-command installer**: `curl -sfL https://raw.githubusercontent.com/NycolazSec/KubePilot-Panel/main/install.sh | sudo sh`.
@@ -205,6 +224,7 @@ First public version of KubePilot, the Kubernetes-native game server panel.
 - Long dialogs (new template, new server…) no longer get their top cut off on small screens: the dialog stays within
   the screen, its content scrolls and the title and buttons stay visible.
 
-[Unreleased]: https://github.com/NycolazSec/KubePilot-Panel/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/NycolazSec/KubePilot-Panel/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/NycolazSec/KubePilot-Panel/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/NycolazSec/KubePilot-Panel/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/NycolazSec/KubePilot-Panel/releases/tag/v0.1.0

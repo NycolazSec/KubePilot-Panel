@@ -3,8 +3,8 @@ name: kubepilot
 description: Kubernetes-native game server panel — an open-source alternative to Pterodactyl
 type: application
 # version and appVersion are set from the git tag by the release workflow
-version: 0.2.0
-appVersion: "0.2.0"
+version: 0.3.0
+appVersion: "0.3.0"
 home: https://github.com/NycolazSec/KubePilot-Panel
 sources:
   - https://github.com/NycolazSec/KubePilot-Panel

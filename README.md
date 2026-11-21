@@ -173,8 +173,9 @@ docs/       logo and banner
 
 ## Roadmap
 
-v0.2 brought Pterodactyl parity (eggs, SFTP, databases, S3 backups). Coming next (v0.3): auto-sleep ✅, multi-node,
-server transfers.
+v0.2 brought Pterodactyl parity (eggs, SFTP, databases, S3 backups); v0.3 the one-command installer, auto-sleep, the
+firewall and anti-DDoS, and password reset by email. Coming next (v0.4): email notifications, multi-node, server
+transfers.
 See the full [roadmap](ROADMAP.md).
 
 ## Contributing
