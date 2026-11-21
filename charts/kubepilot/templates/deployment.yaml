@@ -41,6 +41,23 @@ spec:
             - { name: KUBEPILOT_MINECRAFT_ROUTER, value: {{ .Values.minecraftRouter.enabled | toString | quote }} }
             - { name: KUBEPILOT_AUTO_SLEEP, value: {{ and .Values.minecraftRouter.enabled .Values.minecraftRouter.autoSleep.enabled | toString | quote }} }
             - { name: KUBEPILOT_ROOT_INSTALL, value: {{ .Values.serversNamespace.rootInstall | toString | quote }} }
+            {{- $publicURL := .Values.publicURL | default (and .Values.ingress.enabled .Values.ingress.host (printf "https://%s" .Values.ingress.host)) }}
+            {{- with $publicURL }}
+            - { name: KUBEPILOT_PUBLIC_URL, value: {{ . | quote }} }
+            {{- end }}
+            {{- with .Values.email.smtp }}
+            {{- if .host }}
+            - { name: KUBEPILOT_SMTP_HOST, value: {{ .host | quote }} }
+            - { name: KUBEPILOT_SMTP_PORT, value: {{ .port | toString | quote }} }
+            - { name: KUBEPILOT_SMTP_TLS, value: {{ .tls | quote }} }
+            - { name: KUBEPILOT_SMTP_USERNAME, value: {{ .username | quote }} }
+            - { name: KUBEPILOT_MAIL_FROM, value: {{ required "email.from is required with email.smtp.host" $.Values.email.from | quote }} }
+            {{- if or .existingSecret .password }}
+            - name: KUBEPILOT_SMTP_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ .existingSecret | default (printf "%s-smtp" (include "kubepilot.fullname" $)) }}, key: password } }
+            {{- end }}
+            {{- end }}
+            {{- end }}
             {{- if .Values.backups.s3.enabled }}
             {{- $s3secret := .Values.backups.s3.existingSecret | default (printf "%s-s3" (include "kubepilot.fullname" .)) }}
             - { name: KUBEPILOT_S3_ENDPOINT, value: {{ required "backups.s3.endpoint is required" .Values.backups.s3.endpoint | quote }} }

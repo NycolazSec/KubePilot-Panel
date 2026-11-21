@@ -9,10 +9,12 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 	_ "time/tzdata"
@@ -42,7 +44,9 @@ type Config struct {
 	// DatabaseAddr / DatabasePassword: the MariaDB for the servers' databases (root), "" = off
 	DatabaseAddr     string
 	DatabasePassword string
-	S3               S3Config // backups on S3 when Endpoint is set
+	S3               S3Config   // backups on S3 when Endpoint is set
+	Mail             MailConfig // emails (password reset, notifications) when Host is set
+	PublicURL        string     // https://panel.example.com: the panel's own address, for links in emails
 	SecureCookies    bool
 }
 
@@ -71,9 +75,17 @@ func main() {
 	cfg.S3 = S3Config{Endpoint: os.Getenv("KUBEPILOT_S3_ENDPOINT"), Region: os.Getenv("KUBEPILOT_S3_REGION"), Bucket: os.Getenv("KUBEPILOT_S3_BUCKET"),
 		Prefix: env("KUBEPILOT_S3_PREFIX", "kubepilot"), Insecure: os.Getenv("KUBEPILOT_S3_INSECURE") == "true",
 		AccessKey: os.Getenv("KUBEPILOT_S3_ACCESS_KEY"), SecretKey: os.Getenv("KUBEPILOT_S3_SECRET_KEY"), EncryptionKey: os.Getenv("KUBEPILOT_S3_ENCRYPTION_KEY")}
+	cfg.Mail = MailConfig{Host: os.Getenv("KUBEPILOT_SMTP_HOST"), Port: atoiOr(os.Getenv("KUBEPILOT_SMTP_PORT"), 0), TLS: os.Getenv("KUBEPILOT_SMTP_TLS"),
+		Username: os.Getenv("KUBEPILOT_SMTP_USERNAME"), Password: os.Getenv("KUBEPILOT_SMTP_PASSWORD"), From: os.Getenv("KUBEPILOT_MAIL_FROM")}
+	flag.StringVar(&cfg.PublicURL, "public-url", env("KUBEPILOT_PUBLIC_URL", ""), "the panel's public address (https://…), for links in emails")
 	secure := flag.Bool("secure-cookies", env("KUBEPILOT_SECURE_COOKIES", "true") == "true", "set Secure flag on cookies")
 	flag.Parse()
 	cfg.SecureCookies = *secure
+	if cfg.PublicURL = strings.TrimRight(cfg.PublicURL, "/"); cfg.PublicURL != "" {
+		if u, err := url.Parse(cfg.PublicURL); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || u.Path != "" {
+			log.Fatalf("public URL %q: expected https://panel.example.com", cfg.PublicURL)
+		}
+	}
 
 	if err := os.MkdirAll(filepath.Join(cfg.DataDir, "backups"), 0o700); err != nil {
 		log.Fatalf("data dir: %v", err)
@@ -119,6 +131,12 @@ func main() {
 			log.Printf("Backups go to S3: %s/%s (encrypted: %v)", s.endpoint, s.bucket, s.identity != nil)
 		}
 		cancel()
+	}
+	if m, err := newMailer(cfg.Mail); err != nil {
+		log.Printf("WARNING: emails are off: %v", err)
+	} else if m != nil {
+		app.mail = m
+		log.Printf("Emails: %s:%d (%s) as %s", m.cfg.Host, m.cfg.Port, m.cfg.TLS, m.from.Address)
 	}
 	app.startBackground(ctx)
 

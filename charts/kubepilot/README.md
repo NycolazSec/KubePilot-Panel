@@ -65,6 +65,10 @@ data is ever lost by accident. Delete them by hand if you really want to.
 | `service.type` / `service.port` | `ClusterIP` / `80` | Panel Service |
 | `minecraftRouter.enabled` | `false` | Deploy mc-router: Java servers get `<hostname>.<domain>` on port 25565 (set the domain in the admin settings, wildcard DNS record, DNS only) |
 | `minecraftRouter.service.type` / `.port` | `LoadBalancer` / `25565` | How the router is exposed |
+| `email.smtp.host` / `.port` / `.tls` / `.username` | `""` / `0` / `starttls` | SMTP server for "forgot your password" emails (off while `host` is empty); `tls`: `starttls`, `tls` (465) or `none` (in-cluster relay only) |
+| `email.smtp.password` / `.existingSecret` | `""` | SMTP password, or a Secret with the key `password` |
+| `email.from` | `""` | Sender, e.g. `KubePilot <panel@example.com>` |
+| `publicURL` | `https://<ingress.host>` | The panel's address, for links in emails |
 | `minecraftRouter.autoSleep.enabled` | `true` | Let servers sleep when nobody plays, and wake up when a player joins (mc-router may scale the game StatefulSets, through the scale subresource only) |
 | `minecraftRouter.autoSleep.asleepMOTD` / `.loadingMOTD` / `.wakeMessage` | English texts | What players see in their server list, and the message of the first join attempt |
 | `secureCookies` | `true` | Send cookies over HTTPS only. Set `false` only to test over plain HTTP |
