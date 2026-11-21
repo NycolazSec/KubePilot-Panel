@@ -137,7 +137,7 @@ func volScript(t *testing.T, v Vol, dir string) []string {
 		st, _ := d.Stat()
 		log("dir stat %v", st.IsDir())
 		_, err = d.Read(make([]byte, 1))
-		log("read dir %s", kind(err))
+		log("read dir fails %v", err != nil) // EISDIR or EINVAL, depending on the file system
 		d.Close()
 	}
 	ents, err := fs.ReadDir(v.FS(), "a")
