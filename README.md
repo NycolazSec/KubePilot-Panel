@@ -69,7 +69,7 @@ flowchart LR
 ## Security
 
 - **Game pods**: UID 1000, all capabilities dropped, no privilege escalation, seccomp `RuntimeDefault`, no service-account token (Pod Security `restricted`). Only the install scripts of eggs run as root, still without privilege escalation and with a minimal set of capabilities; the namespace is then enforced at `baseline` with `restricted` audited (`serversNamespace.rootInstall=false` enforces `restricted`).
-- **Network isolation**: a `NetworkPolicy` gives game servers Internet + DNS access but blocks private ranges, the cluster network and the node IPs (databases, API server…).
+- **Network isolation**: a `NetworkPolicy` gives game servers Internet + DNS access but blocks private ranges, the cluster network and the node IPs (databases, API server…). The one opening is the ingress controller's HTTP/HTTPS entry points, so a server can reach the websites the cluster serves through their public address, as anyone on the Internet can (`serversNamespace.ingressController`).
 - **Least privilege**: the panel's ServiceAccount has full rights *only* in `kubepilot-servers`, and read-only access to nodes, PVs, services and metrics. No access to Secrets.
 - **Storage isolation**: game volumes live in their own folder (dedicated `kubepilot-local` StorageClass) and the panel only mounts that folder — it never sees the volumes of the other applications of the cluster.
 - **Origin lock** (optional, Traefik): with `ingress.cloudflareOnly`, the panel only answers requests coming from Cloudflare, so its protections can't be bypassed by hitting the node's IP.

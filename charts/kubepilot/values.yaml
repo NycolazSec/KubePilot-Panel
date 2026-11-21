@@ -13,6 +13,15 @@ serversNamespace:
   # always created non-root, without capabilities (the "restricted" profile is still audited and warned about).
   # false = "restricted" enforced: eggs whose install script needs root won't install.
   rootInstall: true
+  # Game servers are cut off from the cluster, but may reach the websites it serves through their public address
+  # (a bot fetching its own dashboard, a plugin calling a site of yours): those connections land on the ingress
+  # controller's pods, so only these ports of these pods open up. Defaults: Traefik on k3s. namespace "" = closed.
+  ingressController:
+    namespace: kube-system
+    podLabels:
+      app.kubernetes.io/name: traefik
+    # its entry points (container port names or numbers) for HTTP and HTTPS: not its dashboard or metrics
+    ports: [web, websecure]
 
 # Game server volumes. The file manager and backups read them directly on the node,
 # so they must come from a hostPath-based provisioner such as local-path.

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/netip"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -25,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/httpstream"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -76,7 +78,8 @@ type Kube struct {
 	ns           string
 	storageRoot  string
 	storageClass string
-	rootInstall  bool // the namespace accepts root install containers (eggs)
+	rootInstall  bool        // the namespace accepts root install containers (eggs)
+	ingress      IngressPeer // the ingress controller game servers may reach
 
 	pods corelisters.PodLister
 	sts  appslisters.StatefulSetLister
@@ -107,7 +110,7 @@ func newKube(cfg Config) (*Kube, error) {
 		return nil, err
 	}
 	return &Kube{
-		cs: cs, rc: rc, ns: cfg.Namespace, storageRoot: filepath.Clean(cfg.StorageRoot), storageClass: cfg.StorageClass, rootInstall: cfg.RootInstall,
+		cs: cs, rc: rc, ns: cfg.Namespace, storageRoot: filepath.Clean(cfg.StorageRoot), storageClass: cfg.StorageClass, rootInstall: cfg.RootInstall, ingress: cfg.Ingress,
 		metrics: map[string]Usage{}, pvPaths: map[string]string{}, attach: map[string]*attachSess{},
 	}, nil
 }
@@ -171,45 +174,66 @@ func (k *Kube) InternalAddress(id string, port int) string {
 	return fmt.Sprintf("%s.%s.svc.cluster.local:%d", stsName(id), k.ns, port)
 }
 
+// IngressPeer is the cluster's ingress controller, as game servers may reach it. A server that calls a website of
+// this same cluster through its public address (a bot fetching its own dashboard) is sent by kube-proxy straight to
+// the controller's pods: without this exception, the isolation below refuses that connection. Only these ports of
+// these pods open up: the websites, which anyone on the internet reaches anyway — not the controller's dashboard.
+type IngressPeer struct {
+	Namespace string
+	Labels    map[string]string
+	Ports     []intstr.IntOrString
+}
+
+// parseIngressPeer reads the chart's settings: "kube-system", "app.kubernetes.io/name=traefik", "web,websecure".
+// No namespace = no access. Labels and ports are required: an empty selector would open every pod of the namespace.
+func parseIngressPeer(ns, sel, ports string) (IngressPeer, error) {
+	if ns = strings.TrimSpace(ns); ns == "" {
+		return IngressPeer{}, nil
+	}
+	if errs := validation.IsDNS1123Label(ns); len(errs) > 0 {
+		return IngressPeer{}, fmt.Errorf("namespace %q: %s", ns, strings.Join(errs, ", "))
+	}
+	lbls, err := labels.ConvertSelectorToLabelsMap(sel)
+	if err != nil {
+		return IngressPeer{}, fmt.Errorf("pod labels %q: %w", sel, err)
+	}
+	if len(lbls) == 0 {
+		return IngressPeer{}, fmt.Errorf("pod labels are required (an empty selector would match every pod of the namespace)")
+	}
+	ing := IngressPeer{Namespace: ns, Labels: lbls}
+	for _, p := range strings.Split(ports, ",") {
+		if p = strings.TrimSpace(p); p == "" {
+			continue
+		}
+		if n, err := strconv.Atoi(p); err == nil {
+			if n < 1 || n > 65535 {
+				return IngressPeer{}, fmt.Errorf("port %d: out of range", n)
+			}
+			ing.Ports = append(ing.Ports, intstr.FromInt32(int32(n)))
+		} else if errs := validation.IsValidPortName(p); len(errs) > 0 {
+			return IngressPeer{}, fmt.Errorf("port %q: %s", p, strings.Join(errs, ", "))
+		} else {
+			ing.Ports = append(ing.Ports, intstr.FromString(p))
+		}
+	}
+	if len(ing.Ports) == 0 {
+		return IngressPeer{}, fmt.Errorf("ports are required (none would open every port of the controller)")
+	}
+	return ing, nil
+}
+
 func (k *Kube) ensureNetworkPolicy(ctx context.Context) error {
-	except := []string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "169.254.0.0/16"}
+	var nodeIPs []string
 	if nodes, err := k.cs.CoreV1().Nodes().List(ctx, metav1.ListOptions{}); err == nil {
-		seen := map[string]bool{}
 		for _, n := range nodes.Items {
 			for _, a := range n.Status.Addresses {
-				if (a.Type == corev1.NodeInternalIP || a.Type == corev1.NodeExternalIP) && !strings.Contains(a.Address, ":") && !seen[a.Address] {
-					seen[a.Address] = true
-					if !isPrivateV4(a.Address) {
-						except = append(except, a.Address+"/32")
-					}
+				if a.Type == corev1.NodeInternalIP || a.Type == corev1.NodeExternalIP {
+					nodeIPs = append(nodeIPs, a.Address)
 				}
 			}
 		}
 	}
-	udp, tcp := corev1.ProtocolUDP, corev1.ProtocolTCP
-	dns, mysqlPort := intstr.FromInt32(53), intstr.FromInt32(3306)
-	np := &networkingv1.NetworkPolicy{
-		ObjectMeta: metav1.ObjectMeta{Name: "kubepilot-isolation", Namespace: k.ns, Labels: map[string]string{lblManaged: managedBy}},
-		Spec: networkingv1.NetworkPolicySpec{
-			PodSelector: metav1.LabelSelector{MatchLabels: map[string]string{lblManaged: managedBy}},
-			PolicyTypes: []networkingv1.PolicyType{networkingv1.PolicyTypeIngress, networkingv1.PolicyTypeEgress},
-			Ingress:     []networkingv1.NetworkPolicyIngressRule{{}},
-			Egress: []networkingv1.NetworkPolicyEgressRule{
-				{To: []networkingv1.NetworkPolicyPeer{{IPBlock: &networkingv1.IPBlock{CIDR: "0.0.0.0/0", Except: except}}}},
-				{
-					To: []networkingv1.NetworkPolicyPeer{{
-						NamespaceSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"kubernetes.io/metadata.name": "kube-system"}},
-						PodSelector:       &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": "kube-dns"}},
-					}},
-					Ports: []networkingv1.NetworkPolicyPort{{Protocol: &udp, Port: &dns}, {Protocol: &tcp, Port: &dns}},
-				},
-				{ // the servers' databases (MariaDB deployed by the chart), and nothing else of the cluster
-					To:    []networkingv1.NetworkPolicyPeer{{PodSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"app.kubernetes.io/name": "kubepilot-mariadb"}}}},
-					Ports: []networkingv1.NetworkPolicyPort{{Protocol: &tcp, Port: &mysqlPort}},
-				},
-			},
-		},
-	}
+	np := isolationPolicy(k.ns, nodeIPs, k.ingress)
 	api := k.cs.NetworkingV1().NetworkPolicies(k.ns)
 	cur, err := api.Get(ctx, np.Name, metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
@@ -221,6 +245,56 @@ func (k *Kube) ensureNetworkPolicy(ctx context.Context) error {
 	cur.Spec = np.Spec
 	_, err = api.Update(ctx, cur, metav1.UpdateOptions{})
 	return err
+}
+
+// isolationPolicy: game servers reach the internet, the cluster's DNS and the servers' databases — not the other
+// pods of the cluster, its nodes, or private networks. (Their owner's other servers: kubepilot-owner-<id> policies.)
+func isolationPolicy(ns string, nodeIPs []string, ing IngressPeer) *networkingv1.NetworkPolicy {
+	except := []string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "169.254.0.0/16"}
+	seen := map[string]bool{}
+	for _, a := range nodeIPs {
+		ip, err := netip.ParseAddr(a)
+		if err != nil || !ip.Is4() || seen[ip.String()] || isPrivateV4(ip.String()) {
+			continue // IPv6: the pods have none
+		}
+		seen[ip.String()] = true
+		except = append(except, ip.String()+"/32")
+	}
+	udp, tcp := corev1.ProtocolUDP, corev1.ProtocolTCP
+	dns, mysqlPort := intstr.FromInt32(53), intstr.FromInt32(3306)
+	egress := []networkingv1.NetworkPolicyEgressRule{
+		{To: []networkingv1.NetworkPolicyPeer{{IPBlock: &networkingv1.IPBlock{CIDR: "0.0.0.0/0", Except: except}}}},
+		{
+			To: []networkingv1.NetworkPolicyPeer{{
+				NamespaceSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"kubernetes.io/metadata.name": "kube-system"}},
+				PodSelector:       &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": "kube-dns"}},
+			}},
+			Ports: []networkingv1.NetworkPolicyPort{{Protocol: &udp, Port: &dns}, {Protocol: &tcp, Port: &dns}},
+		},
+		{ // the servers' databases (MariaDB deployed by the chart), and nothing else of the cluster
+			To:    []networkingv1.NetworkPolicyPeer{{PodSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"app.kubernetes.io/name": "kubepilot-mariadb"}}}},
+			Ports: []networkingv1.NetworkPolicyPort{{Protocol: &tcp, Port: &mysqlPort}},
+		},
+	}
+	if ing.Namespace != "" && len(ing.Labels) > 0 && len(ing.Ports) > 0 {
+		rule := networkingv1.NetworkPolicyEgressRule{To: []networkingv1.NetworkPolicyPeer{{
+			NamespaceSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"kubernetes.io/metadata.name": ing.Namespace}},
+			PodSelector:       &metav1.LabelSelector{MatchLabels: ing.Labels},
+		}}}
+		for i := range ing.Ports {
+			rule.Ports = append(rule.Ports, networkingv1.NetworkPolicyPort{Protocol: &tcp, Port: &ing.Ports[i]})
+		}
+		egress = append(egress, rule)
+	}
+	return &networkingv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: "kubepilot-isolation", Namespace: ns, Labels: map[string]string{lblManaged: managedBy}},
+		Spec: networkingv1.NetworkPolicySpec{
+			PodSelector: metav1.LabelSelector{MatchLabels: map[string]string{lblManaged: managedBy}},
+			PolicyTypes: []networkingv1.PolicyType{networkingv1.PolicyTypeIngress, networkingv1.PolicyTypeEgress},
+			Ingress:     []networkingv1.NetworkPolicyIngressRule{{}},
+			Egress:      egress,
+		},
+	}
 }
 
 func isPrivateV4(ip string) bool {
