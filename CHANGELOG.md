@@ -8,6 +8,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
+- **Firewall and anti-DDoS** (optional, chart value `shield.enabled`). One agent per node (`kubepilot shield`, a
+  DaemonSet with the host network and the `NET_ADMIN` capability only) filters the game ports with an nftables table
+  of its own: the servers' ports and the Minecraft router, never SSH, the panel, the Kubernetes API or private
+  networks. *Admin* → *Firewall*: limits per source IP (new TCP connections per second, simultaneous connections,
+  UDP packets per second) with automatic bans, an "under attack" mode (limits three times tighter, bans six times
+  longer), packets dropped by reason, banned IPs (unban, or ban by hand on every node), and rules for every server
+  (block, or allow: never limited). *Server* → *Network* → *Firewall*: the server's own rules (`network`
+  permission); one allow rule turns them into an allow list. The panel publishes the configuration in the ConfigMap
+  `kubepilot-shield`, the agents report in `kubepilot-shield-status` (the only two objects they may touch). Bans
+  survive an agent restart; the table is removed when the agent stops. Filtering happens on the node: an attack
+  bigger than its link still has to be stopped upstream (the host's anti-DDoS, or a provider such as path.net).
+  The image now includes `nft`.
+
 - **Password reset by email** ("Forgot your password?" on the sign-in page) once an SMTP server is set in the chart
   (`email.smtp.*`, `email.from`; password in a Secret). The link carries a 256-bit token in its `#fragment` (never in
   server logs), stored hashed, valid once for one hour; a reset signs the account out everywhere and sends a

@@ -237,5 +237,18 @@
   "Open the panel": "Ouvrir le panel",
   "%s: test email": "%s : email de test",
   "The email couldn't be sent: %s": "L'email n'a pas pu être envoyé : %s",
-  "the SMTP server doesn't offer STARTTLS": "le serveur SMTP ne propose pas STARTTLS"
+  "the SMTP server doesn't offer STARTTLS": "le serveur SMTP ne propose pas STARTTLS",
+  "Mode: off, normal or strict": "Mode : off, normal ou strict",
+  "New TCP connections per second: between 1 and 1000": "Nouvelles connexions TCP par seconde : entre 1 et 1000",
+  "Simultaneous connections per IP: between 1 and 10000": "Connexions simultanées par IP : entre 1 et 10000",
+  "UDP packets per second: between 10 and 100000": "Paquets UDP par seconde : entre 10 et 100000",
+  "Ban duration: between 1 and 10080 minutes": "Durée du ban : entre 1 et 10080 minutes",
+  "Firewall rules take IPv4 addresses or ranges, like 203.0.113.7 or 198.51.100.0/24": "Les règles du pare-feu prennent des adresses ou des plages IPv4, comme 203.0.113.7 ou 198.51.100.0/24",
+  "This range is too wide: use /8 or narrower": "Cette plage est trop large : utilise un /8 ou plus étroit",
+  "Action: allow or deny": "Action : allow ou deny",
+  "Too many firewall rules (%d at most)": "Trop de règles de pare-feu (%d au maximum)",
+  "This rule already exists": "Cette règle existe déjà",
+  "The firewall and anti-DDoS protection aren't enabled: set shield.enabled in the Helm chart": "Le pare-feu et l'anti-DDoS ne sont pas activés : mets shield.enabled dans le chart Helm",
+  "Invalid IPv4 address": "Adresse IPv4 invalide",
+  "This address is never filtered (private network or allow list): a ban would do nothing": "Cette adresse n'est jamais filtrée (réseau privé ou liste blanche) : un ban n'aurait aucun effet"
 }

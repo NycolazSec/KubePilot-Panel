@@ -41,6 +41,8 @@ spec:
             - { name: KUBEPILOT_MINECRAFT_ROUTER, value: {{ .Values.minecraftRouter.enabled | toString | quote }} }
             - { name: KUBEPILOT_AUTO_SLEEP, value: {{ and .Values.minecraftRouter.enabled .Values.minecraftRouter.autoSleep.enabled | toString | quote }} }
             - { name: KUBEPILOT_ROOT_INSTALL, value: {{ .Values.serversNamespace.rootInstall | toString | quote }} }
+            - { name: KUBEPILOT_SHIELD, value: {{ .Values.shield.enabled | toString | quote }} }
+            - { name: KUBEPILOT_MINECRAFT_ROUTER_PORT, value: {{ .Values.minecraftRouter.service.port | toString | quote }} }
             {{- with .Values.serversNamespace.ingressController }}
             {{- if .namespace }}
             {{- $labels := list }}

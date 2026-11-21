@@ -32,6 +32,10 @@ rules:
   - apiGroups: [networking.k8s.io]
     resources: [networkpolicies]
     verbs: [get, create, update]
+  # the firewall configuration it publishes for the shield agents, and their status
+  - apiGroups: [""]
+    resources: [configmaps]
+    verbs: [get, create, update]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

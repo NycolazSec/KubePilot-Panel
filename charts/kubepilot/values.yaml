@@ -159,6 +159,22 @@ minecraftRouter:
     loadingMOTD: "§eStarting… come back in a minute"
     wakeMessage: "The server is waking up: reconnect in about a minute!"
 
+# Firewall and anti-DDoS, managed in Admin → Firewall (off by default). One agent per node filters the game ports
+# with nftables — the servers' ports and the Minecraft router, never SSH, the panel or the Kubernetes API:
+# firewall rules per server and for the whole panel, limits per source IP, automatic bans, an "under attack" mode.
+# The agents use the host network and the NET_ADMIN capability (nothing else): the release namespace must allow
+# it (Pod Security "privileged"). They filter what reaches the nodes; an attack bigger than a node's link has to be
+# stopped upstream (your host's anti-DDoS, or a provider such as path.net).
+shield:
+  enabled: false
+  resources:
+    requests: { cpu: 10m, memory: 24Mi }
+    limits: { cpu: 200m, memory: 96Mi }
+  # Nodes to protect: every node by default (the agent tolerates every taint)
+  nodeSelector: {}
+  tolerations:
+    - operator: Exists
+
 service:
   type: ClusterIP
   port: 80
