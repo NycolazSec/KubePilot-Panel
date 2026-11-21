@@ -141,6 +141,7 @@ func (ag *shieldAgent) sync(ctx context.Context) {
 
 func (ag *shieldAgent) apply(ctx context.Context, c *ShieldConfig) error {
 	c.sanitize()
+	c.forNode(ag.node)
 	stale := []string{}
 	keep := map[string]bool{}
 	for _, s := range c.Servers {

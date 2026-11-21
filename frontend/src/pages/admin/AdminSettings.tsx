@@ -33,6 +33,9 @@ export default function AdminSettings() {
         </Field>
         <Field label={t('adminSettings.portMin')} hint={t('adminSettings.portRangeHint')}><input type="number" className="input" value={s.portMin} onChange={(e) => setS({ ...s, portMin: +e.target.value })} /></Field>
         <Field label={t('adminSettings.portMax')}><input type="number" className="input" value={s.portMax} onChange={(e) => setS({ ...s, portMax: +e.target.value })} /></Field>
+        <Field label={t('adminSettings.hostPorts')} hint={t('adminSettings.hostPortsHint')} className="sm:col-span-2">
+          <input className="input font-mono" value={s.hostPorts ?? ''} onChange={(e) => setS({ ...s, hostPorts: e.target.value })} placeholder="25565-25600, 19132-19140, 27015-27030" />
+        </Field>
         <Field label={t('adminSettings.mcDomain')} hint={t('adminSettings.mcDomainHint')} className="sm:col-span-2">
           <input className="input font-mono" value={s.minecraftDomain ?? ''} onChange={(e) => setS({ ...s, minecraftDomain: e.target.value.trim().toLowerCase() })} placeholder={t('adminSettings.mcDomainPlaceholder')} />
         </Field>

@@ -22,6 +22,7 @@ volume and `NodePort` service, and the panel drives the cluster through the Kube
 |---|---|
 | Live dashboard: status, CPU, RAM, disk, one-click address copy | Cluster overview: nodes, CPU/RAM usage, ports, disk, backups |
 | | **Several machines**: add one with two commands, new servers go where there is room (or where you choose), each machine with its own public address |
+| | **Standard game ports** (optional): 25565, 19132, 27015… instead of 30100-30299, from a pool you define — the same port can serve one server on each machine |
 | Real-time console over WebSocket (ANSI colors, command history, search, log export) | Create servers from templates (owner, resources, variables, auto-start) |
 | Start / restart / stop / kill, crash detection (OOMKilled, exit codes, image errors) | Edit resources, image, startup command, suspend servers |
 | File manager: CodeMirror editor, drag & drop upload, zip download, archive / extract | Users & roles, two-factor authentication (TOTP + recovery codes), password reset by email, editable templates with JSON import/export |
@@ -69,6 +70,7 @@ flowchart LR
 | CPU / RAM | `metrics.k8s.io` |
 | Files, backups | the volume's directory on the node, opened with Go's traversal-safe `os.Root` — directly on the panel's node, through that node's agent on the others |
 | Several machines | each server is pinned to its node (node affinity); `NodePort` with `externalTrafficPolicy: Local`, so players use that node's address |
+| Standard ports | the firewall agent of the server's node forwards the port to its pod (nftables DNAT, players' addresses kept); game pods stay Pod Security `restricted` (no `hostPort`) |
 
 ## Security
 
@@ -142,6 +144,9 @@ A user who lost both their phone and their recovery codes can have two-factor au
 *Users*, or with `kubectl -n kubepilot-system exec deploy/kubepilot -- kubepilot user:2fa-reset --username <name>`.
 Players connect to `<node address>:<port>`; game ports are NodePorts in `30100-30299` (configurable in the admin
 settings, within `30000-32767`). Open that range (TCP + UDP) if a firewall sits in front of the node.
+With the firewall agents (`shield.enabled`), servers can also get **standard ports**: set a pool in *Admin* →
+*Settings* (e.g. `25565-25600, 19132-19140, 27015-27030`, ports nothing else uses on the machines) and tick
+*Standard ports* on a server — it gets the game's usual port when it's free on its machine.
 
 ### More machines
 
@@ -188,8 +193,8 @@ docs/       logo and banner
 ## Roadmap
 
 v0.2 brought Pterodactyl parity (eggs, SFTP, databases, S3 backups); v0.3 the one-command installer, auto-sleep, the
-firewall and anti-DDoS, and password reset by email. Coming next (v0.4): several machines (in progress), standard
-game ports, Prometheus metrics, email notifications, server transfers.
+firewall and anti-DDoS, and password reset by email. Coming next (v0.4): several machines and standard game ports (in
+progress), Prometheus metrics, email notifications, server transfers.
 See the full [roadmap](ROADMAP.md).
 
 ## Contributing

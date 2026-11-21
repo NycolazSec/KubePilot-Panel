@@ -19,11 +19,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   keys derived on both ends from a Secret the chart creates; a NetworkPolicy lets only the panel in; no Kubernetes
   credentials. On the panel's own node nothing changes: the volumes are still opened directly.
 - Fresh k3s installs use WireGuard between machines (`--flannel-backend=wireguard-native`) when the kernel has it.
+- **Standard game ports** (with the firewall agents): a pool of ports in *Admin* → *Settings* (`25565-25600,
+  19132-19140, 27015-27030`…), and a *Standard ports* option per server. A server gets the game's usual port when
+  it's free on its machine (else another one of the pool); a port number is unique per machine, not in the whole
+  cluster. The firewall agent of the machine forwards the port to the server's pod (nftables DNAT, players'
+  addresses kept, protected like the other game ports); game pods stay Pod Security `restricted`. Ports something
+  already answers on are skipped. Switching a stopped server between NodePorts and standard ports gives it new ports.
 
 ### Upgrading
 
 - The panel gets the right to list the pods of its own namespace (to find the node agents), and its pod mounts the
   agents' token. Single-node installs behave as before: servers aren't pinned to a node until there are several.
+- The ports table of the database is rebuilt on the first start (every port kept), so that a standard port can
+  be used once per machine.
 
 ## [0.3.0] - 2026-11-21
 

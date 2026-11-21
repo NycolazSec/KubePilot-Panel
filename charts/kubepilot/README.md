@@ -45,7 +45,7 @@ data is ever lost by accident. Delete them by hand if you really want to.
 | `sftp.hostPort` | `true` | Open `sftp.port` on the panel's node, keeping client IPs (k3s ServiceLB would hide them) |
 | `sftp.service.type` | `LoadBalancer` | With `sftp.hostPort=false`: SFTP Service type (`externalTrafficPolicy: Local`) |
 | `shield.enabled` | `false` | Firewall and anti-DDoS on the game ports: one agent per node (DaemonSet, host network, `NET_ADMIN` only, nftables). Managed in *Admin* → *Firewall*; the release namespace must allow Pod Security `privileged` |
-| `shield.nodeSelector` / `shield.tolerations` | every node | Nodes to protect |
+| `shield.nodeSelector` / `shield.tolerations` | every node | Nodes to protect (the agents also open the **standard ports** of the servers on their node) |
 | `nodeAgent.enabled` | `true` | One agent per node serves the game files of its node to the panel (several machines): SSH with keys derived from the `<release>-node` Secret, NetworkPolicy, no Kubernetes credentials |
 | `nodeAgent.nodeSelector` / `nodeAgent.tolerations` | untainted nodes | Nodes where game servers may run |
 | `nodeAgent.resources` | 16Mi → 256Mi | Agent requests / limits |

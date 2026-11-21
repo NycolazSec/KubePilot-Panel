@@ -18,6 +18,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/validation"
 )
 
 // Shield: firewall and anti-DDoS, optional (chart value shield.enabled).
@@ -220,25 +221,37 @@ func (db *DB) DeleteFirewallRule(id int64, serverID string) (*FirewallRule, erro
 
 // ShieldConfig is what every node applies (ConfigMap kubepilot-shield, key config.json).
 type ShieldConfig struct {
-	Rev        string         `json:"rev"` // hash of everything below: the agents report the one they applied
-	Mode       string         `json:"mode"`
-	TCPRate    int            `json:"tcpRate"`
-	TCPBurst   int            `json:"tcpBurst"`
-	Conns      int            `json:"conns"`
-	UDPRate    int            `json:"udpRate"`
-	UDPBurst   int            `json:"udpBurst"`
-	BanSeconds int            `json:"banSeconds"`
-	TCPPorts   []int          `json:"tcpPorts"`
-	UDPPorts   []int          `json:"udpPorts"`
-	Allow      []string       `json:"allow"` // never filtered
-	Deny       []string       `json:"deny"`  // always blocked
-	Servers    []ShieldServer `json:"servers"`
-	Actions    []ShieldAction `json:"actions"` // manual bans and unbans, applied once by each agent
+	Rev        string          `json:"rev"` // hash of everything below: the agents report the one they applied
+	Mode       string          `json:"mode"`
+	TCPRate    int             `json:"tcpRate"`
+	TCPBurst   int             `json:"tcpBurst"`
+	Conns      int             `json:"conns"`
+	UDPRate    int             `json:"udpRate"`
+	UDPBurst   int             `json:"udpBurst"`
+	BanSeconds int             `json:"banSeconds"`
+	TCPPorts   []int           `json:"tcpPorts"`
+	UDPPorts   []int           `json:"udpPorts"`
+	Allow      []string        `json:"allow"` // never filtered
+	Deny       []string        `json:"deny"`  // always blocked
+	Servers    []ShieldServer  `json:"servers"`
+	Actions    []ShieldAction  `json:"actions"`  // manual bans and unbans, applied once by each agent
+	Forwards   []ShieldForward `json:"forwards"` // standard ports: node port → the server's pod on that node
+}
+
+// ShieldForward sends a standard port of a node to the pod of its server (DNAT, players' addresses kept): game pods
+// can't open host ports themselves (Pod Security restricted), the node's agent does it for them.
+type ShieldForward struct {
+	Node   string `json:"node"`
+	Proto  string `json:"proto"` // tcp, udp
+	Port   int    `json:"port"`
+	Addr   string `json:"addr"` // the pod's IPv4 address
+	Target int    `json:"target"`
 }
 
 // ShieldServer: the firewall rules of one server, on its own ports. With an allow list, only those IPs get in.
 type ShieldServer struct {
 	ID    string   `json:"id"`
+	Node  string   `json:"node,omitempty"` // standard ports: only the agent of this node applies the rules (the same port may belong to another server elsewhere)
 	TCP   []int    `json:"tcp"`
 	UDP   []int    `json:"udp"`
 	Allow []string `json:"allow"`
@@ -254,10 +267,23 @@ type ShieldAction struct {
 }
 
 // buildShieldConfig turns the panel's data into the agents' configuration. routerPort: 0 without the router.
-func buildShieldConfig(st ShieldSettings, allocs []*Allocation, rules []*FirewallRule, routerPort int, actions []ShieldAction) *ShieldConfig {
+func buildShieldConfig(st ShieldSettings, allocs []*Allocation, rules []*FirewallRule, routerPort int, actions []ShieldAction, fwd []ShieldForward) *ShieldConfig {
 	tcp, conns, udp, ban := st.effective()
 	c := &ShieldConfig{Mode: st.Mode, TCPRate: tcp, TCPBurst: tcp * 2, Conns: conns, UDPRate: udp, UDPBurst: udp * 2, BanSeconds: ban,
-		Allow: []string{}, Deny: []string{}, Servers: []ShieldServer{}, Actions: actions}
+		Allow: []string{}, Deny: []string{}, Servers: []ShieldServer{}, Actions: actions, Forwards: fwd}
+	if c.Forwards == nil {
+		c.Forwards = []ShieldForward{}
+	}
+	sort.Slice(c.Forwards, func(i, j int) bool {
+		a, b := c.Forwards[i], c.Forwards[j]
+		if a.Node != b.Node {
+			return a.Node < b.Node
+		}
+		if a.Proto != b.Proto {
+			return a.Proto < b.Proto
+		}
+		return a.Port < b.Port
+	})
 	if c.Actions == nil {
 		c.Actions = []ShieldAction{}
 	}
@@ -273,6 +299,9 @@ func buildShieldConfig(st ShieldSettings, allocs []*Allocation, rules []*Firewal
 		return servers[id]
 	}
 	for _, a := range allocs {
+		if a.Host && a.Node != "" {
+			srv(a.ServerID).Node = a.Node
+		}
 		for _, p := range protocols(a.Protocol) {
 			if p == corev1.ProtocolUDP {
 				udpPorts[a.Port] = true
@@ -313,6 +342,12 @@ func buildShieldConfig(st ShieldSettings, allocs []*Allocation, rules []*Firewal
 	return c
 }
 
+// forNode keeps what this node applies: the rules of a server on standard ports, and its forwards, only on its node.
+func (c *ShieldConfig) forNode(node string) {
+	c.Servers = slices.DeleteFunc(c.Servers, func(s ShieldServer) bool { return s.Node != "" && s.Node != node })
+	c.Forwards = slices.DeleteFunc(c.Forwards, func(f ShieldForward) bool { return f.Node != node })
+}
+
 func sortedKeys(m map[int]bool) []int {
 	out := make([]int, 0, len(m))
 	for k := range m {
@@ -340,7 +375,7 @@ func (c *ShieldConfig) sanitize() {
 	c.Allow, c.Deny = cleanCIDRs(c.Allow), cleanCIDRs(c.Deny)
 	servers := c.Servers[:0]
 	for _, s := range c.Servers {
-		if !shieldServerIDRe.MatchString(s.ID) {
+		if !shieldServerIDRe.MatchString(s.ID) || (s.Node != "" && len(validation.IsDNS1123Subdomain(s.Node)) > 0) {
 			continue
 		}
 		s.TCP, s.UDP, s.Allow, s.Deny = cleanPorts(s.TCP), cleanPorts(s.UDP), cleanCIDRs(s.Allow), cleanCIDRs(s.Deny)
@@ -349,6 +384,20 @@ func (c *ShieldConfig) sanitize() {
 		}
 	}
 	c.Servers = servers
+	fwd := c.Forwards[:0]
+	seenFwd := map[string]bool{}
+	for _, f := range c.Forwards {
+		ip, err := netip.ParseAddr(f.Addr)
+		key := f.Node + "/" + f.Proto + "/" + strconv.Itoa(f.Port)
+		if err != nil || !ip.Is4() || (f.Proto != "tcp" && f.Proto != "udp") || f.Port < 1 || f.Port > 65535 ||
+			f.Target < 1 || f.Target > 65535 || len(validation.IsDNS1123Subdomain(f.Node)) > 0 || seenFwd[key] {
+			continue
+		}
+		seenFwd[key] = true
+		f.Addr = ip.String()
+		fwd = append(fwd, f)
+	}
+	c.Forwards = fwd
 	actions := c.Actions[:0]
 	for _, x := range c.Actions {
 		ip, err := netip.ParseAddr(x.IP)
@@ -454,7 +503,10 @@ func nftScript(table string, c *ShieldConfig, stale []string) string {
 	w("add chain %s pre { type filter hook prerouting priority -150; policy accept; }", T)
 	w("add chain %s game_tcp", T)
 	w("add chain %s game_udp", T)
-	for _, ch := range []string{"pre", "game_tcp", "game_udp"} {
+	// standard ports: DNAT to the server's pod, before kube-proxy's NAT; also for connections made on the node
+	w("add chain %s ports { type nat hook prerouting priority -110; policy accept; }", T)
+	w("add chain %s ports_local { type nat hook output priority -110; policy accept; }", T)
+	for _, ch := range []string{"pre", "game_tcp", "game_udp", "ports", "ports_local"} {
 		w("flush chain %s %s", T, ch)
 	}
 	for _, n := range stale {
@@ -470,6 +522,12 @@ func nftScript(table string, c *ShieldConfig, stale []string) string {
 	fill("blocked", c.Deny)
 	fill("tcp_ports", intStrings(c.TCPPorts))
 	fill("udp_ports", intStrings(c.UDPPorts))
+
+	for _, f := range c.Forwards {
+		for _, ch := range []string{"ports", "ports_local"} {
+			w("add rule %s %s meta nfproto ipv4 fib daddr type local %s dport %d dnat ip to %s:%d", T, ch, f.Proto, f.Port, f.Addr, f.Target)
+		}
+	}
 
 	w("add rule %s pre ct direction reply accept", T) // answers to connections made from inside
 	w("add rule %s pre ip saddr @trusted accept", T)
@@ -608,6 +666,34 @@ func (a *App) addShieldAction(op, ip string, seconds int) {
 	a.shieldChanged()
 }
 
+// shieldForwards: the standard ports of the running, public servers, to their pods.
+func (a *App) shieldForwards(allocs []*Allocation) []ShieldForward {
+	out := []ShieldForward{}
+	if a.kube == nil || a.kube.pods == nil {
+		return out
+	}
+	servers := map[string]*Server{}
+	if list, err := a.db.AllServers(); err == nil {
+		for _, s := range list {
+			servers[s.ID] = s
+		}
+	}
+	for _, al := range allocs {
+		s := servers[al.ServerID]
+		if !al.Host || s == nil || s.InternalOnly {
+			continue
+		}
+		pod, err := a.kube.pods.Pods(a.kube.ns).Get(podName(s.ID))
+		if err != nil || pod.Status.Phase != corev1.PodRunning || pod.Status.PodIP == "" || pod.DeletionTimestamp != nil {
+			continue
+		}
+		for _, p := range protocols(al.Protocol) {
+			out = append(out, ShieldForward{Node: pod.Spec.NodeName, Proto: strings.ToLower(string(p)), Port: al.Port, Addr: pod.Status.PodIP, Target: al.TargetPort})
+		}
+	}
+	return out
+}
+
 func (a *App) publishShield(ctx context.Context) error {
 	allocs, err := a.db.Allocations("")
 	if err != nil {
@@ -621,7 +707,7 @@ func (a *App) publishShield(ctx context.Context) error {
 	if a.cfg.MinecraftRouter {
 		router = a.cfg.RouterPort
 	}
-	c := buildShieldConfig(a.db.ShieldSettings(), allocs, rules, router, a.shieldActions())
+	c := buildShieldConfig(a.db.ShieldSettings(), allocs, rules, router, a.shieldActions(), a.shieldForwards(allocs))
 	b, _ := json.Marshal(c)
 	a.shield.mu.Lock()
 	same := string(b) == a.shield.last

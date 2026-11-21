@@ -37,6 +37,6 @@ Ideas and votes are welcome in the [issues](https://github.com/NycolazSec/KubePi
 - [ ] Notifications by email
 - [x] **Multi-node**: add a machine by joining it to the cluster; servers are scheduled where there is room
 - [ ] One-click **server transfer** between nodes
-- [ ] Standard game ports (e.g. `25565`) instead of NodePorts
+- [x] Standard game ports (e.g. `25565`) instead of NodePorts
 - [ ] Prometheus metrics, Grafana dashboard, Discord alerts
 - [ ] Native integration with the [KubePilot Discord bot](https://github.com/NycolazSec/KubePilot)

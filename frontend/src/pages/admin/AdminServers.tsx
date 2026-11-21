@@ -1,7 +1,7 @@
 import { Boxes, ExternalLink, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { del, get, NodesInfo, NodeView, post, put, Server, sortTemplates, Template, User } from '../../api';
+import { del, get, NodesInfo, NodeView, post, put, Server, Settings, sortTemplates, Template, User } from '../../api';
 import { Button, Card, Empty, ErrorBox, Field, IconButton, Loading, Modal, StatusPill, Toggle, useLoad, useUI } from '../../components/ui';
 import { bytes, cpuLabel, mb } from '../../lib/format';
 import TemplateIcon from '../../components/TemplateIcon';
@@ -10,10 +10,10 @@ import { t, tx } from '../../i18n';
 type Form = {
   id?: string; name: string; description: string; ownerId: number; templateId: number; image: string; startup?: string;
   memory: number; cpu: number; disk: number; backupLimit: number; databaseLimit: number; allocationLimit: number; suspended: boolean;
-  env: Record<string, string>; startAfterInstall: boolean; node: string;
+  env: Record<string, string>; startAfterInstall: boolean; node: string; hostPorts: boolean;
 };
 
-function ServerForm({ form, setForm, users, templates, nodes }: { form: Form; setForm: (f: Form) => void; users: User[]; templates: Template[]; nodes: NodeView[] }) {
+function ServerForm({ form, setForm, users, templates, nodes, hostPorts }: { form: Form; setForm: (f: Form) => void; users: User[]; templates: Template[]; nodes: NodeView[]; hostPorts: string }) {
   const tpl = templates.find((x) => x.id === form.templateId);
   const set = (k: keyof Form, v: any) => setForm({ ...form, [k]: v });
   const pickTemplate = (id: number) => {
@@ -86,6 +86,12 @@ function ServerForm({ form, setForm, users, templates, nodes }: { form: Form; se
           </div>
         </details>
       )}
+      {(hostPorts || form.hostPorts) && (
+        <div>
+          <Toggle checked={form.hostPorts} onChange={(v) => set('hostPorts', v)} label={t('adminServers.hostPorts')} />
+          <p className="mt-1 pl-[42px] text-xs text-ink-400">{form.id ? t('adminServers.hostPortsEditHint') : t('adminServers.hostPortsHint', { pool: hostPorts || '—' })}</p>
+        </div>
+      )}
       {form.id ? (
         <>
           <Field label={t('startup.command')} hint={t('adminServers.startupHint')}>
@@ -107,6 +113,7 @@ export default function AdminServers() {
   const templates = useLoad(() => get<Template[]>('/admin/templates').then(sortTemplates));
   const nodes = useLoad(() => get<NodesInfo>('/admin/nodes').then((r) => r.nodes).catch(() => [] as NodeView[]));
   const several = (nodes.data?.length ?? 0) > 1;
+  const settings = useLoad(() => get<Settings>('/admin/settings').catch(() => null));
   const [form, setForm] = useState<Form | null>(null);
   const [busy, setBusy] = useState(false);
   const [q, setQ] = useState('');
@@ -116,9 +123,9 @@ export default function AdminServers() {
   const openCreate = () => {
     const first = templates.data?.[0];
     if (!first || !users.data?.length) return;
-    setForm({ name: '', description: '', ownerId: users.data[0].id, templateId: first.id, image: first.images[0]?.image, memory: first.defaultMemory, cpu: first.defaultCpu, disk: first.defaultDisk, backupLimit: 3, databaseLimit: 1, allocationLimit: 1, suspended: false, env: {}, startAfterInstall: true, node: '' });
+    setForm({ name: '', description: '', ownerId: users.data[0].id, templateId: first.id, image: first.images[0]?.image, memory: first.defaultMemory, cpu: first.defaultCpu, disk: first.defaultDisk, backupLimit: 3, databaseLimit: 1, allocationLimit: 1, suspended: false, env: {}, startAfterInstall: true, node: '', hostPorts: false });
   };
-  const openEdit = (s: Server) => setForm({ id: s.id, name: s.name, description: s.description, ownerId: s.ownerId, templateId: s.templateId, image: s.image, startup: s.startup, memory: s.memory, cpu: s.cpu, disk: s.disk, backupLimit: s.backupLimit, databaseLimit: s.databaseLimit, allocationLimit: s.allocationLimit, suspended: s.suspended, env: s.env, startAfterInstall: false, node: s.node || '' });
+  const openEdit = (s: Server) => setForm({ id: s.id, name: s.name, description: s.description, ownerId: s.ownerId, templateId: s.templateId, image: s.image, startup: s.startup, memory: s.memory, cpu: s.cpu, disk: s.disk, backupLimit: s.backupLimit, databaseLimit: s.databaseLimit, allocationLimit: s.allocationLimit, suspended: s.suspended, env: s.env, startAfterInstall: false, node: s.node || '', hostPorts: !!s.hostPorts });
 
   const save = async () => {
     if (!form) return;
@@ -178,7 +185,7 @@ export default function AdminServers() {
       </Card>
       <Modal open={!!form} onClose={() => setForm(null)} wide title={form?.id ? t('adminServers.editTitle', { name: form.name }) : t('adminServers.create')}
         footer={<><Button variant="ghost" onClick={() => setForm(null)}>{t('common.cancel')}</Button><Button variant="primary" loading={busy} onClick={save}>{form?.id ? t('common.save') : t('adminServers.createInstall')}</Button></>}>
-        {form && users.data && templates.data && <ServerForm form={form} setForm={setForm} users={users.data} templates={templates.data} nodes={nodes.data || []} />}
+        {form && users.data && templates.data && <ServerForm form={form} setForm={setForm} users={users.data} templates={templates.data} nodes={nodes.data || []} hostPorts={settings.data?.hostPorts || ''} />}
       </Modal>
     </>
   );

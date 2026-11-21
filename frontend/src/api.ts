@@ -46,7 +46,7 @@ export interface Me { user: User; panelName: string; version: string; twoFactorR
 export type Status = 'offline' | 'installing' | 'starting' | 'running' | 'stopping' | 'crashed' | 'sleeping';
 export interface State { status: Status; reason?: string; startedAt?: number; restarts: number; installError?: boolean; cpu: number; memory: number }
 
-export interface Allocation { port: number; serverId: string; protocol: string; name: string; targetPort: number; isPrimary: boolean; notes: string }
+export interface Allocation { port: number; serverId: string; protocol: string; name: string; targetPort: number; isPrimary: boolean; notes: string; host?: boolean; node?: string }
 
 export interface Server {
   id: string; name: string; description: string; ownerId: number; templateId: number; image: string; startup: string;
@@ -57,6 +57,7 @@ export interface Server {
   hostname: string; nodeAddress: string; routerDomain: string; internalAddress: string; internalOnly: boolean;
   autoSleep: number; asleep: boolean; autoSleepAvailable: boolean; // auto-sleep: minutes without players (0 = off)
   node?: string; nodeName?: string; // node it was placed on / runs on
+  hostPorts?: boolean; // standard ports on its node instead of NodePorts
 }
 
 export interface FileEntry { name: string; dir: boolean; size: number; mode: string; modified: number; symlink: boolean }
@@ -84,7 +85,7 @@ export interface ShieldInfo {
   nodes?: ShieldNode[]; counters?: Record<string, number>; bans?: { ip: string; expires: number }[]; banCount?: number; since?: number; ports?: number; router?: boolean;
 }
 
-export interface Settings { panelName: string; publicHost: string; portMin: number; portMax: number; timezone: string; twoFactorPolicy: '' | 'admins' | 'everyone'; minecraftDomain: string }
+export interface Settings { panelName: string; publicHost: string; portMin: number; portMax: number; timezone: string; twoFactorPolicy: '' | 'admins' | 'everyone'; minecraftDomain: string; hostPorts?: string }
 export interface NodeInfo { name: string; ready: boolean; version: string; os: string; cpuCap: number; memCap: number; cpu: number; mem: number; pods: number; address: string }
 export interface NodeView extends NodeInfo {
   internalIP: string; externalIP: string; controlPlane: boolean; cordoned: boolean; panel: boolean; agent: boolean; arch: string;

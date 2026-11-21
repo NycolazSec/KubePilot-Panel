@@ -155,6 +155,7 @@ func (a *App) handleExposure(w http.ResponseWriter, r *http.Request, c *Ctx) {
 		writeErr(w, r, err)
 		return
 	}
+	a.shieldChanged() // standard ports open or close with it
 	c.log(a, "server.exposure", map[bool]string{true: "internal only", false: "public"}[in.InternalOnly])
 	writeJSON(w, 200, map[string]bool{"internalOnly": in.InternalOnly})
 }

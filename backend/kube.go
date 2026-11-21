@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/netip"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -34,6 +35,7 @@ import (
 	batchlisters "k8s.io/client-go/listers/batch/v1"
 	corelisters "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/remotecommand"
 )
@@ -85,9 +87,10 @@ type Kube struct {
 	sts  appslisters.StatefulSetLister
 	jobs batchlisters.JobLister
 
-	nodeName  string    // the panel's node: its volumes are mounted, the others' are reached through their agent
-	nodes     *nodePool // nil: node agents turned off
-	nodeCache nodeCache
+	nodeName    string    // the panel's node: its volumes are mounted, the others' are reached through their agent
+	nodes       *nodePool // nil: node agents turned off
+	nodeCache   nodeCache
+	onPodChange func() // called when a pod of the servers' namespace changes (set before start)
 
 	mu      sync.RWMutex
 	metrics map[string]Usage
@@ -133,6 +136,19 @@ func (k *Kube) start(ctx context.Context) error {
 		informers.WithNamespace(k.ns),
 		informers.WithTweakListOptions(func(o *metav1.ListOptions) { o.LabelSelector = lblManaged + "=" + managedBy }))
 	k.pods = f.Core().V1().Pods().Lister()
+	if k.onPodChange != nil { // a server's pod got (or lost) its address: the standard ports follow it
+		_, _ = f.Core().V1().Pods().Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+			AddFunc: func(any) { k.onPodChange() },
+			UpdateFunc: func(o, n any) {
+				op, ok1 := o.(*corev1.Pod)
+				np, ok2 := n.(*corev1.Pod)
+				if !ok1 || !ok2 || op.Status.PodIP != np.Status.PodIP || op.Status.Phase != np.Status.Phase || (op.DeletionTimestamp == nil) != (np.DeletionTimestamp == nil) {
+					k.onPodChange()
+				}
+			},
+			DeleteFunc: func(any) { k.onPodChange() },
+		})
+	}
 	k.sts = f.Apps().V1().StatefulSets().Lister()
 	k.jobs = f.Batch().V1().Jobs().Lister()
 	f.Start(ctx.Done())
@@ -538,23 +554,35 @@ func (k *Kube) EnsurePVC(ctx context.Context, s *Server) error {
 	return err
 }
 
-func (k *Kube) EnsureService(ctx context.Context, sp Spec) error {
-	api := k.cs.CoreV1().Services(k.ns)
-	name := stsName(sp.Server.ID)
+// servicePorts: the ports of a server's Service, and whether they are NodePorts. NodePorts are published by the
+// Service; standard ports by the node agents (shield), which forward them to the pod: the Service then only gives
+// them a cluster address (the owner's other servers, mc-router).
+func (sp Spec) servicePorts() ([]corev1.ServicePort, bool) {
+	nodePorts := !sp.Server.InternalOnly && slices.ContainsFunc(sp.Allocs, func(a *Allocation) bool { return !a.Host })
 	var ports []corev1.ServicePort
 	for _, a := range sp.Allocs {
+		if a.Host && nodePorts {
+			continue // never a NodePort for a standard port
+		}
 		for _, proto := range protocols(a.Protocol) {
 			name := fmt.Sprintf("%s-%d", strings.ToLower(string(proto)), a.Port)
 			if sp.Routed != "" && a.IsPrimary && proto == corev1.ProtocolTCP {
 				name = "mc-router" // the port mc-router connects to
 			}
 			sport := corev1.ServicePort{Name: name, Protocol: proto, Port: int32(a.Port), TargetPort: intstr.FromInt(a.TargetPort)}
-			if !sp.Server.InternalOnly {
+			if nodePorts {
 				sport.NodePort = int32(a.Port)
 			}
 			ports = append(ports, sport)
 		}
 	}
+	return ports, nodePorts
+}
+
+func (k *Kube) EnsureService(ctx context.Context, sp Spec) error {
+	api := k.cs.CoreV1().Services(k.ns)
+	name := stsName(sp.Server.ID)
+	ports, nodePorts := sp.servicePorts()
 	cur, err := api.Get(ctx, name, metav1.GetOptions{})
 	if len(ports) == 0 {
 		if err == nil {
@@ -568,7 +596,7 @@ func (k *Kube) EnsureService(ctx context.Context, sp Spec) error {
 		Ports:                 ports,
 		ExternalTrafficPolicy: corev1.ServiceExternalTrafficPolicyLocal,
 	}
-	if sp.Server.InternalOnly { // reachable through its ClusterIP only (the owner's other servers)
+	if !nodePorts { // reachable through its ClusterIP (the owner's other servers), and its standard ports if any
 		spec.Type, spec.ExternalTrafficPolicy = corev1.ServiceTypeClusterIP, ""
 	}
 	annotations := routerAnnotations(sp)

@@ -73,6 +73,7 @@ export default function Network() {
                         <Copy className="h-3.5 w-3.5 text-ink-400" />{data.host}:{a.port}
                       </button>
                       {a.isPrimary && <Badge color="violet"><Star className="h-3 w-3" /> {t('network.primary')}</Badge>}
+                      {a.host && <span className="ml-1.5"><Badge color="blue">{t('network.standard')}</Badge></span>}
                     </td>
                     <td className="px-4 py-3 uppercase text-ink-300">{a.protocol}</td>
                     <td className="px-4 py-3 font-mono text-ink-400">{a.targetPort}</td>
