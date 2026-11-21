@@ -11,9 +11,11 @@ Open the panel locally:
   kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "kubepilot.fullname" . }} 8080:{{ .Values.service.port }}
 {{- end }}
 
-Create the first admin account:
-  kubectl -n {{ .Release.Namespace }} exec deploy/{{ include "kubepilot.fullname" . }} -- \
-    kubepilot user:create --username admin --email you@example.com --password 'change-me-please' --admin
+First start: open the panel and create the administrator with the setup token it printed in its logs:
+  kubectl -n {{ .Release.Namespace }} logs deploy/{{ include "kubepilot.fullname" . }} | grep "Setup token"
+(or from the command line, then type the password:
+  kubectl -n {{ .Release.Namespace }} exec -i deploy/{{ include "kubepilot.fullname" . }} -- \
+    kubepilot user:create --username admin --email you@example.com --password-stdin --admin)
 
 Players connect to <node address>:<port>. Game ports are NodePorts (30100-30299 by default, configurable in the
 admin settings): open that range (TCP + UDP) if a firewall sits in front of your nodes.

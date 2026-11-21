@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"embed"
 	"errors"
@@ -126,6 +127,7 @@ func main() {
 		log.Fatalf("kubernetes: %v", err)
 	}
 	app := newApp(cfg, db, kube)
+	app.initSetup() // no account yet: prints the token to create the administrator from the browser
 	if err := app.seedTemplates(); err != nil {
 		log.Fatalf("seed templates: %v", err)
 	}
@@ -201,10 +203,14 @@ func runCLI(db *DB, args []string) error {
 		username := fs.String("username", "", "")
 		email := fs.String("email", "", "")
 		password := fs.String("password", "", "")
+		fromStdin := fs.Bool("password-stdin", false, "read the password from the first line of stdin")
 		admin := fs.Bool("admin", false, "")
 		_ = fs.Parse(args[1:])
+		if *fromStdin {
+			*password = readPasswordLine()
+		}
 		if *username == "" || *email == "" || *password == "" {
-			return errors.New("usage: user:create --username U --email E --password P [--admin]")
+			return errors.New("usage: user:create --username U --email E (--password P | --password-stdin) [--admin]")
 		}
 		u, err := db.CreateUser(*username, *email, *password, *admin)
 		if err != nil {
@@ -215,7 +221,11 @@ func runCLI(db *DB, args []string) error {
 		fs := flag.NewFlagSet("user:password", flag.ExitOnError)
 		username := fs.String("username", "", "")
 		password := fs.String("password", "", "")
+		fromStdin := fs.Bool("password-stdin", false, "read the password from the first line of stdin")
 		_ = fs.Parse(args[1:])
+		if *fromStdin {
+			*password = readPasswordLine()
+		}
 		u, err := db.UserByLogin(*username)
 		if err != nil {
 			return err
@@ -237,10 +247,35 @@ func runCLI(db *DB, args []string) error {
 		}
 		db.LogActivity("", nil, "", "admin.user.2fa.reset", u.Username)
 		fmt.Println("Two-factor authentication disabled for", u.Username)
+	case "user:list":
+		rows, err := db.Query(`SELECT username, email, is_admin FROM users ORDER BY id`)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var name, email string
+			var admin bool
+			if err := rows.Scan(&name, &email, &admin); err != nil {
+				return err
+			}
+			role := "user"
+			if admin {
+				role = "admin"
+			}
+			fmt.Printf("%s\t%s\t%s\n", name, email, role)
+		}
+		return rows.Err()
 	default:
-		return fmt.Errorf("unknown command %q (user:create, user:password, user:2fa-reset)", args[0])
+		return fmt.Errorf("unknown command %q (user:create, user:password, user:2fa-reset, user:list)", args[0])
 	}
 	return nil
+}
+
+// readPasswordLine reads a password from stdin (so it never shows in a command line or the process list).
+func readPasswordLine() string {
+	line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+	return strings.TrimRight(line, "\r\n")
 }
 
 func atoiOr(s string, def int) int {

@@ -46,6 +46,7 @@ These endpoints need no authentication; they are rate-limited per IP (10 per 15 
 |---|---|---|
 | `GET` | `/auth/options` | `{"passwordReset": true, "panelName": "…"}`: whether the panel can send reset emails |
 | `POST` | `/auth/forgot` | `{"login": "username or email"}` → always `{"ok": true}` (no hint whether the account exists); the email links to `<publicURL>/reset-password#<token>` |
+| `POST` | `/setup` | First start only (the panel has no account): `{"token": "<setup token from the logs>", "username", "email", "password"}` creates the administrator; `GET /auth/options` says `"setup": true` while it's possible |
 | `POST` | `/auth/reset` | `{"token": "…", "password": "…"}` → the token works once, for one hour; every session of the account is signed out |
 
 ## Servers

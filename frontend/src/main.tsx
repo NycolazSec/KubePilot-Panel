@@ -12,6 +12,7 @@ import Layout from './components/Layout';
 import Login from './pages/Login';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
+import Setup from './pages/Setup';
 import Dashboard from './pages/Dashboard';
 import Account from './pages/Account';
 import ServerLayout from './pages/server/ServerLayout';
@@ -74,6 +75,7 @@ function App() {
           <Routes>
             <Route path="forgot-password" element={<ForgotPassword />} />
             <Route path="reset-password" element={<ResetPassword />} />
+            <Route path="setup" element={<Setup />} />
             <Route path="*" element={<Login />} />
           </Routes>
         ) : me.twoFactorRequired ? (

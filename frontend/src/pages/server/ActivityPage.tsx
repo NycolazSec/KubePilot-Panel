@@ -74,6 +74,7 @@ const labels: Record<string, string> = {
   'account.2fa.disable': t('act.account.2fa.disable'),
   'account.2fa.recovery': t('act.account.2fa.recovery'),
   'admin.user.2fa.reset': t('act.admin.user.2fa.reset'),
+  'auth.setup': t('act.auth.setup'),
   'server.firewall.rule.add': t('act.server.firewall.rule.add'),
   'server.firewall.rule.delete': t('act.server.firewall.rule.delete'),
   'admin.firewall.update': t('act.admin.firewall.update'),

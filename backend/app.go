@@ -52,6 +52,7 @@ type App struct {
 	idle    idleTracker
 
 	shield shieldState // firewall / anti-DDoS configuration published to the agents (see shield.go)
+	setup  setupState  // first start: token to create the administrator from the browser (see setup.go)
 }
 
 func newApp(cfg Config, db *DB, kube *Kube) *App {
@@ -383,6 +384,7 @@ func (a *App) routes() http.Handler {
 	m.HandleFunc("POST /api/auth/logout", a.handleLogout)
 	m.HandleFunc("GET /api/auth/options", a.handleAuthOptions)
 	m.HandleFunc("POST /api/auth/forgot", a.handleForgot)
+	m.HandleFunc("POST /api/setup", a.handleSetup)
 	m.HandleFunc("POST /api/auth/reset", a.handleReset)
 	m.HandleFunc("GET /api/auth/me", a.authed(a.handleMe))
 	m.HandleFunc("PUT /api/account/password", a.authed(a.handlePassword))
