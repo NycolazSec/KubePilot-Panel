@@ -74,6 +74,15 @@ export interface Template {
   features?: string[]; configFiles?: ConfigFile[]; startupEnv?: boolean; installAsRoot?: boolean; installShell?: string; installPath?: string; stopCommand?: string; source?: string;
 }
 
+export interface FirewallRule { id: number; serverId?: string; cidr: string; action: 'allow' | 'deny'; note: string; createdAt: number }
+export interface ShieldSettings { mode: 'off' | 'normal' | 'strict'; tcpRate: number; conns: number; udpRate: number; banMinutes: number }
+export interface ShieldNode { node: string; updated: number; since: number; version: string; error: string; stale: boolean; synced: boolean }
+export interface ShieldInfo {
+  available: boolean; settings: ShieldSettings; defaults: ShieldSettings; rules: FirewallRule[];
+  effective: { tcpRate: number; conns: number; udpRate: number; banMinutes: number };
+  nodes?: ShieldNode[]; counters?: Record<string, number>; bans?: { ip: string; expires: number }[]; banCount?: number; since?: number; ports?: number; router?: boolean;
+}
+
 export interface Settings { panelName: string; publicHost: string; portMin: number; portMax: number; timezone: string; twoFactorPolicy: '' | 'admins' | 'everyone'; minecraftDomain: string }
 export interface NodeInfo { name: string; ready: boolean; version: string; os: string; cpuCap: number; memCap: number; cpu: number; mem: number; pods: number; address: string }
 

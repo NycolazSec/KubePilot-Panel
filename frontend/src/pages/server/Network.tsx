@@ -1,6 +1,7 @@
-import { Copy, Network as NetIcon, Plus, Star, Trash2 } from 'lucide-react';
+import { Copy, Network as NetIcon, Plus, Shield, Star, Trash2 } from 'lucide-react';
 import { useState } from 'react';
-import { Allocation, del, get, post, put } from '../../api';
+import { Allocation, del, FirewallRule, get, post, put } from '../../api';
+import FirewallRules from '../../components/FirewallRules';
 import { Badge, Button, Card, Empty, ErrorBox, IconButton, Loading, Toggle, useLoad, useUI } from '../../components/ui';
 import { copy } from '../../lib/format';
 import { useServer } from './ServerLayout';
@@ -93,7 +94,37 @@ export default function Network() {
         </>
       )}
     </Card>
+    <FirewallCard />
     </div>
+  );
+}
+
+// Firewall of this server (chart option shield.enabled): addresses refused, or only some accepted, on its ports.
+function FirewallCard() {
+  const { server } = useServer();
+  const { toast } = useUI();
+  const base = `/servers/${server.id}/firewall`;
+  const { data, reload } = useLoad(() => get<{ available: boolean; rules: FirewallRule[]; blocked: number; limit: number; mode: string }>(base), [server.id]);
+  if (!data?.available) return null;
+  const allowList = data.rules.some((r) => r.action === 'allow');
+  const add = async (r: { cidr: string; action: string; note: string }) => {
+    try { await post(base, r); toast(t('fw.ruleAdded')); reload(true); } catch (e: any) { toast(e.message, 'err'); }
+  };
+  const remove = async (r: FirewallRule) => {
+    try { await del(`${base}/${r.id}`); reload(true); } catch (e: any) { toast(e.message, 'err'); }
+  };
+  return (
+    <Card padded={false} title={<span className="flex items-center gap-2"><Shield className="h-4 w-4 text-brand-300" />{t('fw.serverTitle')}</span>}
+      description={t('fw.serverHint')}
+      actions={data.blocked > 0 && <span className="text-xs tabular-nums text-ink-400">{t('fw.serverBlocked', { n: data.blocked.toLocaleString() })}</span>}>
+      {(allowList || server.routerDomain) && (
+        <div className="space-y-1 border-b border-ink-700 px-5 py-3 text-[13px]">
+          {allowList && <p className="text-amber-300">{t('fw.allowListOn')}</p>}
+          {server.routerDomain && server.hostname && <p className="text-ink-400">{t('fw.routerNote', { address: `${server.hostname}.${server.routerDomain}` })}</p>}
+        </div>
+      )}
+      <FirewallRules rules={data.rules} onAdd={add} onDelete={remove} emptyHint={t('fw.serverEmpty')} />
+    </Card>
   );
 }
 

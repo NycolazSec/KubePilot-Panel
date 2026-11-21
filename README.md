@@ -27,6 +27,7 @@ volume and `NodePort` service, and the panel drives the cluster through the Kube
 | | **Pterodactyl / Pelican eggs**: import from a catalog of ~300 games and apps, a link or a file |
 | Backups: create, restore, download, lock, automatic rotation — on the panel's volume or **S3** (optionally encrypted) | Settings: panel name, public address, port range, timezone |
 | Cron schedules: commands, power actions, backups | Global activity log |
+| **Firewall** per server: block addresses, or only let some in | **Anti-DDoS** (optional): limits per source IP on the game ports, automatic bans, "under attack" mode, packets dropped by reason, bans and global rules in *Admin* → *Firewall* |
 | Validated startup variables, image selection, extra ports, sub-users with fine-grained permissions |
 | **Plugins & mods** from Modrinth: compatible results only, one-click install with dependencies, updates | |
 | **Minecraft router**: each server at `survival.mc.example.com`, standard port, no port to type | |
@@ -70,6 +71,7 @@ flowchart LR
 
 - **Game pods**: UID 1000, all capabilities dropped, no privilege escalation, seccomp `RuntimeDefault`, no service-account token (Pod Security `restricted`). Only the install scripts of eggs run as root, still without privilege escalation and with a minimal set of capabilities; the namespace is then enforced at `baseline` with `restricted` audited (`serversNamespace.rootInstall=false` enforces `restricted`).
 - **Network isolation**: a `NetworkPolicy` gives game servers Internet + DNS access but blocks private ranges, the cluster network and the node IPs (databases, API server…). The one opening is the ingress controller's HTTP/HTTPS entry points, so a server can reach the websites the cluster serves through their public address, as anyone on the Internet can (`serversNamespace.ingressController`).
+- **Firewall and anti-DDoS** (optional, `shield.enabled`): one agent per node (host network, `NET_ADMIN` only) filters the game ports with an nftables table of its own: per-server and global rules, limits per source IP, automatic bans. SSH, the panel, the Kubernetes API and private networks are never filtered, and the table is removed when the agent stops. It handles what reaches the node; an attack bigger than its link has to be stopped upstream (your host's anti-DDoS, or a provider such as path.net).
 - **Least privilege**: the panel's ServiceAccount has full rights *only* in `kubepilot-servers`, and read-only access to nodes, PVs, services and metrics. No access to Secrets.
 - **Storage isolation**: game volumes live in their own folder (dedicated `kubepilot-local` StorageClass) and the panel only mounts that folder — it never sees the volumes of the other applications of the cluster.
 - **Origin lock** (optional, Traefik): with `ingress.cloudflareOnly`, the panel only answers requests coming from Cloudflare, so its protections can't be bypassed by hitting the node's IP.

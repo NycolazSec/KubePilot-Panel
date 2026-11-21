@@ -171,6 +171,8 @@ accounts with two-factor authentication). API keys can't be used over SFTP.
 | `GET` / `PUT` | `/servers/{id}/startup` | `startup` | `{"env": {"MOTD": "Hi"}, "image": "…"}` (only editable variables, allowed images) |
 | `GET` / `POST` | `/servers/{id}/network` | `network` | `POST {"protocol": "tcp" \| "udp" \| "tcp+udp"}` adds a port |
 | `PUT` / `DELETE` | `/servers/{id}/network/{port}` | `network` | `PUT {"primary": true}` or `{"notes": "Dynmap"}` |
+| `GET` / `POST` | `/servers/{id}/firewall` | `network` | The server's firewall rules and packets they blocked (`{"available", "rules", "blocked", "limit", "mode"}`); `POST {"cidr": "203.0.113.7" \| "198.51.100.0/24", "action": "deny" \| "allow", "note": "…"}` adds one (`shield.enabled`; IPv4, /8 or narrower). One `allow` rule turns the list into an allow list: every other address is refused on the server's ports |
+| `DELETE` | `/servers/{id}/firewall/{rid}` | `network` | Delete a rule |
 | `PUT` | `/servers/{id}/exposure` | `network` | `{"internalOnly": true}` → no public port, reachable by the owner's other servers only |
 | `PUT` | `/servers/{id}/hostname` | `network` | `{"hostname": "survival"}` → `survival.<Minecraft domain>` on port 25565 (Minecraft router; `""` removes it) |
 | `GET` / `POST` | `/servers/{id}/users` | `users` | `POST {"username": "alice", "permissions": ["console", "power"]}` |
@@ -193,6 +195,10 @@ accounts with two-factor authentication). API keys can't be used over SFTP.
 | `POST` | `/admin/servers` | Create `{"name", "ownerId", "templateId", "image", "memory", "cpu", "disk", "backupLimit", "databaseLimit", "allocationLimit", "env", "startAfterInstall"}` |
 | `PUT` / `DELETE` | `/admin/servers/{id}` | Update / delete (volume and backups included) |
 | `GET` / `PUT` | `/admin/settings` | Panel settings |
+| `GET` | `/admin/firewall` | Firewall and anti-DDoS: `settings`, `effective` limits, global `rules`, and with `shield.enabled` what the nodes report: `nodes` (`stale`, `synced`, `error`), `counters` (packets dropped by reason), `bans` (`[{"ip", "expires"}]`, seconds left) |
+| `PUT` | `/admin/firewall` | `{"mode": "off" \| "normal" \| "strict", "tcpRate": 15, "conns": 30, "udpRate": 1500, "banMinutes": 10}` — limits per source IP; `strict` divides them by three and makes bans six times longer; `off` keeps only the rules |
+| `POST` / `DELETE` | `/admin/firewall/rules`, `/admin/firewall/rules/{rid}` | Rules for every server: `{"cidr", "action": "deny" \| "allow", "note"}` (`allow`: never limited nor banned) |
+| `POST` / `DELETE` | `/admin/firewall/bans`, `/admin/firewall/bans/{ip}` | Ban `{"ip", "minutes"}` (1–10080) on every node, or unban |
 | `GET` | `/admin/activity` | Global activity log |
 
 ## Examples

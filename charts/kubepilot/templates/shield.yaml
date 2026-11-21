@@ -1,0 +1,88 @@
+{{- if .Values.shield.enabled }}
+{{- $name := printf "%s-shield" (include "kubepilot.fullname" .) }}
+# Firewall and anti-DDoS: one agent per node programs an nftables table of its own on the game ports.
+# It reads the configuration the panel publishes and reports counters and bans: two ConfigMaps, nothing else.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "kubepilot.labels" . | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Values.serversNamespace.name }}
+  labels: {{- include "kubepilot.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [configmaps]
+    resourceNames: [kubepilot-shield]
+    verbs: [get]
+  - apiGroups: [""]
+    resources: [configmaps]
+    resourceNames: [kubepilot-shield-status]
+    verbs: [get, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Values.serversNamespace.name }}
+  labels: {{- include "kubepilot.labels" . | nindent 4 }}
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: {{ $name }} }
+subjects: [{ kind: ServiceAccount, name: {{ $name }}, namespace: {{ .Release.Namespace }} }]
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "kubepilot.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kubepilot-shield
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  updateStrategy: { type: RollingUpdate }
+  template:
+    metadata:
+      labels:
+        # not the panel's labels: its Service must never send traffic here
+        app.kubernetes.io/name: kubepilot-shield
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      serviceAccountName: {{ $name }}
+      # nftables belongs to a network namespace: the agent works in the node's
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      terminationGracePeriodSeconds: 15
+      securityContext:
+        seccompProfile: { type: RuntimeDefault }
+      {{- with .Values.shield.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.shield.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: shield
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: [shield]
+          env:
+            - name: NODE_NAME
+              valueFrom: { fieldRef: { fieldPath: spec.nodeName } }
+            - { name: KUBEPILOT_NAMESPACE, value: {{ .Values.serversNamespace.name | quote }} }
+            # one table per release, so two installations never touch each other's rules
+            - { name: KUBEPILOT_SHIELD_TABLE, value: {{ printf "kp_%s" (.Release.Name | lower | replace "-" "_" | replace "." "_" | trunc 28) | quote }} }
+          securityContext:
+            # nft needs root's netlink access; it gets NET_ADMIN and nothing else (no privileged mode, no escalation)
+            runAsUser: 0
+            runAsNonRoot: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL], add: [NET_ADMIN] }
+          resources: {{- toYaml .Values.shield.resources | nindent 12 }}
+{{- end }}

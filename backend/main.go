@@ -40,6 +40,9 @@ type Config struct {
 	RootInstall bool
 	// Ingress: the ingress controller's pods, that game servers may reach on its web ports (the cluster's own websites)
 	Ingress IngressPeer
+	// Shield: the chart deployed the firewall / anti-DDoS agents (shield.go); RouterPort: the router's public port
+	Shield     bool
+	RouterPort int
 	// SFTPListen: address of the built-in SFTP server ("" = off); SFTPPort: the port users connect to
 	SFTPListen string
 	SFTPPort   int
@@ -60,6 +63,10 @@ func env(key, def string) string {
 }
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "shield" { // the firewall agent of a node (DaemonSet), not the panel
+		runShieldAgent()
+		return
+	}
 	cfg := Config{}
 	flag.StringVar(&cfg.Listen, "listen", env("KUBEPILOT_LISTEN", ":8080"), "HTTP listen address")
 	flag.StringVar(&cfg.DataDir, "data", env("KUBEPILOT_DATA", "/data"), "data directory (database, backups)")
@@ -69,6 +76,8 @@ func main() {
 	flag.StringVar(&cfg.StorageClass, "storage-class", env("KUBEPILOT_STORAGE_CLASS", "local-path"), "StorageClass of game server volumes (hostPath-based provisioner)")
 	flag.BoolVar(&cfg.RootInstall, "root-install", env("KUBEPILOT_ROOT_INSTALL", "false") == "true", "install scripts of egg templates may run as root (namespace Pod Security baseline)")
 	flag.BoolVar(&cfg.MinecraftRouter, "minecraft-router", env("KUBEPILOT_MINECRAFT_ROUTER", "false") == "true", "mc-router is deployed: give Minecraft servers hostnames on port 25565")
+	flag.BoolVar(&cfg.Shield, "shield", env("KUBEPILOT_SHIELD", "false") == "true", "the shield agents are deployed: firewall and anti-DDoS on the game ports")
+	flag.IntVar(&cfg.RouterPort, "minecraft-router-port", atoiOr(env("KUBEPILOT_MINECRAFT_ROUTER_PORT", ""), 25565), "public port of the Minecraft router")
 	flag.BoolVar(&cfg.AutoSleep, "auto-sleep", env("KUBEPILOT_AUTO_SLEEP", "false") == "true", "mc-router can wake servers up: empty Minecraft servers may go to sleep")
 	flag.StringVar(&cfg.SFTPListen, "sftp-listen", env("KUBEPILOT_SFTP_LISTEN", ""), "SFTP listen address, e.g. :2022 (empty = SFTP off)")
 	flag.IntVar(&cfg.SFTPPort, "sftp-port", atoiOr(env("KUBEPILOT_SFTP_PORT", ""), 0), "SFTP port shown to users (default: the listen port)")
