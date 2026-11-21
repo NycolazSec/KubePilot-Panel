@@ -1,3 +1,4 @@
+{{- $metrics := .Values.metrics | default dict -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -13,8 +14,17 @@ spec:
   template:
     metadata:
       labels: {{- include "kubepilot.selectorLabels" . | nindent 8 }}
-      {{- with .Values.podAnnotations }}
-      annotations: {{- toYaml . | nindent 8 }}
+      {{- if or .Values.podAnnotations (and $metrics.enabled (not $metrics.token)) }}
+      annotations:
+        {{- if and $metrics.enabled (not $metrics.token) }}
+        # for a Prometheus that discovers pods by annotation
+        prometheus.io/scrape: "true"
+        prometheus.io/port: {{ $metrics.port | default 9090 | quote }}
+        prometheus.io/path: /metrics
+        {{- end }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       {{- end }}
     spec:
       serviceAccountName: {{ include "kubepilot.fullname" . }}
@@ -45,6 +55,13 @@ spec:
             - { name: KUBEPILOT_MINECRAFT_ROUTER_PORT, value: {{ .Values.minecraftRouter.service.port | toString | quote }} }
             - name: NODE_NAME
               valueFrom: { fieldRef: { fieldPath: spec.nodeName } }
+            {{- if $metrics.enabled }}
+            - { name: KUBEPILOT_METRICS_LISTEN, value: {{ printf ":%v" ($metrics.port | default 9090) | quote }} }
+            {{- if $metrics.token }}
+            - name: KUBEPILOT_METRICS_TOKEN
+              valueFrom: { secretKeyRef: { name: {{ printf "%s-metrics" (include "kubepilot.fullname" .) }}, key: token } }
+            {{- end }}
+            {{- end }}
             {{- if (.Values.nodeAgent | default dict).enabled }}
             - { name: KUBEPILOT_NODE_AGENTS, value: "true" }
             - { name: KUBEPILOT_NODE_AGENT_NAMESPACE, value: {{ .Release.Namespace | quote }} }
@@ -105,6 +122,9 @@ spec:
             {{- end }}
           ports:
             - { containerPort: 8080, name: http }
+            {{- if $metrics.enabled }}
+            - { containerPort: {{ $metrics.port | default 9090 }}, name: metrics }
+            {{- end }}
             {{- if .Values.sftp.enabled }}
             - { containerPort: 2022, name: sftp{{ if .Values.sftp.hostPort }}, hostPort: {{ .Values.sftp.port }}{{ end }} }
             {{- end }}

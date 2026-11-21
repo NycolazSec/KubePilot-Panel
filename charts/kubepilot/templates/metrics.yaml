@@ -1,0 +1,73 @@
+{{- $metrics := .Values.metrics | default dict }}
+{{- if $metrics.enabled }}
+{{- $name := include "kubepilot.fullname" . }}
+{{- $sm := $metrics.serviceMonitor | default dict }}
+{{- $gd := $metrics.grafanaDashboard | default dict }}
+# Prometheus metrics: their own port, a ClusterIP Service of their own (never the ingress)
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}-metrics
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kubepilot.labels" . | nindent 4 }}
+    app.kubernetes.io/component: metrics
+spec:
+  type: ClusterIP
+  selector: {{- include "kubepilot.selectorLabels" . | nindent 4 }}
+  ports: [{ name: metrics, port: {{ $metrics.port | default 9090 }}, targetPort: metrics }]
+{{- if $metrics.token }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $name }}-metrics
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "kubepilot.labels" . | nindent 4 }}
+type: Opaque
+stringData:
+  token: {{ $metrics.token | quote }}
+{{- end }}
+{{- if $sm.enabled }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kubepilot.labels" . | nindent 4 }}
+    {{- with $sm.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "kubepilot.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: metrics
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: {{ $sm.interval | default "30s" }}
+      scrapeTimeout: 15s
+      {{- if $metrics.token }}
+      bearerTokenSecret: { name: {{ $name }}-metrics, key: token }
+      {{- end }}
+{{- end }}
+{{- if $gd.enabled }}
+---
+# Picked up by the Grafana sidecar (kube-prometheus-stack): the KubePilot dashboard appears in Grafana
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}-dashboard
+  namespace: {{ $gd.namespace | default .Release.Namespace }}
+  labels:
+    {{- include "kubepilot.labels" . | nindent 4 }}
+    {{- with $gd.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+data:
+  kubepilot.json: {{ .Files.Get "dashboards/kubepilot.json" | toJson }}
+{{- end }}
+{{- end }}

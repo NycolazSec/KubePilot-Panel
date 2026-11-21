@@ -179,6 +179,25 @@ nodeAgent:
   # the nodes game servers may run on: none of the tainted ones by default, like the servers themselves
   tolerations: []
 
+# Prometheus metrics: /metrics on a port of its own and a ClusterIP Service of its own, never through the
+# ingress (server names and player counts aren't for the internet). Game servers (state, CPU, memory, disk,
+# players, restarts, backups), nodes, ports and the firewall. Grafana dashboard: dashboards/kubepilot.json.
+metrics:
+  enabled: true
+  port: 9090
+  # optional bearer token Prometheus must send (kept in the <release>-metrics Secret); empty: none
+  token: ""
+  # Prometheus Operator (kube-prometheus-stack): a ServiceMonitor for the metrics Service
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+    labels: {}
+  # a ConfigMap the Grafana sidecar of kube-prometheus-stack picks up: the KubePilot dashboard appears in Grafana
+  grafanaDashboard:
+    enabled: false
+    namespace: ""   # default: the release namespace
+    labels: { grafana_dashboard: "1" }
+
 shield:
   enabled: false
   resources:

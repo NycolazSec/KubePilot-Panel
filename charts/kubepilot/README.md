@@ -47,6 +47,10 @@ data is ever lost by accident. Delete them by hand if you really want to.
 | `sftp.service.type` | `LoadBalancer` | With `sftp.hostPort=false`: SFTP Service type (`externalTrafficPolicy: Local`) |
 | `shield.enabled` | `false` | Firewall and anti-DDoS on the game ports: one agent per node (DaemonSet, host network, `NET_ADMIN` only, nftables). Managed in *Admin* → *Firewall*; the release namespace must allow Pod Security `privileged` |
 | `shield.nodeSelector` / `shield.tolerations` | every node | Nodes to protect (the agents also open the **standard ports** of the servers on their node) |
+| `metrics.enabled` | `true` | Prometheus `/metrics` on port `metrics.port` (9090) of the panel, `<release>-metrics` ClusterIP Service, `prometheus.io/*` pod annotations |
+| `metrics.token` | `""` | Bearer token Prometheus must send (Secret `<release>-metrics`) |
+| `metrics.serviceMonitor.enabled` | `false` | `ServiceMonitor` for the Prometheus Operator (`interval`, `labels`) |
+| `metrics.grafanaDashboard.enabled` | `false` | ConfigMap with the KubePilot dashboard for the Grafana sidecar (`labels`: `grafana_dashboard: "1"`, `namespace`) |
 | `nodeAgent.enabled` | `true` | One agent per node serves the game files of its node to the panel (several machines): SSH with keys derived from the `<release>-node` Secret, NetworkPolicy, no Kubernetes credentials |
 | `nodeAgent.nodeSelector` / `nodeAgent.tolerations` | untainted nodes | Nodes where game servers may run |
 | `nodeAgent.resources` | 16Mi → 256Mi | Agent requests / limits |

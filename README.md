@@ -23,6 +23,7 @@ volume and `NodePort` service, and the panel drives the cluster through the Kube
 | Live dashboard: status, CPU, RAM, disk, one-click address copy | Cluster overview: nodes, CPU/RAM usage, ports, disk, backups |
 | | **Several machines**: add one with two commands, new servers go where there is room (or where you choose), each machine with its own public address |
 | | **Standard game ports** (optional): 25565, 19132, 27015… instead of 30100-30299, from a pool you define — the same port can serve one server on each machine |
+| | **Prometheus metrics** and a **Grafana dashboard**: servers (state, CPU, memory, disk, players, restarts), machines, ports, firewall |
 | Real-time console over WebSocket (ANSI colors, command history, search, log export) | Create servers from templates (owner, resources, variables, auto-start) |
 | Start / restart / stop / kill, crash detection (OOMKilled, exit codes, image errors) | Edit resources, image, startup command, suspend servers |
 | File manager: CodeMirror editor, drag & drop upload, zip download, archive / extract | Users & roles, two-factor authentication (TOTP + recovery codes), password reset by email, editable templates with JSON import/export |
@@ -148,6 +149,15 @@ With the firewall agents (`shield.enabled`), servers can also get **standard por
 *Settings* (e.g. `25565-25600, 19132-19140, 27015-27030`, ports nothing else uses on the machines) and tick
 *Standard ports* on a server — it gets the game's usual port when it's free on its machine.
 
+### Monitoring
+
+The panel serves Prometheus metrics on port `9090` of its pod (`<release>-metrics` Service, never through the
+ingress): `kubepilot_server_*` (state, CPU, memory, disk, players of Minecraft servers, restarts, backups),
+`kubepilot_node_*`, `kubepilot_ports_*` and `kubepilot_shield_*`. With kube-prometheus-stack, turn on
+`metrics.serviceMonitor.enabled` and `metrics.grafanaDashboard.enabled`; otherwise scrape the pod (it carries the
+`prometheus.io/*` annotations) and import [`charts/kubepilot/dashboards/kubepilot.json`](charts/kubepilot/dashboards/kubepilot.json)
+in Grafana.
+
 ### More machines
 
 Add a machine to spread your servers: on the main machine, `… | sudo sh -s -- add-node` prints the command to run
@@ -194,8 +204,8 @@ docs/       logo and banner
 ## Roadmap
 
 v0.2 brought Pterodactyl parity (eggs, SFTP, databases, S3 backups); v0.3 the one-command installer, auto-sleep, the
-firewall and anti-DDoS, and password reset by email. Coming next (v0.4): several machines and standard game ports (in
-progress), Prometheus metrics, email notifications, server transfers.
+firewall and anti-DDoS, and password reset by email. Coming next (v0.4): several machines, standard game ports and
+Prometheus metrics (in progress), email and Discord notifications, server transfers.
 See the full [roadmap](ROADMAP.md).
 
 ## Contributing

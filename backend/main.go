@@ -60,6 +60,9 @@ type Config struct {
 	NodeAgents     bool
 	AgentNamespace string
 	AgentSelector  string
+	// MetricsListen: address of the Prometheus /metrics listener ("" = off); MetricsToken: optional bearer token
+	MetricsListen string
+	MetricsToken  string
 }
 
 func env(key, def string) string {
@@ -107,6 +110,8 @@ func main() {
 	flag.BoolVar(&cfg.NodeAgents, "node-agents", env("KUBEPILOT_NODE_AGENTS", "false") == "true", "the node agents are deployed: files of servers on other nodes are reachable")
 	flag.StringVar(&cfg.AgentNamespace, "node-agent-namespace", env("KUBEPILOT_NODE_AGENT_NAMESPACE", ""), "namespace of the node agents")
 	flag.StringVar(&cfg.AgentSelector, "node-agent-selector", env("KUBEPILOT_NODE_AGENT_SELECTOR", "app.kubernetes.io/name=kubepilot-node"), "label selector of the node agents' pods")
+	flag.StringVar(&cfg.MetricsListen, "metrics-listen", env("KUBEPILOT_METRICS_LISTEN", ""), "Prometheus metrics listen address, e.g. :9090 (empty = off; never expose it through the ingress)")
+	cfg.MetricsToken = os.Getenv("KUBEPILOT_METRICS_TOKEN") // optional bearer token: never a flag
 	secure := flag.Bool("secure-cookies", env("KUBEPILOT_SECURE_COOKIES", "true") == "true", "set Secure flag on cookies")
 	flag.Parse()
 	cfg.SecureCookies = *secure
@@ -190,6 +195,22 @@ func main() {
 		app.sftp = s
 		go s.serve(ctx, ln)
 		log.Printf("SFTP listening on %s (host key %s)", ln.Addr(), s.fingerprint)
+	}
+
+	if cfg.MetricsListen != "" {
+		mux := http.NewServeMux()
+		mux.HandleFunc("GET /metrics", app.handleMetrics)
+		ms := &http.Server{Addr: cfg.MetricsListen, Handler: mux, ReadHeaderTimeout: 10 * time.Second, WriteTimeout: 30 * time.Second}
+		go func() {
+			<-ctx.Done()
+			_ = ms.Close()
+		}()
+		go func() {
+			if err := ms.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				log.Printf("metrics: %v", err)
+			}
+		}()
+		log.Printf("Prometheus metrics on %s/metrics", cfg.MetricsListen)
 	}
 
 	srv := &http.Server{
