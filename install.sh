@@ -36,6 +36,8 @@ SERVER=${KUBEPILOT_SERVER:-}         # join: https://<main machine>:6443
 TOKEN=${KUBEPILOT_TOKEN:-}           # join: the invitation printed by add-node
 NODE_NAME=${KUBEPILOT_NODE_NAME:-}   # join: name of the new machine in the cluster (default: its hostname)
 SERVER_ADDRESS=${KUBEPILOT_SERVER_ADDRESS:-} # add-node: address the new machine reaches this one at (default: its IP)
+ALLOW_FROM=${KUBEPILOT_ALLOW_FROM:-}         # add-node: IP of the new machine (ufw opens the cluster's ports for it only)
+K3S_VERSION=${KUBEPILOT_K3S_VERSION:-}       # join: the k3s version of the main machine (a node can't be newer)
 
 # ---------- Output, in French or English
 
@@ -86,7 +88,8 @@ Relancé sur un serveur où KubePilot est installé, le script le met à jour.
 
 Ajouter une machine au cluster :
   … | sudo sh -s -- add-node     sur la machine principale : affiche la commande pour la nouvelle machine
-  … | sudo sh -s -- join --server https://<machine principale>:6443 --token <invitation> [--node-name nom]
+  … | sudo sh -s -- add-node --allow-from <IP de la nouvelle machine>   (ufw : ports du cluster pour elle seule)
+  … | sudo sh -s -- join --server https://<machine principale>:6443 --token <invitation> [--k3s-version v…] [--node-name nom]
                                  sur la nouvelle machine : installe k3s et rejoint le cluster
 EOF
 	else
@@ -110,7 +113,8 @@ Run again on a server where KubePilot is installed, the script updates it.
 
 Add a machine to the cluster:
   … | sudo sh -s -- add-node     on the main machine: prints the command for the new machine
-  … | sudo sh -s -- join --server https://<main machine>:6443 --token <invitation> [--node-name name]
+  … | sudo sh -s -- add-node --allow-from <IP of the new machine>   (ufw: the cluster's ports for it only)
+  … | sudo sh -s -- join --server https://<main machine>:6443 --token <invitation> [--k3s-version v…] [--node-name name]
                                  on the new machine: installs k3s and joins the cluster
 EOF
 	fi
@@ -141,6 +145,10 @@ while [ $# -gt 0 ]; do
 	--token) TOKEN=${2:-} && shift ;;
 	--node-name=*) NODE_NAME=${1#*=} ;;
 	--node-name) NODE_NAME=${2:-} && shift ;;
+	--allow-from=*) ALLOW_FROM=${1#*=} ;;
+	--allow-from) ALLOW_FROM=${2:-} && shift ;;
+	--k3s-version=*) K3S_VERSION=${1#*=} ;;
+	--k3s-version) K3S_VERSION=${2:-} && shift ;;
 	-h | --help) usage && exit 0 ;;
 	*) die "Unknown option: $1 (see --help)" "Option inconnue : $1 (voir --help)" ;;
 	esac
@@ -200,6 +208,7 @@ ok "Linux $ARCH, $MEM MB RAM" "Linux $ARCH, $MEM Mo de RAM"
 IP=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i < NF; i++) if ($i == "src") {print $(i + 1); exit}}' || true)
 
 ufw_active() { command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q 'Status: active'; }
+is_ipv4() { printf '%s' "$1" | grep -Eq '^([0-9]{1,3}\.){3}[0-9]{1,3}$'; }
 
 # ---------- add-node: on the main machine, an invitation for a new machine
 
@@ -218,18 +227,29 @@ if [ "$MODE" = add-node ]; then
 		die "Can't create the invitation (k3s token create, see $LOG)." "Impossible de créer l'invitation (k3s token create, voir $LOG)."
 	ok "Invitation created, valid for 24 hours" "Invitation créée, valable 24 heures"
 	BACKEND=$(kubectl get nodes -o jsonpath='{.items[0].metadata.annotations.flannel\.alpha\.coreos\.com/backend-type}' 2>/dev/null || true)
-	UDP=51820
-	if [ "$BACKEND" != wireguard-native ]; then
+	case $BACKEND in
+	wireguard*) UDP=51820 ;; # flannel names it "wireguard"
+	*)
 		UDP=8472
 		warn "On this cluster the traffic between machines isn't encrypted (flannel ${BACKEND:-vxlan}): only add machines of the same private network, or switch k3s to --flannel-backend=wireguard-native first." \
 			"Sur ce cluster, le trafic entre les machines n'est pas chiffré (flannel ${BACKEND:-vxlan}) : n'ajoute que des machines du même réseau privé, ou passe d'abord k3s en --flannel-backend=wireguard-native."
+		;;
+	esac
+	if ufw_active; then
+		[ -n "$ALLOW_FROM" ] || ALLOW_FROM=$(ask "ufw is active: public IP of the new machine (the cluster's ports open for it only)" \
+			"ufw est actif : IP publique de la nouvelle machine (les ports du cluster ne s'ouvrent que pour elle)" "")
+		if [ -n "$ALLOW_FROM" ]; then
+			is_ipv4 "$ALLOW_FROM" || die "Invalid IP: $ALLOW_FROM" "IP invalide : $ALLOW_FROM"
+			for p in 6443/tcp 10250/tcp "$UDP/udp"; do run ufw allow from "$ALLOW_FROM" to any port "${p%/*}" proto "${p#*/}"; done
+			ok "Ports 6443/tcp, 10250/tcp and $UDP/udp opened for $ALLOW_FROM" "Ports 6443/tcp, 10250/tcp et $UDP/udp ouverts pour $ALLOW_FROM"
+		else
+			warn "ufw is active: open 6443/tcp, 10250/tcp and $UDP/udp for the new machine (ufw allow from <its IP> to any port <port> proto <tcp|udp>)." \
+				"ufw est actif : ouvre 6443/tcp, 10250/tcp et $UDP/udp pour la nouvelle machine (ufw allow from <son IP> to any port <port> proto <tcp|udp>)."
+		fi
 	fi
-	if ufw_active && confirm "ufw is active: open 6443/tcp, 10250/tcp and $UDP/udp for the new machine?" "ufw est actif : ouvrir 6443/tcp, 10250/tcp et $UDP/udp pour la nouvelle machine ?" y; then
-		for p in 6443/tcp 10250/tcp "$UDP/udp"; do run ufw allow "$p"; done
-		ok "Ports opened" "Ports ouverts"
-	fi
-	printf '\n  %s\n\n    %scurl -sfL %s | sudo sh -s -- join --server https://%s:6443 --token %s%s\n\n' \
-		"$(tr2 "On the new machine (a fresh Linux server), run:" "Sur la nouvelle machine (un serveur Linux neuf), lance :")" "$B" "$INSTALL_URL" "$ADDR" "$JOIN" "$N"
+	K3SV=$(k3s --version 2>/dev/null | sed -n 's/^k3s version \([^ ]*\).*/\1/p')
+	printf '\n  %s\n\n    %scurl -sfL %s | sudo sh -s -- join --server https://%s:6443 --token %s%s%s\n\n' \
+		"$(tr2 "On the new machine (a fresh Linux server), run:" "Sur la nouvelle machine (un serveur Linux neuf), lance :")" "$B" "$INSTALL_URL" "$ADDR" "$JOIN" "${K3SV:+ --k3s-version $K3SV}" "$N"
 	say "It must reach this machine on 6443/tcp; the machines talk to each other on 10250/tcp and $UDP/udp." \
 		"Elle doit joindre cette machine sur 6443/tcp ; les machines se parlent sur 10250/tcp et $UDP/udp."
 	say "Keep the invitation secret: it lets a machine join the cluster." "Garde l'invitation secrète : elle permet à une machine de rejoindre le cluster."
@@ -248,6 +268,11 @@ if [ "$MODE" = join ]; then
 	if command -v k3s >/dev/null 2>&1 || [ -e /etc/systemd/system/k3s.service ] || [ -e /etc/systemd/system/k3s-agent.service ] || [ -d /var/lib/rancher/k3s/data ]; then
 		die "k3s is already installed on this machine: join a fresh one, or uninstall k3s first (k3s-uninstall.sh or k3s-agent-uninstall.sh)." \
 			"k3s est déjà installé sur cette machine : utilise une machine neuve, ou désinstalle d'abord k3s (k3s-uninstall.sh ou k3s-agent-uninstall.sh)."
+	fi
+	if [ -n "$K3S_VERSION" ]; then # the version of the main machine: a node newer than the server isn't supported
+		printf '%s' "$K3S_VERSION" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+\+k3s[0-9]+$' || die "Invalid k3s version: $K3S_VERSION" "Version de k3s invalide : $K3S_VERSION"
+		INSTALL_K3S_VERSION=$K3S_VERSION
+		export INSTALL_K3S_VERSION
 	fi
 	if [ -n "$NODE_NAME" ]; then
 		printf '%s' "$NODE_NAME" | grep -Eq '^[a-z0-9]([a-z0-9.-]{0,61}[a-z0-9])?$' || die "Invalid machine name: $NODE_NAME (lowercase letters, digits, - and .)" \
@@ -278,9 +303,18 @@ if [ "$MODE" = join ]; then
 	done
 	ok "Joined the cluster as ${NODE_NAME:-$(hostname)}" "Cluster rejoint sous le nom ${NODE_NAME:-$(hostname)}"
 	if ufw_active; then
-		PORTS="10250/tcp 51820/udp 8472/udp 30100:30299/tcp 30100:30299/udp"
-		if confirm "ufw is active: open $PORTS (cluster and game ports)?" "ufw est actif : ouvrir $PORTS (cluster et ports de jeu) ?" y; then
-			for p in $PORTS; do run ufw allow "$p"; done
+		# the cluster's ports for the main machine only, the game ports for everyone
+		MAIN=${SERVER#https://}
+		MAIN=${MAIN%%/*}
+		MAIN=${MAIN%:*}
+		is_ipv4 "$MAIN" || MAIN=$(getent ahostsv4 "$MAIN" 2>/dev/null | awk 'NR == 1 {print $1}')
+		if confirm "ufw is active: open the cluster's ports for ${MAIN:-the main machine} and the game ports 30100-30299 for everyone?" \
+			"ufw est actif : ouvrir les ports du cluster pour ${MAIN:-la machine principale} et les ports de jeu 30100-30299 pour tout le monde ?" y; then
+			for p in 10250/tcp 51820/udp 8472/udp; do
+				if [ -n "$MAIN" ]; then run ufw allow from "$MAIN" to any port "${p%/*}" proto "${p#*/}"; else run ufw allow "$p"; fi
+			done
+			run ufw allow 30100:30299/tcp
+			run ufw allow 30100:30299/udp
 			ok "Ports opened" "Ports ouverts"
 		fi
 	fi

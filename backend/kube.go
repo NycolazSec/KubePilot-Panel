@@ -20,6 +20,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -158,6 +159,7 @@ func (k *Kube) start(ctx context.Context) error {
 		}
 	}
 	go k.metricsLoop(ctx)
+	go k.policyLoop(ctx)
 	return nil
 }
 
@@ -189,6 +191,9 @@ func (k *Kube) EnsureOwnerNetwork(ctx context.Context, owner int64) error {
 		return err
 	} else if err != nil {
 		return err
+	}
+	if equality.Semantic.DeepEqual(cur.Spec, np.Spec) {
+		return nil
 	}
 	cur.Spec = np.Spec
 	_, err = api.Update(ctx, cur, metav1.UpdateOptions{})
@@ -268,9 +273,29 @@ func (k *Kube) ensureNetworkPolicy(ctx context.Context) error {
 	} else if err != nil {
 		return err
 	}
+	if equality.Semantic.DeepEqual(cur.Spec, np.Spec) {
+		return nil
+	}
 	cur.Spec = np.Spec
 	_, err = api.Update(ctx, cur, metav1.UpdateOptions{})
 	return err
+}
+
+// policyLoop keeps the isolation up to date when machines join or leave: a new node's addresses must be
+// out of the game servers' reach as soon as it's there, not from the panel's next restart.
+func (k *Kube) policyLoop(ctx context.Context) {
+	t := time.NewTicker(time.Minute)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+		if err := k.ensureNetworkPolicy(ctx); err != nil {
+			log.Printf("networkpolicy: %v", err)
+		}
+	}
 }
 
 // isolationPolicy: game servers reach the internet, the cluster's DNS and the servers' databases — not the other

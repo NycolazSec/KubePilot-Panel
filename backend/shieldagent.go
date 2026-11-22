@@ -124,6 +124,7 @@ func (ag *shieldAgent) sync(ctx context.Context) {
 		return
 	}
 	if ag.applied && cm.ResourceVersion == ag.rv {
+		ag.err = "" // the API answers again: an earlier failure to read it is over
 		return
 	}
 	var c ShieldConfig
