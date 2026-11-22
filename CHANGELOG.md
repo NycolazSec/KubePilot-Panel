@@ -8,6 +8,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
+- **Cluster ports closed to the Internet** (*Admin* → *Firewall* → *Exposure*, off by default, with the firewall
+  agents): Kubernetes listens on every address of every machine — the API (6443), the kubelet (10250), k3s' image
+  mirror (5001), etcd (2379-2380) and kube-proxy's health checks — and only the machines of the cluster need them.
+  With the option, each agent lets these ports answer only the machines' own addresses, the cluster's private
+  networks, the machine itself and the global *Allow* rules, over IPv4 and IPv6. While an invitation to add a
+  machine is open, 6443 stays open to everyone until the machine has joined. Game ports are never closed by it.
+- **Exposure check** (same page): each machine checks the others from the outside with
+  [tcpcat](https://tcpcat.io), now bundled in the image, on the ports they listen on plus the servers' and a few
+  usual ones — a few dozen probes per machine, not a scan of the whole range. IPv4 probes leave from a source port
+  the firewall treats like any Internet address, so what the check finds open is what the Internet finds open. Each
+  open port is labelled (game server, panel, SFTP, SSH, cluster port that should be closed, unknown).
+
 - **Several machines**: `install.sh add-node` on the main machine prints an invitation (valid 24 hours) and the
   command to run on a new machine, `install.sh join` installs k3s there and joins the cluster. New servers go to the
   machine with the most free memory among those that accept new servers, or to the one the admin picks; a server
@@ -34,6 +46,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Changed
 
+- The firewall agent (`shield.enabled`) also gets the `NET_RAW` capability (tcpcat's probes), a 32 MiB `/tmp` and a
+  192 MiB memory limit (was 96 MiB).
 - **Adding a machine takes one command**: *Admin* → *Machines* → *Add a machine* creates the k3s invitation in the
   panel (no need to log in to the main machine) and shows a single command for the new machine, which carries the
   main machine's k3s version; the panel then shows the machine joining and its agent starting. Needs the panel to

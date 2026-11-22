@@ -77,13 +77,17 @@ export interface Template {
 }
 
 export interface FirewallRule { id: number; serverId?: string; cidr: string; action: 'allow' | 'deny'; note: string; createdAt: number }
-export interface ShieldSettings { mode: 'off' | 'normal' | 'strict'; tcpRate: number; conns: number; udpRate: number; banMinutes: number }
+export interface ShieldSettings { mode: 'off' | 'normal' | 'strict'; tcpRate: number; conns: number; udpRate: number; banMinutes: number; clusterGuard: boolean }
 export interface ShieldNode { node: string; updated: number; since: number; version: string; error: string; stale: boolean; synced: boolean }
 export interface ShieldInfo {
   available: boolean; settings: ShieldSettings; defaults: ShieldSettings; rules: FirewallRule[];
   effective: { tcpRate: number; conns: number; udpRate: number; banMinutes: number };
   nodes?: ShieldNode[]; counters?: Record<string, number>; bans?: { ip: string; expires: number }[]; banCount?: number; since?: number; ports?: number; router?: boolean;
+  guard?: { ports: number[]; machines: { name: string; addrs: string[] }[]; joinOpenUntil: number; clusterPorts: number[] };
+  exposure?: { results: ExposureResult[]; running: boolean; requested: number };
 }
+export type ExposedKind = 'game' | 'panel' | 'sftp' | 'ssh' | 'cluster' | 'other';
+export interface ExposureResult { node: string; addr: string; from: string; at: number; probed: number; open: { port: number; kind: ExposedKind }[]; error?: string; problems: number }
 
 export interface Settings { panelName: string; publicHost: string; portMin: number; portMax: number; timezone: string; twoFactorPolicy: '' | 'admins' | 'everyone'; minecraftDomain: string; hostPorts?: string }
 export interface NodeInfo { name: string; ready: boolean; version: string; os: string; cpuCap: number; memCap: number; cpu: number; mem: number; pods: number; address: string }

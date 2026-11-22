@@ -78,11 +78,17 @@ spec:
             # one table per release, so two installations never touch each other's rules
             - { name: KUBEPILOT_SHIELD_TABLE, value: {{ printf "kp_%s" (.Release.Name | lower | replace "-" "_" | replace "." "_" | trunc 28) | quote }} }
           securityContext:
-            # nft needs root's netlink access; it gets NET_ADMIN and nothing else (no privileged mode, no escalation)
+            # nft needs root's netlink access: NET_ADMIN; the exposure check sends its probes with tcpcat from a raw
+            # socket: NET_RAW. Nothing else (no privileged mode, no escalation)
             runAsUser: 0
             runAsNonRoot: false
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
-            capabilities: { drop: [ALL], add: [NET_ADMIN] }
+            capabilities: { drop: [ALL], add: [NET_ADMIN, NET_RAW] }
           resources: {{- toYaml .Values.shield.resources | nindent 12 }}
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp } # tcpcat's report, during an exposure check
+      volumes:
+        - name: tmp
+          emptyDir: { sizeLimit: 32Mi }
 {{- end }}

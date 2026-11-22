@@ -155,6 +155,7 @@
   "Template not found": "Template introuvable",
   "The archive contains too many files (%d max)": "L'archive contient trop de fichiers (%d max)",
   "The archive exceeds the allowed disk space": "L'archive dépasse l'espace disque autorisé",
+  "The audit needs at least two machines: each one checks the others from the outside": "L'audit a besoin d'au moins deux machines : chacune vérifie les autres depuis l'extérieur",
   "The backup storage can't be reached right now": "Le stockage des sauvegardes est injoignable pour le moment",
   "The database server can't be reached right now": "Le serveur de bases de données est injoignable pour le moment",
   "The destination already exists": "La destination existe déjà",

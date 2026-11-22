@@ -28,9 +28,10 @@ import (
 // on every node (shieldagent.go): it turns that configuration into its own nftables table and reports its counters
 // and bans in the ConfigMap kubepilot-shield-status.
 //
-// Only the game ports are filtered — the servers' NodePorts and the Minecraft router — never SSH, the panel or the
-// Kubernetes API, so no rule can lock the administrator out. Private networks (the cluster itself) are never
-// filtered. This protects against what reaches the node; an attack bigger than the node's link has to be stopped
+// Only the game ports are filtered — the servers' NodePorts and the Minecraft router — never SSH or the panel, so no
+// rule can lock the administrator out. Private networks (the cluster itself) are never filtered. The cluster's own
+// ports (Kubernetes API, kubelet…) are closed to the Internet only with the cluster port guard, which always lets
+// the nodes in (exposure.go). This protects against what reaches the node; an attack bigger than the node's link has to be stopped
 // upstream (the host's anti-DDoS, or a provider such as path.net).
 
 const (
@@ -63,6 +64,8 @@ type ShieldSettings struct {
 	Conns      int    `json:"conns"`      // simultaneous TCP connections
 	UDPRate    int    `json:"udpRate"`    // UDP packets per second
 	BanMinutes int    `json:"banMinutes"` // an IP over a limit is banned this long
+	// ClusterGuard: the cluster's own ports (API, kubelet…) only answer the nodes (exposure.go)
+	ClusterGuard bool `json:"clusterGuard"`
 }
 
 func defaultShield() ShieldSettings {
@@ -236,6 +239,9 @@ type ShieldConfig struct {
 	Servers    []ShieldServer  `json:"servers"`
 	Actions    []ShieldAction  `json:"actions"`  // manual bans and unbans, applied once by each agent
 	Forwards   []ShieldForward `json:"forwards"` // standard ports: node port → the server's pod on that node
+	Guard      []int           `json:"guard"`    // the cluster's own ports, open only to the nodes (empty: no guard)
+	Nodes      []ClusterNode   `json:"nodes"`    // every machine and its addresses (allowed on the guard ports; audited)
+	Audit      int64           `json:"audit"`    // exposure audit requested at that time (0: none); each agent runs it once
 }
 
 // ShieldForward sends a standard port of a node to the pod of its server (DNAT, players' addresses kept): game pods
@@ -336,10 +342,16 @@ func buildShieldConfig(st ShieldSettings, allocs []*Allocation, rules []*Firewal
 		}
 	}
 	sort.Slice(c.Servers, func(i, j int) bool { return c.Servers[i].ID < c.Servers[j].ID })
+	c.seal()
+	return c
+}
+
+// seal sanitizes the configuration and stamps its revision (a hash of everything): call it after any change.
+func (c *ShieldConfig) seal() {
+	c.Rev = ""
 	c.sanitize()
 	b, _ := json.Marshal(c)
 	c.Rev = sha(string(b))[:16]
-	return c
 }
 
 // forNode keeps what this node applies: the rules of a server on standard ports, and its forwards, only on its node.
@@ -408,6 +420,21 @@ func (c *ShieldConfig) sanitize() {
 		actions = append(actions, x)
 	}
 	c.Actions = actions
+	// the guard never closes a game port, and never applies without the nodes it must let in
+	c.Guard = slices.DeleteFunc(cleanPorts(c.Guard), func(p int) bool { return slices.Contains(c.TCPPorts, p) })
+	nodes := []ClusterNode{}
+	for _, n := range c.Nodes {
+		if len(validation.IsDNS1123Subdomain(n.Name)) > 0 {
+			continue
+		}
+		n.Addrs = cleanAddrs(n.Addrs)
+		nodes = append(nodes, n)
+	}
+	c.Nodes = nodes
+	if v4, v6 := splitAddrs(c.Nodes); len(v4)+len(v6) == 0 {
+		c.Guard = []int{}
+	}
+	c.Audit = max(c.Audit, 0)
 }
 
 func clampInt(v, lo, hi int) int { return max(lo, min(hi, v)) }
@@ -475,7 +502,7 @@ func isTrusted(ip netip.Addr, allow []string) bool {
 }
 
 // shieldCounters: packets dropped, by reason (plus srv_<id> for each server's own rules).
-var shieldCounters = []string{"blocked", "banned", "rate_tcp", "conns", "rate_udp", "invalid"}
+var shieldCounters = []string{"blocked", "banned", "rate_tcp", "conns", "rate_udp", "invalid", "cluster"}
 
 // nftScript is the nftables transaction that brings the table to the configuration. It is applied atomically
 // (nft -f): sets of bans and rate meters are kept between two configurations, every rule is rewritten.
@@ -493,6 +520,9 @@ func nftScript(table string, c *ShieldConfig, stale []string) string {
 	w("add set %s rl_tcp { type ipv4_addr; flags dynamic,timeout; timeout 1m; size 65536; }", T)
 	w("add set %s rl_udp { type ipv4_addr; flags dynamic,timeout; timeout 1m; size 65536; }", T)
 	w("add set %s conns { type ipv4_addr; flags dynamic; size 65536; }", T)
+	w("add set %s guard_ports { type inet_service; }", T)
+	w("add set %s nodes { type ipv4_addr; flags interval; auto-merge; }", T)
+	w("add set %s nodes6 { type ipv6_addr; flags interval; auto-merge; }", T)
 	for _, n := range shieldCounters {
 		w("add counter %s %s", T, n)
 	}
@@ -522,6 +552,10 @@ func nftScript(table string, c *ShieldConfig, stale []string) string {
 	fill("blocked", c.Deny)
 	fill("tcp_ports", intStrings(c.TCPPorts))
 	fill("udp_ports", intStrings(c.UDPPorts))
+	v4, v6 := splitAddrs(c.Nodes)
+	fill("guard_ports", intStrings(c.Guard))
+	fill("nodes", v4)
+	fill("nodes6", v6)
 
 	for _, f := range c.Forwards {
 		for _, ch := range []string{"ports", "ports_local"} {
@@ -531,6 +565,13 @@ func nftScript(table string, c *ShieldConfig, stale []string) string {
 
 	w("add rule %s pre ct direction reply accept", T) // answers to connections made from inside
 	w("add rule %s pre ip saddr @trusted accept", T)
+	if len(c.Guard) > 0 {
+		// the cluster's own ports: the machine itself and the nodes, except the audit's probes (exposure.go)
+		w(`add rule %s pre tcp dport @guard_ports iif "lo" accept`, T)
+		w("add rule %s pre tcp dport @guard_ports ip saddr @nodes tcp sport != %d accept", T, auditSourcePort)
+		w("add rule %s pre tcp dport @guard_ports ip6 saddr @nodes6 accept", T)
+		w(`add rule %s pre tcp dport @guard_ports counter name "cluster" drop`, T)
+	}
 	w("add rule %s pre meta nfproto ipv4 tcp dport @tcp_ports jump game_tcp", T)
 	w("add rule %s pre meta nfproto ipv4 udp dport @udp_ports jump game_udp", T)
 	for _, proto := range []string{"tcp", "udp"} {
@@ -591,6 +632,10 @@ type shieldNodeStatus struct {
 	Servers  map[string]uint64 `json:"servers"`
 	Bans     []shieldBan       `json:"bans"`
 	BanCount int               `json:"banCount"`
+	// for the exposure audit (exposure.go)
+	Listening []int        `json:"listening,omitempty"` // TCP ports listening on every or a public address
+	Public    []string     `json:"public,omitempty"`    // the machine's public addresses
+	Audit     *auditReport `json:"audit,omitempty"`     // the last audit this agent ran
 }
 
 type shieldBan struct {
@@ -607,6 +652,7 @@ type shieldState struct {
 	rev     string // last configuration published
 	last    string
 	kick    chan struct{}
+	audit   int64 // exposure audit requested (UnixMilli), 0: none
 }
 
 func (a *App) shieldChanged() {
@@ -707,7 +753,14 @@ func (a *App) publishShield(ctx context.Context) error {
 	if a.cfg.MinecraftRouter {
 		router = a.cfg.RouterPort
 	}
-	c := buildShieldConfig(a.db.ShieldSettings(), allocs, rules, router, a.shieldActions(), a.shieldForwards(allocs))
+	st := a.db.ShieldSettings()
+	c := buildShieldConfig(st, allocs, rules, router, a.shieldActions(), a.shieldForwards(allocs))
+	c.Nodes = a.clusterNodeList(ctx)
+	c.Guard = a.guardPorts(ctx, st, c.Nodes)
+	a.shield.mu.Lock()
+	c.Audit = a.shield.audit
+	a.shield.mu.Unlock()
+	c.seal()
 	b, _ := json.Marshal(c)
 	a.shield.mu.Lock()
 	same := string(b) == a.shield.last
@@ -846,6 +899,26 @@ func (a *App) handleAdminShield(w http.ResponseWriter, r *http.Request, u *User)
 		allocs, _ := a.db.Allocations("")
 		out["nodes"], out["counters"], out["bans"], out["banCount"], out["since"], out["ports"] = nodes, counters, banList, banCount, since, len(allocs)
 		out["router"] = a.cfg.MinecraftRouter
+		// the cluster port guard and the exposure audit (exposure.go)
+		machines := a.clusterNodeList(r.Context())
+		guard := a.guardPorts(r.Context(), st, machines)
+		inv := a.db.nodeInvite()
+		joinUntil := int64(0)
+		if inv.joinOpen(len(machines), now()) {
+			joinUntil = inv.Until
+		}
+		a.shield.mu.Lock()
+		requested := a.shield.audit
+		a.shield.mu.Unlock()
+		views, running := a.exposure(a.shieldStatus(r.Context()), requested, guard)
+		if guard == nil {
+			guard = []int{}
+		}
+		if machines == nil {
+			machines = []ClusterNode{}
+		}
+		out["guard"] = map[string]any{"ports": guard, "machines": machines, "joinOpenUntil": joinUntil, "clusterPorts": clusterPorts}
+		out["exposure"] = map[string]any{"results": views, "running": running, "requested": requested}
 	}
 	writeJSON(w, 200, out)
 }
