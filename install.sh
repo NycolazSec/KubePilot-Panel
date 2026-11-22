@@ -231,8 +231,8 @@ if [ "$MODE" = add-node ]; then
 	wireguard*) UDP=51820 ;; # flannel names it "wireguard"
 	*)
 		UDP=8472
-		warn "On this cluster the traffic between machines isn't encrypted (flannel ${BACKEND:-vxlan}): only add machines of the same private network, or switch k3s to --flannel-backend=wireguard-native first." \
-			"Sur ce cluster, le trafic entre les machines n'est pas chiffré (flannel ${BACKEND:-vxlan}) : n'ajoute que des machines du même réseau privé, ou passe d'abord k3s en --flannel-backend=wireguard-native."
+		warn "On this cluster the traffic between machines isn't encrypted (flannel ${BACKEND:-vxlan}): only add machines of the same private network, or switch k3s to --flannel-backend=wireguard-native first, then reboot this machine (the pods' network MTU goes from 1450 to 1420: pods started before keep 1450 and lose big packets)." \
+			"Sur ce cluster, le trafic entre les machines n'est pas chiffré (flannel ${BACKEND:-vxlan}) : n'ajoute que des machines du même réseau privé, ou passe d'abord k3s en --flannel-backend=wireguard-native, puis redémarre cette machine (la MTU du réseau des pods passe de 1450 à 1420 : les pods lancés avant gardent 1450 et perdent les gros paquets)."
 		;;
 	esac
 	if ufw_active; then

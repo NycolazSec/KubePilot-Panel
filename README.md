@@ -164,7 +164,9 @@ In *Admin* → *Machines* → *Add a machine*, the panel gives you **one command
 (any provider, root access). It installs k3s (the main machine's version), joins the cluster and opens its
 firewall; the panel shows the machine arriving, and new servers can go there a minute later. The machines reach
 each other on `6443/tcp`, `10250/tcp` and `51820/udp` (the installer opens them when ufw is on); the installer sets
-k3s up with WireGuard, so the traffic between machines is encrypted. Without the panel:
+k3s up with WireGuard, so the traffic between machines is encrypted (switching an existing cluster from VXLAN to
+WireGuard changes the pods' MTU from 1450 to 1420: reboot the machine afterwards, or the pods started before lose big
+packets). Without the panel:
 `… | sudo sh -s -- add-node` on the main machine prints the same command.
 
 All chart options (storage, node, ingress, resources…) are documented in the [chart README](charts/kubepilot/README.md).
