@@ -1,8 +1,8 @@
-import { Ban, Save, Shield, ShieldOff, Unlock } from 'lucide-react';
+import { Ban, Radar, Save, Shield, ShieldAlert, ShieldCheck, ShieldOff, Unlock } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { del, get, post, put, ShieldInfo, ShieldSettings } from '../../api';
+import { del, ExposedKind, get, post, put, ShieldInfo, ShieldSettings } from '../../api';
 import FirewallRules from '../../components/FirewallRules';
-import { Button, Card, Empty, ErrorBox, Field, IconButton, Loading, Tabs, useLoad, useUI } from '../../components/ui';
+import { Badge, Button, Card, Empty, ErrorBox, Field, IconButton, Loading, Tabs, Toggle, useLoad, useUI } from '../../components/ui';
 import { t } from '../../i18n';
 import { ago, dateTime, duration } from '../../lib/format';
 import clsx from 'clsx';
@@ -11,10 +11,12 @@ import clsx from 'clsx';
 export default function AdminFirewall() {
   const { toast } = useUI();
   const { data, error, loading, reload } = useLoad(() => get<ShieldInfo>('/admin/firewall'));
+  const auditing = !!data?.exposure?.running;
   useEffect(() => {
-    const id = setInterval(() => reload(true), 10000);
+    // every 10 s, every 3 s while the machines check each other
+    const id = setInterval(() => reload(true), auditing ? 3000 : 10000);
     return () => clearInterval(id);
-  }, [reload]);
+  }, [reload, auditing]);
 
   if (error) return <ErrorBox error={error} />;
   if (loading || !data) return <Loading />;
@@ -37,6 +39,7 @@ export default function AdminFirewall() {
   return (
     <div className="space-y-5">
       <ProtectionCard data={data} onSaved={() => reload(true)} />
+      <ExposureCard data={data} reload={() => reload(true)} />
       <BlockedCard data={data} />
       <BansCard data={data} reload={() => reload(true)} />
       <Card padded={false} title={t('fw.globalRules')} description={t('fw.globalRulesHint')}>
@@ -52,7 +55,7 @@ function ProtectionCard({ data, onSaved }: { data: ShieldInfo; onSaved: () => vo
   const [busy, setBusy] = useState(false);
   const save = async () => {
     setBusy(true);
-    try { await put('/admin/firewall', s); toast(t('fw.saved')); onSaved(); } catch (e: any) { toast(e.message, 'err'); } finally { setBusy(false); }
+    try { await put('/admin/firewall', { ...s, clusterGuard: data.settings.clusterGuard }); toast(t('fw.saved')); onSaved(); } catch (e: any) { toast(e.message, 'err'); } finally { setBusy(false); }
   };
   const num = (k: keyof ShieldSettings) => (e: React.ChangeEvent<HTMLInputElement>) => setS({ ...s, [k]: +e.target.value });
   const strict = s.mode === 'strict';
@@ -98,6 +101,74 @@ function ProtectionCard({ data, onSaved }: { data: ShieldInfo; onSaved: () => vo
   );
 }
 
+const kindColor: Record<ExposedKind, 'green' | 'gray' | 'red' | 'yellow' | 'blue'> = {
+  game: 'green', panel: 'green', sftp: 'blue', ssh: 'gray', cluster: 'red', other: 'yellow',
+};
+
+/** The cluster port guard and the exposure check: what the Internet reaches on each machine (tcpcat). */
+function ExposureCard({ data, reload }: { data: ShieldInfo; reload: () => void }) {
+  const { toast } = useUI();
+  const [busy, setBusy] = useState(false);
+  const guard = data.guard;
+  const exposure = data.exposure;
+  const machines = guard?.machines ?? [];
+  const on = data.settings.clusterGuard;
+  const setGuard = async (v: boolean) => {
+    setBusy(true);
+    try { await put('/admin/firewall', { ...data.settings, clusterGuard: v }); toast(t('fw.guardSaved')); reload(); } catch (e: any) { toast(e.message, 'err'); } finally { setBusy(false); }
+  };
+  const audit = async () => {
+    try { await post('/admin/firewall/audit', {}); reload(); } catch (e: any) { toast(e.message, 'err'); }
+  };
+  const results = exposure?.results ?? [];
+  const running = !!exposure?.running;
+  return (
+    <Card title={<span className="flex items-center gap-2"><Radar className="h-4 w-4 text-brand-300" />{t('fw.exposure')}</span>} description={t('fw.exposureHint')}
+      actions={<Button size="sm" icon={<Radar className="h-3.5 w-3.5" />} loading={running} disabled={machines.length < 2} onClick={audit}>{running ? t('fw.auditRunning') : t('fw.audit')}</Button>}>
+      <div className="mb-5 rounded-md border border-ink-700 bg-ink-900 px-4 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2 text-sm">
+            {on ? <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-400" /> : <ShieldAlert className="h-4 w-4 shrink-0 text-amber-400" />}
+            <span className="font-medium text-ink-100">{on ? t('fw.guardOn') : t('fw.guardOff')}</span>
+          </div>
+          <Toggle checked={on} onChange={(v) => { if (!busy) void setGuard(v); }} label={t('fw.guard')} />
+        </div>
+        <p className="mt-2 max-w-3xl text-[13px] text-ink-400">{t('fw.guardHint', { ports: (on && guard?.ports.length ? guard.ports : guard?.clusterPorts ?? []).join(', ') })}</p>
+        {machines.length > 0 && (
+          <p className="mt-2 text-xs text-ink-500">{t('fw.guardMachines')} {machines.map((m) => <span key={m.name} className="mr-3 font-mono text-ink-300">{m.name} {m.addrs.join(', ')}</span>)}</p>
+        )}
+        {on && !!guard?.joinOpenUntil && <p className="mt-2 text-xs text-amber-300">{t('fw.guardJoin', { date: dateTime(guard.joinOpenUntil) })}</p>}
+        {on && <p className="mt-2 text-xs text-ink-500">{t('fw.guardOutside')}</p>}
+      </div>
+      <p className="mb-3 max-w-3xl text-[13px] text-ink-400">{machines.length < 2 ? t('fw.auditOneMachine') : t('fw.auditHint')}</p>
+      {!results.length ? (
+        running ? <Loading label={t('fw.auditRunning')} /> : <Empty icon={<Radar className="h-6 w-6" />} title={t('fw.auditNone')}>{t('fw.auditNoneHint')}</Empty>
+      ) : (
+        <div className="space-y-3">
+          {results.map((r) => (
+            <div key={r.from + r.addr} className="rounded-md border border-ink-700 px-4 py-3">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <div className="min-w-0 text-sm"><span className="font-mono text-ink-100">{r.node}</span> <span className="font-mono text-ink-400">{r.addr}</span></div>
+                <div className="text-xs text-ink-500">{t('fw.auditFrom', { node: r.from, date: dateTime(r.at), probed: r.probed })}</div>
+              </div>
+              {r.error ? <p className="mt-2 text-sm text-red-400">{r.error}</p> : (
+                <>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {r.open.length === 0 ? <span className="text-sm text-ink-400">{t('fw.auditNothing')}</span> : r.open.map((p) => (
+                      <Badge key={p.port} color={kindColor[p.kind]}><span className="font-mono">{p.port}</span> {t(`fw.kind.${p.kind}` as any)}</Badge>
+                    ))}
+                  </div>
+                  <p className={clsx('mt-2 text-xs', r.problems ? 'text-red-400' : 'text-emerald-400')}>{r.problems ? t('fw.auditProblems', { n: r.problems }) : t('fw.auditClean')}</p>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 const dot = { green: 'bg-emerald-400', amber: 'bg-amber-400 animate-pulse', red: 'bg-red-500' };
 
 function NodeLine({ color, label, detail }: { color: keyof typeof dot; label: string; detail: string }) {
@@ -110,17 +181,17 @@ function NodeLine({ color, label, detail }: { color: keyof typeof dot; label: st
   );
 }
 
-const counterKeys = ['blocked', 'banned', 'rate_tcp', 'conns', 'rate_udp', 'invalid', 'servers'] as const;
+const counterKeys = ['blocked', 'banned', 'rate_tcp', 'conns', 'rate_udp', 'invalid', 'cluster', 'servers'] as const;
 
 function BlockedCard({ data }: { data: ShieldInfo }) {
   const c = data.counters ?? {};
   const label: Record<(typeof counterKeys)[number], string> = {
     blocked: t('fw.cBlocked'), banned: t('fw.cBanned'), rate_tcp: t('fw.cRateTcp'), conns: t('fw.cConns'),
-    rate_udp: t('fw.cRateUdp'), invalid: t('fw.cInvalid'), servers: t('fw.cServers'),
+    rate_udp: t('fw.cRateUdp'), invalid: t('fw.cInvalid'), cluster: t('fw.cCluster'), servers: t('fw.cServers'),
   };
   return (
     <Card title={t('fw.blocked')} description={data.since ? t('fw.since', { date: dateTime(data.since) }) : undefined}>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-7">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-8">
         {counterKeys.map((k) => (
           <div key={k} className="flex min-h-[78px] flex-col justify-between rounded-md border border-ink-700 bg-ink-900 px-3 py-2.5">
             <div className="text-2xs font-medium uppercase tracking-wider text-ink-400">{label[k]}</div>

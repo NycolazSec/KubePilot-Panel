@@ -125,5 +125,10 @@ func (a *App) handleAdminNodeInvite(w http.ResponseWriter, r *http.Request, u *U
 		return
 	}
 	a.db.LogActivity("", u, clientIP(r), "admin.node.invite", inv.Server)
+	// with the cluster port guard, 6443 opens to everyone until the new machine has joined (exposure.go)
+	if nodes, err := a.kube.clusterNodes(r.Context()); err == nil {
+		_ = a.db.saveNodeInvite(nodeInvite{Until: inv.Expires, Nodes: len(nodes)})
+		a.shieldChanged()
+	}
 	writeJSON(w, 200, inv)
 }

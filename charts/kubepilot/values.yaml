@@ -208,7 +208,8 @@ shield:
   enabled: false
   resources:
     requests: { cpu: 10m, memory: 24Mi }
-    limits: { cpu: 200m, memory: 96Mi }
+    # the exposure check runs tcpcat in the agent's container for a few seconds
+    limits: { cpu: 500m, memory: 192Mi }
   # Nodes to protect: every node by default (the agent tolerates every taint)
   nodeSelector: {}
   tolerations:

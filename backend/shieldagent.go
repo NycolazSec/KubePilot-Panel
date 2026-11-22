@@ -6,12 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
 	"os/signal"
 	"sort"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -35,12 +37,18 @@ type shieldAgent struct {
 	since int64
 	// nft runs the nft command (replaced in tests)
 	nft func(ctx context.Context, stdin string, args ...string) (string, error)
+	// probe checks an address's ports from here with tcpcat (exposure.go; replaced in tests)
+	probe func(ctx context.Context, addr string, ports []int) ([]int, error)
 
 	rv         string // ConfigMap version applied
 	rev        string
 	applied    bool
 	lastAction int64
 	err        string
+
+	mu      sync.Mutex   // the exposure audit runs on its own goroutine (exposure.go)
+	audit   *auditReport // the last one, reported in the status
+	auditID int64        // the request it answered
 }
 
 func runShieldAgent() {
@@ -66,7 +74,7 @@ func runShieldAgent() {
 	if err != nil {
 		log.Fatalf("shield: %v", err)
 	}
-	ag := &shieldAgent{cs: cs, ns: env("KUBEPILOT_NAMESPACE", "kubepilot-servers"), node: node, table: table, since: now(), nft: runNft}
+	ag := &shieldAgent{cs: cs, ns: env("KUBEPILOT_NAMESPACE", "kubepilot-servers"), node: node, table: table, since: now(), nft: runNft, probe: runTcpcat}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	log.Printf("shield %s: node %s, table inet %s", version, node, table)
@@ -138,6 +146,16 @@ func (ag *shieldAgent) sync(ctx context.Context) {
 		return
 	}
 	ag.rv, ag.rev, ag.err = cm.ResourceVersion, c.Rev, ""
+	// an exposure audit requested since the last one: run it once, on the whole configuration (apply kept only
+	// what this node applies)
+	if c.Audit > 0 && c.Audit != ag.auditID {
+		ag.auditID = c.Audit
+		var full ShieldConfig
+		if json.Unmarshal([]byte(cm.Data["config.json"]), &full) == nil {
+			full.sanitize()
+			go ag.runAudit(ctx, &full)
+		}
+	}
 }
 
 func (ag *shieldAgent) apply(ctx context.Context, c *ShieldConfig) error {
@@ -280,7 +298,16 @@ func parseNftBans(raw string) []shieldBan {
 // report writes this node's status in the status ConfigMap (one key per node).
 func (ag *shieldAgent) report(ctx context.Context) {
 	st := shieldNodeStatus{Node: ag.node, Updated: now(), Since: ag.since, Version: version, Rev: ag.rev, Error: ag.err,
-		Counters: map[string]uint64{}, Servers: map[string]uint64{}, Bans: []shieldBan{}}
+		Counters: map[string]uint64{}, Servers: map[string]uint64{}, Bans: []shieldBan{},
+		Public: publicAddrs(), Audit: ag.lastAudit()}
+	var tables []io.Reader
+	for _, f := range []string{"/proc/net/tcp", "/proc/net/tcp6"} {
+		if fh, err := os.Open(f); err == nil {
+			defer fh.Close()
+			tables = append(tables, fh)
+		}
+	}
+	st.Listening = listeningPorts(tables...)
 	if ag.applied {
 		for name, v := range ag.counters(ctx) {
 			if id, ok := strings.CutPrefix(name, "srv_"); ok {
