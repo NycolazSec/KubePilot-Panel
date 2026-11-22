@@ -25,6 +25,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   cluster. The firewall agent of the machine forwards the port to the server's pod (nftables DNAT, players'
   addresses kept, protected like the other game ports); game pods stay Pod Security `restricted`. Ports something
   already answers on are skipped. Switching a stopped server between NodePorts and standard ports gives it new ports.
+- **Prometheus metrics** (`metrics.enabled`, on by default): `/metrics` on port 9090 of the panel's pod, with a
+  Service of its own and never through the ingress — game servers (state, CPU and memory with their limits, disk,
+  players of Minecraft servers, restarts, backups), machines (CPU, memory, servers, memory reserved, agents), ports
+  (NodePorts and standard ones) and the firewall (packets dropped by reason, banned IPs, agents in sync). Optional
+  bearer token (`metrics.token`), `ServiceMonitor` (`metrics.serviceMonitor.enabled`) and a **Grafana dashboard**
+  (`dashboards/kubepilot.json`, or a ConfigMap for the Grafana sidecar with `metrics.grafanaDashboard.enabled`).
 
 ### Upgrading
 

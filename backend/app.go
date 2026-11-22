@@ -47,6 +47,8 @@ type App struct {
 	resetPerAccount *rateLimiter // reset emails per account
 	tickets         loginTickets // sign-ins waiting for their second factor
 
+	playerCache playerCache // Minecraft player counts for the metrics
+
 	sleepMu sync.RWMutex
 	asleep  map[string]bool // servers stopped by auto-sleep (see sleep.go)
 	idle    idleTracker
