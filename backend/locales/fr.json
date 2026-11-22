@@ -270,5 +270,9 @@
   "No standard ports are set up: add a range in Admin → Settings": "Aucun port standard n'est configuré : ajoute une plage dans Admin → Réglages",
   "No free standard port left on this machine (%s ports in the pool)": "Plus de port standard libre sur cette machine (%s ports dans la plage)",
   "Stop the server before changing its kind of ports": "Arrête le serveur avant de changer son type de ports",
-  "Standard ports need the node agents of the firewall (shield.enabled=true): they open the ports on the machines": "Les ports standards ont besoin des agents du pare-feu (shield.enabled=true) : ce sont eux qui ouvrent les ports sur les machines"
+  "Standard ports need the node agents of the firewall (shield.enabled=true): they open the ports on the machines": "Les ports standards ont besoin des agents du pare-feu (shield.enabled=true) : ce sont eux qui ouvrent les ports sur les machines",
+  "No node found": "Aucune machine trouvée",
+  "Adding a machine from the panel needs k3s: join the node to your cluster the way your Kubernetes does it": "Ajouter une machine depuis le panel demande k3s : ajoute le nœud à ton cluster comme le prévoit ton Kubernetes",
+  "Can't read the cluster's certificate authority (/cacerts)": "Impossible de lire l'autorité de certification du cluster (/cacerts)",
+  "The panel isn't allowed to create invitations (nodeInvites.enabled=false): run install.sh add-node on the main machine": "Le panel n'a pas le droit de créer des invitations (nodeInvites.enabled=false) : lance install.sh add-node sur la machine principale"
 }

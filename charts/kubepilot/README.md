@@ -54,6 +54,7 @@ data is ever lost by accident. Delete them by hand if you really want to.
 | `nodeAgent.enabled` | `true` | One agent per node serves the game files of its node to the panel (several machines): SSH with keys derived from the `<release>-node` Secret, NetworkPolicy, no Kubernetes credentials |
 | `nodeAgent.nodeSelector` / `nodeAgent.tolerations` | untainted nodes | Nodes where game servers may run |
 | `nodeAgent.resources` | 16Mi → 256Mi | Agent requests / limits |
+| `nodeInvites.enabled` | `true` | *Add a machine* in the panel creates the k3s invitation itself (bootstrap token, 24 h): the panel may **create** Secrets in `kube-system` (never read them). `false`: use `install.sh add-node` |
 | `serversNamespace.ingressController` | Traefik (`kube-system`, `web`/`websecure`) | Ingress controller pods and ports game servers may reach, for the cluster's websites through their public address. `namespace: ""` closes it |
 | `serversNamespace.rootInstall` | `true` | Let egg install scripts run as root (namespace enforced at `baseline`; games stay non-root). `false` enforces `restricted` |
 | `storage.isolated` | `true` | Create a StorageClass that keeps game volumes in their own folder; the panel mounts only that folder, never other apps' volumes (local-path-provisioner ≥ v0.0.27) |

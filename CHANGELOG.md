@@ -32,6 +32,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   bearer token (`metrics.token`), `ServiceMonitor` (`metrics.serviceMonitor.enabled`) and a **Grafana dashboard**
   (`dashboards/kubepilot.json`, or a ConfigMap for the Grafana sidecar with `metrics.grafanaDashboard.enabled`).
 
+### Changed
+
+- **Adding a machine takes one command**: *Admin* → *Machines* → *Add a machine* creates the k3s invitation in the
+  panel (no need to log in to the main machine) and shows a single command for the new machine, which carries the
+  main machine's k3s version; the panel then shows the machine joining and its agent starting. Needs the panel to
+  create Secrets in `kube-system` (create only; `nodeInvites.enabled=false` to turn it off).
+- Fresh installs with ufw also open 6443/tcp, 10250/tcp and 51820/udp, so the main machine is ready for more.
+
+### Fixed
+
+- `deploy.sh` sends the image it builds to the other nodes (`KUBEPILOT_EXTRA_NODES`, over SSH).
+- `install.sh add-node`: WireGuard detected (no false "unencrypted" warning), ufw rules for the new machine's IP only;
+  `join`: `--k3s-version` (a node newer than the server isn't supported), ufw rules for the main machine only.
+- A new machine's addresses are blocked for game servers within a minute (the isolation policy follows the nodes).
+- The firewall agent no longer shows a stale error after a short API outage.
+
 ### Upgrading
 
 - The panel gets the right to list the pods of its own namespace (to find the node agents), and its pod mounts the

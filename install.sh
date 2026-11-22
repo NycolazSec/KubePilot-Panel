@@ -599,7 +599,9 @@ fi
 
 if ufw_active; then
 	step "Firewall (ufw)" "Pare-feu (ufw)"
-	PORTS="80/tcp 443/tcp 30100:30299/tcp 30100:30299/udp $SFTP_PORT/tcp"
+	# also the cluster's ports, so that adding a machine later works from the panel (k3s API and kubelet need
+	# their certificates; WireGuard its keys)
+	PORTS="80/tcp 443/tcp 30100:30299/tcp 30100:30299/udp $SFTP_PORT/tcp 6443/tcp 10250/tcp 51820/udp"
 	[ "$MC_ROUTER" != true ] || PORTS="$PORTS 25565/tcp"
 	if confirm "ufw is active: open $PORTS?" "ufw est actif : ouvrir $PORTS ?" y; then
 		for p in $PORTS; do run ufw allow "$p"; done
