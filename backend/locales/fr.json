@@ -262,5 +262,13 @@
   "Unknown node: %s": "Machine inconnue : %s",
   "No node can take a new server: every node is full, not ready, or closed to new servers": "Aucune machine ne peut prendre un nouveau serveur : elles sont toutes pleines, pas prêtes ou fermées aux nouveaux serveurs",
   "No node has enough free memory for this server (%s MB free at most)": "Aucune machine n'a assez de mémoire libre pour ce serveur (%s Mo libres au plus)",
-  "Invalid address: a domain name or an IP address": "Adresse invalide : un nom de domaine ou une adresse IP"
+  "Invalid address: a domain name or an IP address": "Adresse invalide : un nom de domaine ou une adresse IP",
+  "Invalid port range: %s (ports 1024-65535, e.g. 25565-25600)": "Plage de ports invalide : %s (ports 1024-65535, par ex. 25565-25600)",
+  "Port %s is reserved (%s): leave it out of the standard ports": "Le port %s est réservé (%s) : laisse-le hors des ports standards",
+  "At most 2000 standard ports": "2000 ports standards au maximum",
+  "The port ranges overlap": "Les plages de ports se chevauchent",
+  "No standard ports are set up: add a range in Admin → Settings": "Aucun port standard n'est configuré : ajoute une plage dans Admin → Réglages",
+  "No free standard port left on this machine (%s ports in the pool)": "Plus de port standard libre sur cette machine (%s ports dans la plage)",
+  "Stop the server before changing its kind of ports": "Arrête le serveur avant de changer son type de ports",
+  "Standard ports need the node agents of the firewall (shield.enabled=true): they open the ports on the machines": "Les ports standards ont besoin des agents du pare-feu (shield.enabled=true) : ce sont eux qui ouvrent les ports sur les machines"
 }

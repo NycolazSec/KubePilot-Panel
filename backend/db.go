@@ -62,15 +62,6 @@ CREATE TABLE IF NOT EXISTS servers (
   suspended INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL
 );
-CREATE TABLE IF NOT EXISTS allocations (
-  port INTEGER PRIMARY KEY,
-  server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
-  protocol TEXT NOT NULL,
-  name TEXT NOT NULL DEFAULT '',
-  target_port INTEGER NOT NULL,
-  is_primary INTEGER NOT NULL DEFAULT 0,
-  notes TEXT NOT NULL DEFAULT ''
-);
 CREATE TABLE IF NOT EXISTS server_users (
   server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -155,6 +146,12 @@ func openDB(path string) (*DB, error) {
 		return nil, err
 	}
 	if err := db.addColumn("servers", "node", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return nil, err
+	}
+	if err := db.addColumn("servers", "host_ports", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return nil, err
+	}
+	if err := db.migrateAllocations(); err != nil {
 		return nil, err
 	}
 	if _, err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS servers_hostname ON servers(hostname) WHERE hostname<>''`); err != nil {
@@ -353,6 +350,8 @@ type Settings struct {
 	TwoFactorPolicy string `json:"twoFactorPolicy"`
 	// MinecraftDomain: with the Minecraft router, Java servers are reachable at <hostname>.<domain>
 	MinecraftDomain string `json:"minecraftDomain"`
+	// HostPorts: the standard ports servers may get on their node ("25565-25600, 27015-27030"; "" = none)
+	HostPorts string `json:"hostPorts"`
 }
 
 func (db *DB) Settings() Settings {
@@ -588,15 +587,16 @@ type Server struct {
 	AutoSleep       int               `json:"autoSleep"`    // minutes without players before sleeping (0 = never)
 	Asleep          bool              `json:"asleep"`       // stopped by auto-sleep: the next player connection wakes it up
 	Node            string            `json:"node"`         // node it was placed on ("" = wherever its volume is: single-node clusters, older servers)
+	HostPorts       bool              `json:"hostPorts"`    // standard ports (host ports on its node) instead of NodePorts
 }
 
-const serverCols = `id, name, description, owner_id, template_id, image, startup, env, memory_mb, cpu_millis, disk_mb, backup_limit, allocation_limit, suspended, created_at, hostname, internal_only, database_limit, auto_sleep, asleep, node`
+const serverCols = `id, name, description, owner_id, template_id, image, startup, env, memory_mb, cpu_millis, disk_mb, backup_limit, allocation_limit, suspended, created_at, hostname, internal_only, database_limit, auto_sleep, asleep, node, host_ports`
 
 func scanServer(row interface{ Scan(...any) error }) (*Server, error) {
 	s := &Server{}
 	var env string
 	if err := row.Scan(&s.ID, &s.Name, &s.Description, &s.OwnerID, &s.TemplateID, &s.Image, &s.Startup, &env,
-		&s.MemoryMB, &s.CPUMillis, &s.DiskMB, &s.BackupLimit, &s.AllocationLimit, &s.Suspended, &s.CreatedAt, &s.Hostname, &s.InternalOnly, &s.DatabaseLimit, &s.AutoSleep, &s.Asleep, &s.Node); err != nil {
+		&s.MemoryMB, &s.CPUMillis, &s.DiskMB, &s.BackupLimit, &s.AllocationLimit, &s.Suspended, &s.CreatedAt, &s.Hostname, &s.InternalOnly, &s.DatabaseLimit, &s.AutoSleep, &s.Asleep, &s.Node, &s.HostPorts); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}
@@ -638,10 +638,10 @@ func (db *DB) ServersForUser(uid int64) ([]*Server, error) {
 
 func (db *DB) InsertServer(s *Server) error {
 	env, _ := json.Marshal(s.Env)
-	_, err := db.Exec(`INSERT INTO servers(`+serverCols+`) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+	_, err := db.Exec(`INSERT INTO servers(`+serverCols+`) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		s.ID, s.Name, s.Description, s.OwnerID, s.TemplateID, s.Image, s.Startup, string(env),
 		s.MemoryMB, s.CPUMillis, s.DiskMB, s.BackupLimit, s.AllocationLimit, s.Suspended, s.CreatedAt, s.Hostname, s.InternalOnly, s.DatabaseLimit,
-		s.AutoSleep, s.Asleep, s.Node)
+		s.AutoSleep, s.Asleep, s.Node, s.HostPorts)
 	return err
 }
 
@@ -671,10 +671,12 @@ type Allocation struct {
 	TargetPort int    `json:"targetPort"`
 	IsPrimary  bool   `json:"isPrimary"`
 	Notes      string `json:"notes"`
+	Host       bool   `json:"host"`           // a standard port, open on the server's node (hostPort), not a NodePort
+	Node       string `json:"node,omitempty"` // host ports: the node it's counted on ("" on a single node)
 }
 
 func (db *DB) Allocations(serverID string) ([]*Allocation, error) {
-	q := `SELECT port, server_id, protocol, name, target_port, is_primary, notes FROM allocations`
+	q := `SELECT port, server_id, protocol, name, target_port, is_primary, notes, host, node FROM allocations`
 	var rows *sql.Rows
 	var err error
 	if serverID == "" {
@@ -689,7 +691,7 @@ func (db *DB) Allocations(serverID string) ([]*Allocation, error) {
 	out := []*Allocation{}
 	for rows.Next() {
 		a := &Allocation{}
-		if err := rows.Scan(&a.Port, &a.ServerID, &a.Protocol, &a.Name, &a.TargetPort, &a.IsPrimary, &a.Notes); err != nil {
+		if err := rows.Scan(&a.Port, &a.ServerID, &a.Protocol, &a.Name, &a.TargetPort, &a.IsPrimary, &a.Notes, &a.Host, &a.Node); err != nil {
 			return nil, err
 		}
 		out = append(out, a)
@@ -698,8 +700,8 @@ func (db *DB) Allocations(serverID string) ([]*Allocation, error) {
 }
 
 func (db *DB) InsertAllocation(a *Allocation) error {
-	_, err := db.Exec(`INSERT INTO allocations(port,server_id,protocol,name,target_port,is_primary,notes) VALUES(?,?,?,?,?,?,?)`,
-		a.Port, a.ServerID, a.Protocol, a.Name, a.TargetPort, a.IsPrimary, a.Notes)
+	_, err := db.Exec(`INSERT INTO allocations(port,server_id,protocol,name,target_port,is_primary,notes,host,node) VALUES(?,?,?,?,?,?,?,?,?)`,
+		a.Port, a.ServerID, a.Protocol, a.Name, a.TargetPort, a.IsPrimary, a.Notes, a.Host, a.Node)
 	return err
 }
 

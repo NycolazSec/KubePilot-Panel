@@ -170,7 +170,7 @@ accounts with two-factor authentication). API keys can't be used over SFTP.
 | `PUT` / `DELETE` | `/servers/{id}/schedules/{sid}` | `schedules` | same body for `PUT` |
 | `POST` | `/servers/{id}/schedules/{sid}/run` | `schedules` | run now → `{"result": "OK"}` |
 | `GET` / `PUT` | `/servers/{id}/startup` | `startup` | `{"env": {"MOTD": "Hi"}, "image": "…"}` (only editable variables, allowed images) |
-| `GET` / `POST` | `/servers/{id}/network` | `network` | `POST {"protocol": "tcp" \| "udp" \| "tcp+udp"}` adds a port |
+| `GET` / `POST` | `/servers/{id}/network` | `network` | `POST {"protocol": "tcp" \| "udp" \| "tcp+udp"}` adds a port (a standard port when the server uses them: `"host": true` in the allocation) |
 | `PUT` / `DELETE` | `/servers/{id}/network/{port}` | `network` | `PUT {"primary": true}` or `{"notes": "Dynmap"}` |
 | `GET` / `POST` | `/servers/{id}/firewall` | `network` | The server's firewall rules and packets they blocked (`{"available", "rules", "blocked", "limit", "mode"}`); `POST {"cidr": "203.0.113.7" \| "198.51.100.0/24", "action": "deny" \| "allow", "note": "…"}` adds one (`shield.enabled`; IPv4, /8 or narrower). One `allow` rule turns the list into an allow list: every other address is refused on the server's ports |
 | `DELETE` | `/servers/{id}/firewall/{rid}` | `network` | Delete a rule |
@@ -193,11 +193,11 @@ accounts with two-factor authentication). API keys can't be used over SFTP.
 | `PUT` / `DELETE` | `/admin/templates/{tid}` | Update / delete |
 | `POST` | `/admin/templates/egg` | Convert a Pterodactyl / Pelican egg `{"url"}` (GitHub only) or `{"egg": <egg JSON>}` into a template draft → `{"template", "warnings"}` (not saved) |
 | `GET` | `/admin/eggs/catalog` | Community eggs of github.com/pelican-eggs `[{"repo", "name", "group", "url"}]` (cached 6 h) |
-| `POST` | `/admin/servers` | Create `{"name", "ownerId", "templateId", "image", "memory", "cpu", "disk", "backupLimit", "databaseLimit", "allocationLimit", "env", "startAfterInstall", "node"}` — `node`: the machine to put it on (`""`: the one with the most free memory) |
+| `POST` | `/admin/servers` | Create `{"name", "ownerId", "templateId", "image", "memory", "cpu", "disk", "backupLimit", "databaseLimit", "allocationLimit", "env", "startAfterInstall", "node", "hostPorts"}` — `node`: the machine to put it on (`""`: the one with the most free memory); `hostPorts`: standard ports from the pool of the settings instead of NodePorts (can be switched later with `PUT`, server stopped: it gets new ports) |
 | `GET` | `/admin/nodes` | Machines: `{"agents", "nodes": [{"name", "ready", "panel", "agent", "cordoned", "address", "internalIP", "externalIP", "cpu", "cpuCap", "mem", "memCap", "servers", "memoryAllocated", "cpuAllocated", "diskAllocated", "publicHost", "acceptNew", "problem"}]}` |
 | `PUT` | `/admin/nodes/{name}` | `{"publicHost": "eu2.example.com", "acceptNew": true}` — the address players use for the servers of that machine (`""`: its IP), and whether automatic placement may use it |
 | `PUT` / `DELETE` | `/admin/servers/{id}` | Update / delete (volume and backups included) |
-| `GET` / `PUT` | `/admin/settings` | Panel settings |
+| `GET` / `PUT` | `/admin/settings` | Panel settings — `hostPorts`: the standard ports servers may get on their machine, e.g. `"25565-25600, 27015-27030"` (needs the firewall agents) |
 | `GET` | `/admin/firewall` | Firewall and anti-DDoS: `settings`, `effective` limits, global `rules`, and with `shield.enabled` what the nodes report: `nodes` (`stale`, `synced`, `error`), `counters` (packets dropped by reason), `bans` (`[{"ip", "expires"}]`, seconds left) |
 | `PUT` | `/admin/firewall` | `{"mode": "off" \| "normal" \| "strict", "tcpRate": 15, "conns": 30, "udpRate": 1500, "banMinutes": 10}` — limits per source IP; `strict` divides them by three and makes bans six times longer; `off` keeps only the rules |
 | `POST` / `DELETE` | `/admin/firewall/rules`, `/admin/firewall/rules/{rid}` | Rules for every server: `{"cidr", "action": "deny" \| "allow", "note"}` (`allow`: never limited nor banned) |

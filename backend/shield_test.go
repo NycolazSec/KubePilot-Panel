@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -72,7 +73,7 @@ func TestBuildShieldConfig(t *testing.T) {
 		{ServerID: "bbbb2222", CIDR: "192.0.2.99/32", Action: "deny"},
 		{ServerID: "dddd4444", CIDR: "192.0.2.1/32", Action: "deny"}, // no port: nothing to filter
 	}
-	c := buildShieldConfig(defaultShield(), allocs, rules, 25565, nil)
+	c := buildShieldConfig(defaultShield(), allocs, rules, 25565, nil, nil)
 	if fmt.Sprint(c.TCPPorts) != "[25565 30100 30101 30103]" || fmt.Sprint(c.UDPPorts) != "[30101 30102]" {
 		t.Fatalf("ports: tcp %v udp %v", c.TCPPorts, c.UDPPorts)
 	}
@@ -89,10 +90,10 @@ func TestBuildShieldConfig(t *testing.T) {
 	if c.TCPRate != 15 || c.TCPBurst != 30 || c.Conns != 30 || c.UDPRate != 1500 || c.UDPBurst != 3000 || c.BanSeconds != 600 || c.Rev == "" {
 		t.Fatalf("limits: %+v", c)
 	}
-	if again := buildShieldConfig(defaultShield(), allocs, rules, 25565, nil); again.Rev != c.Rev {
+	if again := buildShieldConfig(defaultShield(), allocs, rules, 25565, nil, nil); again.Rev != c.Rev {
 		t.Fatal("same inputs, same revision")
 	}
-	if other := buildShieldConfig(defaultShield(), allocs, rules, 0, nil); other.Rev == c.Rev || len(other.TCPPorts) != 3 {
+	if other := buildShieldConfig(defaultShield(), allocs, rules, 0, nil, nil); other.Rev == c.Rev || len(other.TCPPorts) != 3 {
 		t.Fatal("without the router, port 25565 isn't protected and the revision changes")
 	}
 }
@@ -129,10 +130,26 @@ func sampleShieldConfig(mode string) *ShieldConfig {
 		[]*Allocation{{Port: 30117, ServerID: "aaaa1111", Protocol: "tcp+udp"}, {Port: 30118, ServerID: "bbbb2222", Protocol: "tcp"}},
 		[]*FirewallRule{{CIDR: "198.51.100.0/24", Action: "deny"}, {CIDR: "203.0.113.10", Action: "allow"},
 			{ServerID: "aaaa1111", CIDR: "192.0.2.0/24", Action: "allow"}, {ServerID: "bbbb2222", CIDR: "192.0.2.66/32", Action: "deny"}},
-		25565, nil)
+		25565, nil, []ShieldForward{{Node: "node-a", Proto: "tcp", Port: 25566, Addr: "10.42.0.12", Target: 25565},
+			{Node: "node-a", Proto: "udp", Port: 19132, Addr: "10.42.0.13", Target: 19132}, {Node: "bad node", Proto: "tcp", Port: 1, Addr: "x", Target: 1}})
 }
 
 func TestNftScript(t *testing.T) {
+	c := sampleShieldConfig("normal")
+	if len(c.Forwards) != 2 {
+		t.Fatalf("an invalid forward is dropped: %+v", c.Forwards)
+	}
+	for _, want := range []string{"tcp dport 25566 dnat ip to 10.42.0.12:25565", "udp dport 19132 dnat ip to 10.42.0.13:19132"} {
+		if !strings.Contains(nftScript("kubepilot", c, nil), want) {
+			t.Errorf("forward %q missing", want)
+		}
+	}
+	other := *c
+	other.Forwards = slices.Clone(c.Forwards)
+	other.forNode("node-b")
+	if len(other.Forwards) != 0 || strings.Contains(nftScript("kubepilot", &other, nil), "dnat") {
+		t.Fatal("another node forwards nothing")
+	}
 	s := nftScript("kubepilot", sampleShieldConfig("normal"), []string{"srv_gone0000"})
 	for _, want := range []string{
 		"add chain inet kubepilot pre { type filter hook prerouting priority -150; policy accept; }",
@@ -349,7 +366,7 @@ func TestShieldAPI(t *testing.T) {
 	// the configuration the agents get
 	allocs := []*Allocation{{Port: 30150, ServerID: "fw12ab34", Protocol: "tcp"}}
 	rules, _ := db.FirewallRules("*")
-	c := buildShieldConfig(db.ShieldSettings(), allocs, rules, 0, acts)
+	c := buildShieldConfig(db.ShieldSettings(), allocs, rules, 0, acts, nil)
 	if c.Mode != "strict" || c.TCPRate != 5 || fmt.Sprint(c.Deny) != "[198.51.100.0/24]" || len(c.Servers) != 1 || len(c.Actions) != 2 {
 		t.Fatalf("config: %+v", c)
 	}

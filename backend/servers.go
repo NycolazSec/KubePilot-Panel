@@ -537,12 +537,13 @@ func (a *App) handleAllocAdd(w http.ResponseWriter, r *http.Request, c *Ctx) {
 		writeErr(w, r, errCode(403, "Extra port limit reached (%d)", c.Server.AllocationLimit))
 		return
 	}
-	port, err := a.allocatePort(r.Context())
+	al, err := a.newAllocation(r.Context(), c.Server, 0)
 	if err != nil {
 		writeErr(w, r, err)
 		return
 	}
-	al := &Allocation{Port: port, ServerID: c.Server.ID, Protocol: in.Protocol, Name: "extra", TargetPort: port, IsPrimary: len(allocs) == 0, Notes: truncate(in.Notes, 100)}
+	port := al.Port
+	al.Protocol, al.Name, al.TargetPort, al.IsPrimary, al.Notes = in.Protocol, "extra", port, len(allocs) == 0, truncate(in.Notes, 100)
 	if err := a.db.InsertAllocation(al); err != nil {
 		writeErr(w, r, err)
 		return
@@ -576,7 +577,7 @@ func (a *App) handleAllocUpdate(w http.ResponseWriter, r *http.Request, c *Ctx) 
 		return
 	}
 	if in.Notes != nil {
-		_, _ = a.db.Exec(`UPDATE allocations SET notes=? WHERE port=?`, truncate(*in.Notes, 100), port)
+		_, _ = a.db.Exec(`UPDATE allocations SET notes=? WHERE port=? AND server_id=?`, truncate(*in.Notes, 100), port, c.Server.ID)
 	}
 	if in.Primary && !target.IsPrimary {
 		_, _ = a.db.Exec(`UPDATE allocations SET is_primary=(port=?) WHERE server_id=?`, port, c.Server.ID)
@@ -755,7 +756,8 @@ type serverInput struct {
 	Suspended       bool              `json:"suspended"`
 	Env             map[string]string `json:"env"`
 	StartAfter      bool              `json:"startAfterInstall"`
-	Node            string            `json:"node"` // creation only: "" = the node with the most free memory
+	Node            string            `json:"node"`      // creation only: "" = the node with the most free memory
+	HostPorts       *bool             `json:"hostPorts"` // standard ports instead of NodePorts (nil: unchanged)
 }
 
 func (in *serverInput) validate() error {
@@ -799,6 +801,7 @@ func (a *App) handleAdminServerCreate(w http.ResponseWriter, r *http.Request, u 
 		ID: randomID(8), Name: in.Name, Description: truncate(in.Description, 300), OwnerID: in.OwnerID, TemplateID: t.ID,
 		Image: t.Images[0].Image, Startup: t.Startup, Env: map[string]string{}, MemoryMB: in.Memory, CPUMillis: in.CPU,
 		DiskMB: in.Disk, BackupLimit: in.BackupLimit, AllocationLimit: in.AllocationLimit, CreatedAt: now(), DatabaseLimit: derefOr(in.DatabaseLimit, 1),
+		HostPorts: in.HostPorts != nil && *in.HostPorts,
 	}
 	if strings.TrimSpace(in.Image) != "" {
 		s.Image = strings.TrimSpace(in.Image)
@@ -823,9 +826,10 @@ func (a *App) handleAdminServerCreate(w http.ResponseWriter, r *http.Request, u 
 		return
 	}
 	for i, tp := range t.Ports {
-		port, err := a.allocatePort(r.Context())
+		al, err := a.newAllocation(r.Context(), s, tp.Port)
 		if err == nil {
-			err = a.db.InsertAllocation(&Allocation{Port: port, ServerID: s.ID, Protocol: tp.Protocol, Name: tp.Name, TargetPort: tp.Port, IsPrimary: i == 0})
+			al.Protocol, al.Name, al.TargetPort, al.IsPrimary = tp.Protocol, tp.Name, tp.Port, i == 0
+			err = a.db.InsertAllocation(al)
 		}
 		if err != nil {
 			a.allocMu.Unlock()
@@ -901,6 +905,24 @@ func (a *App) handleAdminServerUpdate(w http.ResponseWriter, r *http.Request, u 
 	}
 	if in.Startup != nil {
 		s.Startup = *in.Startup
+	}
+	if in.HostPorts != nil && *in.HostPorts != s.HostPorts {
+		if st := a.kube.State(s.ID).Status; st != "offline" && st != "crashed" {
+			writeErr(w, r, errCode(409, "Stop the server before changing its kind of ports"))
+			return
+		}
+		s.HostPorts = *in.HostPorts
+		if err := a.reallocate(r.Context(), s); err != nil {
+			writeErr(w, r, err)
+			return
+		}
+		if _, err := a.db.Exec(`UPDATE servers SET host_ports=? WHERE id=?`, s.HostPorts, s.ID); err != nil {
+			writeErr(w, r, err)
+			return
+		}
+		a.syncService(r.Context(), s)
+		a.shieldChanged()
+		a.db.LogActivity(s.ID, u, clientIP(r), "admin.server.ports", map[bool]string{true: "standard", false: "nodeport"}[s.HostPorts])
 	}
 	if err := a.db.UpdateServer(s); err != nil {
 		writeErr(w, r, err)
@@ -1126,6 +1148,16 @@ func (a *App) handleAdminSettingsSave(w http.ResponseWriter, r *http.Request, u 
 		return
 	}
 	s.PublicHost = strings.TrimSpace(s.PublicHost)
+	pool, err := parsePortPool(s.HostPorts, a.routerPort(), a.cfg.SFTPPort)
+	if err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	if len(pool) > 0 && !a.cfg.Shield {
+		writeErr(w, r, errCode(400, "Standard ports need the node agents of the firewall (shield.enabled=true): they open the ports on the machines"))
+		return
+	}
+	s.HostPorts = formatPortPool(pool)
 	s.MinecraftDomain = strings.Trim(strings.ToLower(strings.TrimSpace(s.MinecraftDomain)), ".")
 	if s.MinecraftDomain != "" && !domainRe.MatchString(s.MinecraftDomain) {
 		writeErr(w, r, errCode(400, "Invalid domain"))

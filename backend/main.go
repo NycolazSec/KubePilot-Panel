@@ -141,7 +141,8 @@ func main() {
 		log.Fatalf("kubernetes: %v", err)
 	}
 	app := newApp(cfg, db, kube)
-	app.initSetup() // no account yet: prints the token to create the administrator from the browser
+	kube.onPodChange = app.shieldChanged // standard ports follow their server's pod
+	app.initSetup()                      // no account yet: prints the token to create the administrator from the browser
 	if err := app.seedTemplates(); err != nil {
 		log.Fatalf("seed templates: %v", err)
 	}
