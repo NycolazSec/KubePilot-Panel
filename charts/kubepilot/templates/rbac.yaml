@@ -67,3 +67,28 @@ metadata:
   labels: {{- include "kubepilot.labels" . | nindent 4 }}
 roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: {{ $name }} }
 subjects: [{ kind: ServiceAccount, name: {{ $name }}, namespace: {{ .Release.Namespace }} }]
+{{- $invites := .Values.nodeInvites | default (dict "enabled" true) }}
+{{- if $invites.enabled }}
+---
+# "Add a machine" in the panel: it creates the k3s invitation (a bootstrap token, like `k3s token create`).
+# Create only: the panel can't read, list or change any Secret of kube-system.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $name }}-invites
+  namespace: kube-system
+  labels: {{- include "kubepilot.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $name }}-invites
+  namespace: kube-system
+  labels: {{- include "kubepilot.labels" . | nindent 4 }}
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: {{ $name }}-invites }
+subjects: [{ kind: ServiceAccount, name: {{ $name }}, namespace: {{ .Release.Namespace }} }]
+{{- end }}

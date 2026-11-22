@@ -1,11 +1,9 @@
 import { Check, Copy, Cpu, HardDrive, MemoryStick, Plus, Save, Server as ServerIcon, TriangleAlert } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { get, NodesInfo, NodeView, put } from '../../api';
+import { get, NodesInfo, NodeView, post, put } from '../../api';
 import { Badge, Bar, Button, Card, ErrorBox, Field, Loading, Modal, Toggle, useLoad, useUI } from '../../components/ui';
 import { bytes, cpuLabel, mb } from '../../lib/format';
-import { t, tn, tx } from '../../i18n';
-
-const installer = 'https://raw.githubusercontent.com/NycolazSec/KubePilot-Panel/main/install.sh';
+import { t, tn } from '../../i18n';
 
 /** Admin → Nodes: the machines of the cluster, what runs on each, and how to add one. */
 export default function AdminNodes() {
@@ -32,7 +30,7 @@ export default function AdminNodes() {
       <div className="grid gap-4 xl:grid-cols-2">
         {data.nodes.map((n) => <NodeCard key={n.name} node={n} several={several} onSaved={() => reload(true)} />)}
       </div>
-      <AddNodeModal open={adding} onClose={() => setAdding(false)} />
+      <AddNodeModal open={adding} onClose={() => setAdding(false)} known={data.nodes.map((n) => n.name)} onJoined={() => reload(true)} />
     </div>
   );
 }
@@ -117,29 +115,81 @@ function Command({ cmd }: { cmd: string }) {
   );
 }
 
-function AddNodeModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+type Invitation = { command: string; server: string; k3sVersion: string; expires: number };
+
+function AddNodeModal({ open, onClose, known, onJoined }: { open: boolean; onClose: () => void; known: string[]; onJoined: () => void }) {
+  const [address, setAddress] = useState('');
+  const [inv, setInv] = useState<Invitation | null>(null);
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [joined, setJoined] = useState<NodeView | null>(null);
+  const [before, setBefore] = useState<string[]>([]);
+
+  useEffect(() => { if (open) { setInv(null); setErr(''); setJoined(null); setBefore(known); } }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // waiting for the new machine: it shows up in the node list, then its agent starts
+  useEffect(() => {
+    if (!open || !inv || (joined && joined.agent)) return;
+    const id = setInterval(async () => {
+      try {
+        const r = await get<NodesInfo>('/admin/nodes');
+        const n = r.nodes.find((x) => !before.includes(x.name));
+        if (n) { setJoined(n); onJoined(); }
+      } catch { /* try again */ }
+    }, 3000);
+    return () => clearInterval(id);
+  }, [open, inv, joined, before, onJoined]);
+
+  const create = async () => {
+    setBusy(true); setErr('');
+    try { setInv(await post<Invitation>('/admin/nodes/invite', address ? { address } : {})); } catch (e: any) { setErr(e.message); } finally { setBusy(false); }
+  };
+
   return (
-    <Modal open={open} onClose={onClose} wide title={t('nodes.addTitle')} footer={<Button onClick={onClose}>{t('common.close')}</Button>}>
-      <ol className="space-y-5 text-sm">
-        <li>
-          <p className="mb-2 font-medium text-ink-100">1. {t('nodes.step1')}</p>
-          <Command cmd={`curl -sfL ${installer} | sudo sh -s -- add-node`} />
-          <p className="mt-1.5 text-xs text-ink-400">{t('nodes.step1Hint')}</p>
-        </li>
-        <li>
-          <p className="mb-2 font-medium text-ink-100">2. {t('nodes.step2')}</p>
-          <Command cmd={`curl -sfL ${installer} | sudo sh -s -- join --server https://… --token …`} />
-          <p className="mt-1.5 text-xs text-ink-400">{t('nodes.step2Hint')}</p>
-        </li>
-        <li>
-          <p className="font-medium text-ink-100">3. {t('nodes.step3')}</p>
-          <p className="mt-1 text-xs text-ink-400">{t('nodes.step3Hint')}</p>
-        </li>
-      </ol>
-      <div className="mt-5 rounded-md border border-ink-700 bg-ink-800/50 p-3 text-xs text-ink-300">
-        <p className="mb-1 font-medium text-ink-200">{t('nodes.network')}</p>
-        <p>{tx('nodes.networkHint', { ports: <code className="font-mono text-ink-100">6443/tcp · 10250/tcp · 51820/udp</code> })}</p>
-      </div>
+    <Modal open={open} onClose={onClose} wide title={t('nodes.addTitle')} footer={<Button onClick={onClose}>{joined?.agent ? t('nodes.done') : t('common.close')}</Button>}>
+      {!inv ? (
+        <div className="space-y-4 text-sm">
+          <p className="text-ink-300">{t('nodes.inviteIntro')}</p>
+          <ul className="list-disc space-y-1 pl-5 text-[13px] text-ink-400">
+            <li>{t('nodes.need1')}</li>
+            <li>{t('nodes.need2')}</li>
+          </ul>
+          <details className="text-xs text-ink-400">
+            <summary className="cursor-pointer select-none">{t('nodes.advanced')}</summary>
+            <div className="mt-3"><Field label={t('nodes.mainAddress')} hint={t('nodes.mainAddressHint')}>
+              <input className="input font-mono text-xs" value={address} onChange={(e) => setAddress(e.target.value.trim())} placeholder="51.68.227.100" />
+            </Field></div>
+          </details>
+          {err && <ErrorBox error={err} />}
+          <Button variant="primary" icon={<Plus className="h-3.5 w-3.5" />} loading={busy} onClick={create}>{t('nodes.createInvite')}</Button>
+        </div>
+      ) : (
+        <div className="space-y-5 text-sm">
+          <div>
+            <p className="mb-2 font-medium text-ink-100">{t('nodes.pasteThis')}</p>
+            <Command cmd={inv.command} />
+            <p className="mt-1.5 text-xs text-ink-400">{t('nodes.inviteFacts', { version: inv.k3sVersion, time: new Date(inv.expires * 1000).toLocaleString() })}</p>
+          </div>
+          <div className="rounded-md border border-ink-700 bg-ink-800/50 px-3.5 py-3">
+            {!joined ? (
+              <p className="flex items-center gap-2.5 text-ink-300"><span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-ink-500 border-t-brand-400" />{t('nodes.waiting')}</p>
+            ) : !joined.agent ? (
+              <p className="flex items-center gap-2.5 text-ink-200"><span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-ink-500 border-t-brand-400" />{t('nodes.joinedStarting', { name: joined.name })}</p>
+            ) : (
+              <p className="flex items-center gap-2.5 font-medium text-green-300"><Check className="h-4 w-4" />{t('nodes.joinedReady', { name: joined.name })}</p>
+            )}
+          </div>
+          <details className="text-xs text-ink-400">
+            <summary className="cursor-pointer select-none text-ink-300">{t('nodes.trouble')}</summary>
+            <ul className="mt-2 list-disc space-y-2 pl-5">
+              <li>{t('nodes.troubleFirewall')}<div className="mt-1.5"><Command cmd="sudo ufw allow 6443/tcp && sudo ufw allow 10250/tcp && sudo ufw allow 51820/udp" /></div></li>
+              <li>{t('nodes.troubleProvider')}</li>
+              <li>{t('nodes.troubleName')}</li>
+              <li>{t('nodes.troubleLog')}</li>
+            </ul>
+          </details>
+        </div>
+      )}
     </Modal>
   );
 }

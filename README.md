@@ -160,12 +160,14 @@ in Grafana.
 
 ### More machines
 
-Add a machine to spread your servers: on the main machine, `… | sudo sh -s -- add-node` prints the command to run
-on the new one (`… | sudo sh -s -- join --server https://<main>:6443 --token <invitation>`), which installs k3s and
-joins the cluster in about a minute. The machine shows up in *Admin* → *Machines* with its KubePilot agent; new
-servers go to the machine with the most free memory, or to the one you pick. The machines reach each other on
-`6443/tcp`, `10250/tcp` and `51820/udp`: the installer sets k3s up with WireGuard, so the traffic between machines
-is encrypted (on a cluster that uses VXLAN, `add-node` warns you — keep the machines on a private network).
+In *Admin* → *Machines* → *Add a machine*, the panel gives you **one command**: paste it on a fresh Linux server
+(any provider, root access). It installs k3s (the main machine's version), joins the cluster and opens its
+firewall; the panel shows the machine arriving, and new servers can go there a minute later. The machines reach
+each other on `6443/tcp`, `10250/tcp` and `51820/udp` (the installer opens them when ufw is on); the installer sets
+k3s up with WireGuard, so the traffic between machines is encrypted (switching an existing cluster from VXLAN to
+WireGuard changes the pods' MTU from 1450 to 1420: reboot the machine afterwards, or the pods started before lose big
+packets). Without the panel:
+`… | sudo sh -s -- add-node` on the main machine prints the same command.
 
 All chart options (storage, node, ingress, resources…) are documented in the [chart README](charts/kubepilot/README.md).
 Upgrade with `helm upgrade kubepilot oci://ghcr.io/nycolazsec/charts/kubepilot -n kubepilot-system --reset-then-reuse-values`

@@ -115,3 +115,24 @@ func TestValidHost(t *testing.T) {
 		}
 	}
 }
+
+func TestJoinCommand(t *testing.T) {
+	ca := []byte("-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n")
+	tok := joinToken(ca, "abc123", "0123456789abcdef")
+	if !strings.HasPrefix(tok, "K10") || !strings.HasSuffix(tok, "::abc123.0123456789abcdef") || len(tok) != 3+64+2+6+1+16 {
+		t.Fatalf("token: %s", tok)
+	}
+	cmd := joinCommand("51.68.227.100", tok, "v1.35.5+k3s1")
+	want := "curl -sfL https://raw.githubusercontent.com/NycolazSec/KubePilot-Panel/main/install.sh | sudo sh -s -- join --server https://51.68.227.100:6443 --token " + tok + " --k3s-version v1.35.5+k3s1"
+	if cmd != want {
+		t.Fatalf("command:\n%s\n%s", cmd, want)
+	}
+	cp := testNode("server", 4000, true)
+	cp.Labels = map[string]string{"node-role.kubernetes.io/control-plane": "true"}
+	if n := mainNode([]corev1.Node{testNode("worker", 4000, true), cp}, "worker"); n.Name != "server" {
+		t.Fatalf("the control plane is the main machine: %s", n.Name)
+	}
+	if n := mainNode([]corev1.Node{testNode("a", 4000, true), testNode("panel", 4000, true)}, "panel"); n.Name != "panel" {
+		t.Fatalf("no control plane label: the panel's node: %s", n.Name)
+	}
+}

@@ -198,6 +198,12 @@ metrics:
     namespace: ""   # default: the release namespace
     labels: { grafana_dashboard: "1" }
 
+# "Add a machine" in Admin -> Machines gives one command to paste on the new machine: the panel creates the k3s
+# invitation itself (a bootstrap token valid 24 hours). It needs to create Secrets in kube-system (create only:
+# it can't read any). false: invitations come from `install.sh add-node` on the main machine.
+nodeInvites:
+  enabled: true
+
 shield:
   enabled: false
   resources:
