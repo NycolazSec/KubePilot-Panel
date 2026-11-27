@@ -11,12 +11,12 @@ require (
 	github.com/minio/minio-go/v7 v7.4.1
 	github.com/pkg/sftp v1.13.12
 	github.com/robfig/cron/v3 v3.0.1
-	go.yaml.in/yaml/v3 v3.0.5
+	go.yaml.in/yaml/v3 v3.0.6
 	golang.org/x/crypto v0.59.0
 	k8s.io/api v0.37.2
 	k8s.io/apimachinery v0.37.2
 	k8s.io/client-go v0.37.2
-	modernc.org/sqlite v1.62.0
+	modernc.org/sqlite v1.63.0
 	rsc.io/qr v0.2.0
 	sigs.k8s.io/yaml v1.6.0
 )
